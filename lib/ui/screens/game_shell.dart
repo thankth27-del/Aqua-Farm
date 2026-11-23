@@ -9,8 +9,8 @@ import 'farm_tab.dart';
 import 'fish_tab.dart';
 import 'kitchen_tab.dart';
 import 'market_tab.dart';
-import 'placeholder_tab.dart';
 import 'report_screen.dart';
+import 'storage_tab.dart';
 
 /// โครงหน้าเกม: แถบบน + เมนูล่าง 5 แท็บ
 class GameShell extends ConsumerStatefulWidget {
@@ -38,12 +38,7 @@ class _GameShellState extends ConsumerState<GameShell> {
       1 => const FishTab(),
       2 => const MarketTab(),
       3 => const KitchenTab(),
-      _ => const PlaceholderTab(
-        title: 'คลังสินค้า',
-        icon: 'crate',
-        items: ['crate', 'jar', 'fridge', 'can'],
-        note: 'เสบียงฉุกเฉิน อาหาร และวันหมดอายุ',
-      ),
+      _ => const StorageTab(),
     };
     return Scaffold(
       body: GrassBackground(

@@ -5,6 +5,7 @@ import 'package:aqua_farm/ui/providers.dart';
 import 'package:aqua_farm/ui/screens/game_shell.dart';
 import 'package:aqua_farm/ui/screens/kitchen_tab.dart';
 import 'package:aqua_farm/ui/screens/market_tab.dart';
+import 'package:aqua_farm/ui/screens/storage_tab.dart';
 import 'package:aqua_farm/ui/theme/theme.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -625,6 +626,223 @@ void main() {
       await startNewGame(tester);
       container.read(gameProvider)!.state.fishStock['nila'] = 1;
       await openKitchen(tester);
+      for (final img in tester.widgetList<Image>(find.byType(Image))) {
+        expect(img.filterQuality, FilterQuality.none);
+      }
+      for (final e in [
+        ...find.byType(PixelButton).evaluate(),
+        ...find.byType(Pressable).evaluate(),
+      ]) {
+        final size = (e.renderObject! as RenderBox).size;
+        expect(size.height, greaterThanOrEqualTo(kMinTap));
+        expect(size.width, greaterThanOrEqualTo(kMinTap));
+      }
+    });
+  });
+
+  group('คลัง', () {
+    Future<void> openStorage(WidgetTester tester) async {
+      await tester.tap(
+        find.descendant(
+          of: find.byType(GameNavBar),
+          matching: find.text('คลัง'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(StorageTab), findsOneWidget);
+    }
+
+    Future<void> scrollTo(WidgetTester tester, Finder f) async {
+      await tester.scrollUntilVisible(
+        f,
+        200,
+        scrollable: find
+            .descendant(
+              of: find.byType(StorageTab),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      await tester.ensureVisible(f);
+      await tester.pumpAndSettle();
+    }
+
+    Finder batchButton(int i, String label) => find.descendant(
+      of: find.byKey(ValueKey('batch-$i')),
+      matching: find.widgetWithText(PixelButton, label),
+    );
+
+    testWidgets('เสบียงฉุกเฉิน: คำนวณวันจากความอิ่ม และตั้งเป้าหมายได้', (
+      tester,
+    ) async {
+      await pumpApp(tester);
+      await startNewGame(tester);
+      final e = container.read(gameProvider)!.engine;
+      await openStorage(tester);
+
+      expect(find.text('อาหารกินได้ 2 จาน'), findsOneWidget);
+      expect(
+        find.text('อยู่ได้ ${fmtNum(e.supplyDays)} วัน (ต้องการ 20/วัน)'),
+        findsOneWidget,
+      );
+      expect(find.byKey(const ValueKey('supply-after')), findsOneWidget);
+      await scrollTo(tester, find.byKey(const ValueKey('goal-status')));
+      expect(
+        find.text('ขาดอีก ${fmtNum(e.goalShortfall)} วันจึงถึงเป้า'),
+        findsOneWidget,
+      );
+
+      await scrollTo(tester, find.byKey(const ValueKey('goal-3')));
+      await tester.tap(find.byKey(const ValueKey('goal-3')));
+      await tester.pumpAndSettle();
+      expect(e.state.goal, 3);
+      expect(
+        find.text('ขาดอีก ${fmtNum(e.goalShortfall)} วันจึงถึงเป้า'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('กินอาหารต้องยืนยัน: ยกเลิกไม่กิน ตกลงแล้วกิน', (
+      tester,
+    ) async {
+      await pumpApp(tester);
+      await startNewGame(tester);
+      final s = container.read(gameProvider)!.state;
+      s.hunger = 50;
+      await openStorage(tester);
+
+      final eat = batchButton(0, 'กิน');
+      await scrollTo(tester, eat);
+      await tester.tap(eat);
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('กินปลาแห้ง? ความอิ่ม 50 → 70'),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('ยกเลิก').last);
+      await tester.pumpAndSettle();
+      expect(s.stock.single.qty, 2);
+      expect(s.hunger, 50);
+
+      await tester.tap(eat);
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(PixelButton, 'กิน').last);
+      await tester.pumpAndSettle();
+      expect(s.stock.single.qty, 1);
+      expect(s.hunger, 70);
+    });
+
+    testWidgets('อิ่มแล้ว: กินไม่ได้ และไม่ขึ้นหน้ายืนยัน', (tester) async {
+      await pumpApp(tester);
+      await startNewGame(tester);
+      final s = container.read(gameProvider)!.state;
+      s.hunger = 100;
+      await openStorage(tester);
+      final eat = batchButton(0, 'กิน');
+      await scrollTo(tester, eat);
+      await tester.tap(eat);
+      await tester.pump();
+      expect(find.byType(ConfirmDialog), findsNothing);
+      expect(find.text('อิ่มแล้ว'), findsOneWidget);
+      expect(s.stock.single.qty, 2);
+      await tester.pump(const Duration(seconds: 3));
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('ขายอาหารจากคลังต้องยืนยัน', (tester) async {
+      await pumpApp(tester);
+      await startNewGame(tester);
+      final s = container.read(gameProvider)!.state;
+      await openStorage(tester);
+      final sell = batchButton(0, 'ขาย');
+      await scrollTo(tester, sell);
+      await tester.tap(sell);
+      await tester.pumpAndSettle();
+      expect(find.text('ยืนยันขายปลาแห้ง 1 จาน ได้ 70 บาท?'), findsOneWidget);
+      await tester.tap(find.text('ยกเลิก').last);
+      await tester.pumpAndSettle();
+      expect(s.money, 500);
+      await tester.tap(sell);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('ตกลง'));
+      await tester.pumpAndSettle();
+      expect(s.money, 570);
+      expect(s.stock.single.qty, 1);
+    });
+
+    testWidgets('ทิ้งอาหารต้องยืนยัน แล้วหายทั้งล็อต', (tester) async {
+      await pumpApp(tester);
+      await startNewGame(tester);
+      final s = container.read(gameProvider)!.state;
+      await openStorage(tester);
+      final discard = batchButton(0, 'ทิ้ง');
+      await scrollTo(tester, discard);
+      await tester.tap(discard);
+      await tester.pumpAndSettle();
+      expect(find.text('ทิ้งปลาแห้ง 2 จาน?'), findsOneWidget);
+      await tester.tap(find.text('ยกเลิก').last);
+      await tester.pumpAndSettle();
+      expect(s.stock, hasLength(1));
+
+      await tester.tap(discard);
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(PixelButton, 'ทิ้ง').last);
+      await tester.pumpAndSettle();
+      expect(s.stock, isEmpty);
+    });
+
+    testWidgets('อาหารหมดอายุ: กินและขายไม่ได้ แต่ทิ้งได้', (tester) async {
+      await pumpApp(tester);
+      await startNewGame(tester);
+      final s = container.read(gameProvider)!.state;
+      s.stock.single.age = 99;
+      await openStorage(tester);
+      final eat = batchButton(0, 'กิน');
+      await scrollTo(tester, eat);
+      expect(tester.widget<PixelButton>(eat).onPressed, isNull);
+      expect(
+        tester.widget<PixelButton>(batchButton(0, 'ขาย')).onPressed,
+        isNull,
+      );
+      expect(
+        tester.widget<PixelButton>(batchButton(0, 'ทิ้ง')).onPressed,
+        isNotNull,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('batch-0')),
+          matching: find.text('หมดอายุ'),
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('แสดงวัตถุดิบสดและอุปกรณ์ในคลัง', (tester) async {
+      await pumpApp(tester);
+      await startNewGame(tester);
+      final s = container.read(gameProvider)!.state;
+      s.fishStock['nila'] = 3;
+      s.inventory['salt'] = 2;
+      s.equipment['rack'] = 1;
+      await openStorage(tester);
+      await scrollTo(tester, find.byKey(const ValueKey('raw-nila')));
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('raw-nila')),
+          matching: find.text('x3'),
+        ),
+        findsOneWidget,
+      );
+      expect(find.byKey(const ValueKey('raw-salt')), findsOneWidget);
+      await scrollTo(tester, find.byKey(const ValueKey('equip-rack')));
+      expect(find.byKey(const ValueKey('equip-rack')), findsOneWidget);
+    });
+
+    testWidgets('ปุ่มในคลังสูงอย่างน้อย 48dp และภาพไม่เบลอ', (tester) async {
+      await pumpApp(tester);
+      await startNewGame(tester);
+      await openStorage(tester);
+      await scrollTo(tester, batchButton(0, 'ทิ้ง'));
       for (final img in tester.widgetList<Image>(find.byType(Image))) {
         expect(img.filterQuality, FilterQuality.none);
       }
