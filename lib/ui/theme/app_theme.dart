@@ -67,12 +67,6 @@ ThemeData buildAquaTheme() {
       elevation: 0,
       insetPadding: EdgeInsets.symmetric(horizontal: 18, vertical: 24),
     ),
-    snackBarTheme: const SnackBarThemeData(
-      behavior: SnackBarBehavior.floating,
-      backgroundColor: Colors.transparent,
-      elevation: 0,
-      insetPadding: EdgeInsets.fromLTRB(16, 0, 16, 12),
-    ),
     tooltipTheme: const TooltipThemeData(
       decoration: BoxDecoration(color: AquaColors.ink),
       textStyle: TextStyle(

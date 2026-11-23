@@ -69,6 +69,25 @@ try {
   await b.sleep(800);
   for (const [op, ...a] of steps) {
     if (op === 'wait') await b.sleep(a[0]);
+    // ["save", {patch}] — แก้เซฟช่อง 1 ใน localStorage (เช่น ตั้งตลาดปิด) ใช้คู่กับ reload
+    if (op === 'save') {
+      console.log('save', await b.evaluate(`(() => {
+        const k = 'flutter.aquafarm_slots_v3';
+        let raw = JSON.parse(localStorage.getItem(k));
+        const wrapped = typeof raw === 'string';
+        const all = wrapped ? JSON.parse(raw) : raw;
+        Object.assign(all['1'].S, ${JSON.stringify(a[0])});
+        const out = JSON.stringify(all);
+        localStorage.setItem(k, JSON.stringify(wrapped ? out : all));
+        return Object.keys(${JSON.stringify(a[0])}).join(',');
+      })()`));
+    }
+    if (op === 'reload') {
+      await b.send('Page.reload', {});
+      await b.sleep(7000);
+      await b.evaluate(findJs('', 0));
+      await b.sleep(800);
+    }
     if (op === 'click') await click(a[0], a[1]);
     if (op === 'tap' || op === 'scrollTo') {
       let p = null;

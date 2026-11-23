@@ -131,20 +131,9 @@ class _NameDialogState extends State<_NameDialog> {
   }
 }
 
-/// toast (แจ้งผลการกระทำ) — สีแดงเมื่อไม่สำเร็จหรือเป็นคำเตือน
-void toast(BuildContext context, String message, {bool bad = false}) {
-  final m = ScaffoldMessenger.maybeOf(context);
-  if (m == null) return;
-  m
-    ..hideCurrentSnackBar()
-    ..showSnackBar(
-      SnackBar(
-        content: ToastBubble(message, bad: bad),
-        padding: EdgeInsets.zero,
-        duration: const Duration(milliseconds: 2600),
-      ),
-    );
-}
+/// toast (แจ้งผลการกระทำ) ด้านบนจอใต้แถบบน — สีแดงเมื่อไม่สำเร็จหรือเป็นคำเตือน
+void toast(BuildContext context, String message, {bool bad = false}) =>
+    ToastHost.show(context, message, bad: bad);
 
 void showResult(BuildContext context, ActionResult r) =>
     toast(context, r.message, bad: r.warning);

@@ -26,7 +26,7 @@ class AquaFarmApp extends ConsumerWidget {
           child: Center(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: kMaxPhoneWidth),
-              child: child,
+              child: ToastHost(child: child!),
             ),
           ),
         ),

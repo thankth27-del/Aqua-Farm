@@ -2,6 +2,7 @@ import 'package:aqua_farm/save/save_repository.dart';
 import 'package:aqua_farm/ui/app.dart';
 import 'package:aqua_farm/ui/providers.dart';
 import 'package:aqua_farm/ui/screens/game_shell.dart';
+import 'package:aqua_farm/ui/screens/market_tab.dart';
 import 'package:aqua_farm/ui/theme/theme.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -242,6 +243,258 @@ void main() {
     await tester.tap(find.text('ร้านปลา').first);
     await tester.pumpAndSettle();
     checkScreen();
+  });
+
+  group('ตลาด', () {
+    Finder marketScroll() => find
+        .descendant(
+          of: find.byType(MarketTab),
+          matching: find.byType(Scrollable),
+        )
+        .first;
+
+    Future<void> openMarket(WidgetTester tester) async {
+      await tester.tap(
+        find.descendant(
+          of: find.byType(GameNavBar),
+          matching: find.text('ตลาด'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(MarketTab), findsOneWidget);
+    }
+
+    /// เลื่อนจนเห็นทั้งชิ้น (ไม่ใช่แค่โผล่ขอบ) ก่อนกด
+    Future<void> scrollTo(WidgetTester tester, Finder f) async {
+      await tester.scrollUntilVisible(f, 200, scrollable: marketScroll());
+      await tester.ensureVisible(f);
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('การ์ดวัตถุดิบแสดงไอคอน ราคาวันนี้ และราคาเมื่อวาน', (
+      tester,
+    ) async {
+      await pumpApp(tester);
+      await startNewGame(tester);
+      final s = container.read(gameProvider)!.state;
+      s.prevPrices['garlic'] = s.prices['garlic']! - 2;
+      await openMarket(tester);
+
+      final card = find.byKey(const ValueKey('ing-garlic'));
+      expect(card, findsOneWidget);
+      Finder inCard(Finder f) => find.descendant(of: card, matching: f);
+      expect(inCard(find.text('กระเทียม')), findsOneWidget);
+      expect(inCard(find.byType(PixelIcon)), findsWidgets);
+      expect(inCard(find.text('${s.prices['garlic']}')), findsOneWidget);
+      expect(
+        inCard(find.text('เมื่อวาน ${s.prices['garlic']! - 2}')),
+        findsOneWidget,
+      );
+      expect(inCard(find.text('▲2')), findsOneWidget);
+      expect(inCard(find.text('ซื้อ')), findsOneWidget);
+      expect(find.byKey(const ValueKey('market-closed')), findsNothing);
+    });
+
+    testWidgets('ซื้อวัตถุดิบต้องยืนยัน: ยกเลิกไม่ซื้อ ตกลงแล้วซื้อ', (
+      tester,
+    ) async {
+      await pumpApp(tester);
+      await startNewGame(tester);
+      await openMarket(tester);
+      final s = container.read(gameProvider)!.state;
+      final p = s.prices['garlic']!;
+
+      await tester.tap(find.byKey(const ValueKey('ing-garlic')));
+      await tester.pumpAndSettle();
+      expect(
+        find.text(
+          'ยืนยันซื้อกระเทียม 1 ชิ้น ราคา $p บาท? (เงินคงเหลือ ${500 - p} บาท)',
+        ),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('ยกเลิก').last);
+      await tester.pumpAndSettle();
+      expect(s.inventory['garlic'] ?? 0, 0);
+      expect(s.money, 500);
+
+      await tester.tap(find.byKey(const ValueKey('ing-garlic')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('ตกลง'));
+      await tester.pumpAndSettle();
+      expect(s.inventory['garlic'], 1);
+      expect(s.money, 500 - p);
+    });
+
+    testWidgets('ขายปลาในคลังต้องยืนยันก่อน', (tester) async {
+      await pumpApp(tester);
+      await startNewGame(tester);
+      final s = container.read(gameProvider)!.state;
+      s.fishStock['nila'] = 2;
+      await openMarket(tester);
+
+      final card = find.byKey(const ValueKey('sell-fish-nila'));
+      await scrollTo(tester, card);
+      await tester.tap(card);
+      await tester.pumpAndSettle();
+      expect(find.text('ยืนยันขายปลานิล 1 ตัว ได้ 90 บาท?'), findsOneWidget);
+      await tester.tap(find.text('ยกเลิก').last);
+      await tester.pumpAndSettle();
+      expect(s.fishStock['nila'], 2);
+      expect(s.money, 500);
+
+      await tester.tap(card);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('ตกลง'));
+      await tester.pumpAndSettle();
+      expect(s.fishStock['nila'], 1);
+      expect(s.money, 590);
+    });
+
+    testWidgets('ขายอาหารต้องยืนยันก่อน', (tester) async {
+      await pumpApp(tester);
+      await startNewGame(tester);
+      final s = container.read(gameProvider)!.state;
+      expect(s.stock.single.food, 'dried');
+      expect(s.stock.single.qty, 2);
+      await openMarket(tester);
+
+      final sell = find.descendant(
+        of: find.byKey(const ValueKey('sell-food-0')),
+        matching: find.byType(PixelButton),
+      );
+      await scrollTo(tester, sell);
+      await tester.tap(sell);
+      await tester.pumpAndSettle();
+      expect(find.text('ยืนยันขายปลาแห้ง 1 จาน ได้ 70 บาท?'), findsOneWidget);
+      await tester.tap(find.text('ยกเลิก').last);
+      await tester.pumpAndSettle();
+      expect(s.stock.single.qty, 2);
+
+      await tester.tap(sell);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('ตกลง'));
+      await tester.pumpAndSettle();
+      expect(s.stock.single.qty, 1);
+      expect(s.money, 570);
+    });
+
+    testWidgets('ซื้ออุปกรณ์ครัวต้องยืนยันก่อน', (tester) async {
+      await pumpApp(tester);
+      await startNewGame(tester);
+      final s = container.read(gameProvider)!.state;
+      final before = s.equipmentCount('rack');
+      await openMarket(tester);
+
+      final buy = find.descendant(
+        of: find.byKey(const ValueKey('eq-rack')),
+        matching: find.byType(PixelButton),
+      );
+      await scrollTo(tester, buy);
+      await tester.tap(buy);
+      await tester.pumpAndSettle();
+      expect(find.text('ยืนยันซื้อแผงตากปลา ราคา 60 บาท?'), findsOneWidget);
+      await tester.tap(find.text('ยกเลิก').last);
+      await tester.pumpAndSettle();
+      expect(s.equipmentCount('rack'), before);
+
+      await tester.tap(buy);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('ตกลง'));
+      await tester.pumpAndSettle();
+      expect(s.equipmentCount('rack'), before + 1);
+      expect(s.money, 440);
+    });
+
+    testWidgets(
+      'ตลาดปิดตอนเกิดภัย: มีป้ายบอกเหตุผล ซื้อขายไม่ได้ ไม่ขึ้นหน้ายืนยัน',
+      (tester) async {
+        await pumpApp(tester);
+        await startNewGame(tester);
+        final s = container.read(gameProvider)!.state;
+        s.marketClosed = true;
+        s.fishStock['nila'] = 1;
+        await openMarket(tester);
+
+        expect(find.byKey(const ValueKey('market-closed')), findsOneWidget);
+        expect(find.text('ตลาดปิดชั่วคราว'), findsOneWidget);
+        expect(
+          find.textContaining('ซื้อขายไม่ได้ ใช้เสบียงที่เตรียมไว้'),
+          findsOneWidget,
+        );
+
+        const reason = 'ตลาดปิดชั่วคราว เส้นทางถูกตัดขาดจากภัยพิบัติ';
+        Future<void> tapBlocked(Finder f) async {
+          await scrollTo(tester, f);
+          await tester.tap(f);
+          await tester.pump();
+          expect(find.byType(ConfirmDialog), findsNothing);
+          expect(find.text(reason), findsOneWidget);
+          await tester.pump(const Duration(seconds: 3));
+          await tester.pumpAndSettle();
+        }
+
+        await tapBlocked(find.byKey(const ValueKey('ing-garlic')));
+        await tapBlocked(find.byKey(const ValueKey('sell-fish-nila')));
+        await tapBlocked(
+          find.descendant(
+            of: find.byKey(const ValueKey('sell-food-0')),
+            matching: find.byType(PixelButton),
+          ),
+        );
+        await tapBlocked(
+          find.descendant(
+            of: find.byKey(const ValueKey('eq-rack')),
+            matching: find.byType(PixelButton),
+          ),
+        );
+
+        expect(s.money, 500);
+        expect(s.inventory['garlic'] ?? 0, 0);
+        expect(s.fishStock['nila'], 1);
+        expect(s.stock.single.qty, 2);
+      },
+    );
+
+    testWidgets('ข้อความแจ้งเตือนอยู่ใต้แถบบน ไม่บังเมนูล่าง', (tester) async {
+      await pumpApp(tester);
+      await startNewGame(tester);
+      container.read(gameProvider)!.state.marketClosed = true;
+      await openMarket(tester);
+
+      final card = find.byKey(const ValueKey('ing-garlic'));
+      await scrollTo(tester, card);
+      await tester.tap(card);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      final bubble = tester.getRect(find.byType(ToastBubble));
+      final top = tester.getRect(find.byType(TopBar));
+      final nav = tester.getRect(find.byType(GameNavBar));
+      expect(bubble.top, greaterThanOrEqualTo(top.bottom));
+      expect(bubble.bottom, lessThan(nav.top));
+      expect(bubble.top, lessThan(844 / 3));
+      await tester.pump(const Duration(seconds: 3));
+      await tester.pumpAndSettle();
+      expect(find.byType(ToastBubble), findsNothing);
+    });
+
+    testWidgets('ปุ่มในตลาดสูงอย่างน้อย 48dp และภาพไม่เบลอ', (tester) async {
+      await pumpApp(tester);
+      await startNewGame(tester);
+      await openMarket(tester);
+      for (final img in tester.widgetList<Image>(find.byType(Image))) {
+        expect(img.filterQuality, FilterQuality.none);
+      }
+      final tappables = [
+        ...find.byType(PixelButton).evaluate(),
+        ...find.byType(Pressable).evaluate(),
+      ];
+      expect(tappables, isNotEmpty);
+      for (final e in tappables) {
+        final size = (e.renderObject! as RenderBox).size;
+        expect(size.height, greaterThanOrEqualTo(kMinTap));
+        expect(size.width, greaterThanOrEqualTo(kMinTap));
+      }
+    });
   });
 
   testWidgets('ใช้ฟอนต์ไทยที่ฝังในแอป (Mali) กับข้อความทั้งเกม', (
