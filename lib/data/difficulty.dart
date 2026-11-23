@@ -61,8 +61,8 @@ const Map<Difficulty, DifficultySpec> kDifficulties = {
   Difficulty.hard: DifficultySpec(
     name: 'ยาก',
     targetDays: 60,
-    buy: 1.15,
-    sell: .9,
+    buy: 1.1,
+    sell: .95,
     severity: 1.25,
     water: 1.15,
   ),
