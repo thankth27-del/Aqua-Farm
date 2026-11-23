@@ -197,7 +197,8 @@ class GameEngine {
   GameSummary get summary => GameSummary(
     mode: s.mode,
     won: s.won,
-    days: s.won ? targetDays : s.day,
+    // แพ้: จบวันแล้ววันขยับไปแล้ว จึงนับวันสุดท้ายที่เล่นจริง
+    days: s.won ? targetDays : (s.over ? s.day - 1 : s.day),
     targetDays: targetDays,
     grade: overallGrade,
     disastersSurvived: s.survived,

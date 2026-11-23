@@ -6,6 +6,7 @@ import '../dialogs.dart';
 import '../providers.dart';
 import '../scenes/pixel_scene.dart';
 import '../theme/theme.dart';
+import '../widgets/summary_card.dart';
 
 /// Game Over — สุขภาพหมด (เกมที่จบไม่ถูกบันทึก จึงโหลดเซฟล่าสุดได้)
 class GameOverScreen extends ConsumerWidget {
@@ -14,15 +15,14 @@ class GameOverScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final ctl = ref.read(gameProvider.notifier);
+    final sum = ref.watch(gameProvider)!.engine.summary;
     return Scaffold(
       body: Stack(
         fit: StackFit.expand,
         children: [
           PixelScene(
-            painterBuilder: (t) => FarmPainter(
-              t,
-              const FarmSceneData(damaged: true),
-            ),
+            painterBuilder: (t) =>
+                FarmPainter(t, const FarmSceneData(damaged: true)),
             cover: true,
             framed: false,
             alignment: const Alignment(-.12, 0),
@@ -30,7 +30,7 @@ class GameOverScreen extends ConsumerWidget {
           const ColoredBox(color: Color(0x991B120B)),
           SafeArea(
             child: Center(
-              child: Padding(
+              child: SingleChildScrollView(
                 padding: const EdgeInsets.all(Gap.l),
                 child: BounceIn(
                   child: WoodPanel(
@@ -63,6 +63,8 @@ class GameOverScreen extends ConsumerWidget {
                           'สุขภาพหมดเพราะขาดอาหารเป็นเวลานาน',
                           align: TextAlign.center,
                         ),
+                        const SizedBox(height: Gap.m),
+                        SummaryCard(summary: sum),
                         const SizedBox(height: Gap.s),
                         const PaperCard(
                           child: Row(

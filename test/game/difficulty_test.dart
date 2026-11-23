@@ -296,6 +296,9 @@ void main() {
       expect(r.won, isFalse);
       expect(s.over, isTrue);
       expect(s.won, isFalse);
+      // คะแนนสรุปตอนแพ้: วันที่ไปถึง = วันสุดท้ายที่เล่น (ไม่ใช่วันถัดไป)
+      expect(e.summary.won, isFalse);
+      expect(e.summary.days, 15);
     });
 
     test('คะแนนสรุป: เกรดรวมจากเกรดรายวัน และนับภัยที่รอด', () {

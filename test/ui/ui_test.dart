@@ -348,6 +348,31 @@ void main() {
     expect(find.text('AQUA FARM'), findsOneWidget);
   });
 
+  testWidgets('Game Over: แสดงคะแนนสรุปแบบเดียวกับหน้าชนะ', (tester) async {
+    await pumpApp(tester);
+    await startNewGame(tester, mode: Difficulty.hard);
+    final ctl = container.read(gameProvider.notifier);
+    ctl.update((e) {
+      e.state
+        ..day = 12
+        ..hunger = 0
+        ..health = 10
+        ..money = 321
+        ..survived = 1;
+    });
+    await tester.tap(find.widgetWithText(PixelButton, 'จบวัน'));
+    await tester.pumpAndSettle();
+    expect(find.text('Game Over'), findsOneWidget);
+    expect(find.byKey(const ValueKey('summary')), findsOneWidget);
+    expect(find.text('โหมดยาก'), findsOneWidget);
+    expect(find.text('เกรดรวม'), findsOneWidget);
+    expect(find.text('1 ครั้ง'), findsOneWidget);
+    expect(find.text('321฿'), findsOneWidget);
+    expect(find.text('วันที่ไปถึง'), findsOneWidget);
+    expect(find.text('12/60 วัน'), findsOneWidget);
+    expect(find.widgetWithText(PixelButton, 'โหลดเซฟล่าสุด'), findsOneWidget);
+  });
+
   testWidgets('ช่องเซฟ: ลบต้องยืนยัน และเปลี่ยนชื่อได้', (tester) async {
     await pumpApp(tester);
     await startNewGame(tester);
