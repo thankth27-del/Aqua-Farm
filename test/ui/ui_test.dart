@@ -287,7 +287,7 @@ void main() {
     for (final t in ['ง่าย', 'ปานกลาง', 'ยาก']) {
       expect(find.text(t), findsOneWidget);
     }
-    for (final t in ['รอดครบ 15 วัน', 'รอดครบ 30 วัน', 'รอดครบ 60 วัน']) {
+    for (final t in ['รอดครบ 20 วัน', 'รอดครบ 30 วัน', 'รอดครบ 60 วัน']) {
       expect(find.text(t), findsOneWidget);
     }
     await tester.tap(find.widgetWithText(PixelButton, 'ยกเลิก'));
@@ -322,27 +322,27 @@ void main() {
     // ข้ามไปวันสุดท้าย (ให้อิ่มและปลอดภัยเพื่อไม่ให้ตายระหว่างทาง)
     ctl.update((e) {
       e.state
-        ..day = 15
+        ..day = 20
         ..hunger = 100
         ..health = 100
         ..money = 777;
     });
     await ctl.save();
     await tester.pumpAndSettle();
-    expect(find.text('วัน 15/15'), findsOneWidget);
+    expect(find.text('วัน 20/20'), findsOneWidget);
     await tester.tap(find.widgetWithText(PixelButton, 'จบวัน'));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('win')), findsOneWidget);
     expect(find.text('ชนะ!'), findsOneWidget);
-    expect(find.text('รอดครบ 15 วัน'), findsOneWidget);
+    expect(find.text('รอดครบ 20 วัน'), findsOneWidget);
     expect(find.text('โหมดง่าย'), findsOneWidget);
     expect(find.text('เกรดรวม'), findsOneWidget);
     expect(find.text('ภัยที่รอด'), findsOneWidget);
     expect(find.text('เงินคงเหลือ'), findsOneWidget);
-    expect(find.text('15/15 วัน'), findsOneWidget);
-    // ไม่มีรายงานประจำวันซ้อน และเซฟยังเป็นวันที่ 15 ก่อนจบเกม
+    expect(find.text('20/20 วัน'), findsOneWidget);
+    // ไม่มีรายงานประจำวันซ้อน และเซฟยังเป็นวันที่ 20 ก่อนจบเกม
     expect(find.textContaining('รายงานประจำวัน'), findsNothing);
-    expect(repo.listSlots()[1]!.day, 15);
+    expect(repo.listSlots()[1]!.day, 20);
 
     await tester.tap(find.widgetWithText(PixelButton, 'กลับเมนูหลัก'));
     await tester.pumpAndSettle();

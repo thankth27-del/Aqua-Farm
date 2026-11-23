@@ -354,7 +354,7 @@ void main() {
       final e = engineFor(Difficulty.easy);
       final s = e.state
         ..upcoming = null
-        ..day = 15
+        ..day = 20
         ..hunger = 0
         ..health = 10;
       final r = e.endDay();
@@ -364,7 +364,7 @@ void main() {
       expect(s.won, isFalse);
       // คะแนนสรุปตอนแพ้: วันที่ไปถึง = วันสุดท้ายที่เล่น (ไม่ใช่วันถัดไป)
       expect(e.summary.won, isFalse);
-      expect(e.summary.days, 15);
+      expect(e.summary.days, 20);
     });
 
     test('คะแนนสรุป: เกรดรวมจากเกรดรายวัน และนับภัยที่รอด', () {

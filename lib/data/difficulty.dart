@@ -43,7 +43,7 @@ class DifficultySpec {
 const Map<Difficulty, DifficultySpec> kDifficulties = {
   Difficulty.easy: DifficultySpec(
     name: 'ง่าย',
-    targetDays: 15,
+    targetDays: 20,
     buy: .9,
     sell: 1.1,
     severity: .8,
