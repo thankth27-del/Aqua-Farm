@@ -7,6 +7,7 @@ import '../providers.dart';
 import '../theme/theme.dart';
 import 'farm_tab.dart';
 import 'fish_tab.dart';
+import 'kitchen_tab.dart';
 import 'market_tab.dart';
 import 'placeholder_tab.dart';
 import 'report_screen.dart';
@@ -36,12 +37,7 @@ class _GameShellState extends ConsumerState<GameShell> {
       0 => FarmTab(onOpenTab: (i) => setState(() => _tab = i)),
       1 => const FishTab(),
       2 => const MarketTab(),
-      3 => const PlaceholderTab(
-        title: 'ครัว',
-        icon: 'tomyum',
-        items: ['tomyum', 'fry', 'hsoup', 'dry'],
-        note: 'ทำอาหาร 5 เมนู และถนอมอาหาร 4 วิธี',
-      ),
+      3 => const KitchenTab(),
       _ => const PlaceholderTab(
         title: 'คลังสินค้า',
         icon: 'crate',

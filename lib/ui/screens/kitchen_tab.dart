@@ -1,0 +1,467 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:material_ui/material_ui.dart';
+
+import '../../data/equipment_data.dart';
+import '../../data/fish_data.dart';
+import '../../data/food_data.dart';
+import '../../data/ingredients.dart';
+import '../../game/game_engine.dart';
+import '../dialogs.dart';
+import '../providers.dart';
+import '../scenes/pixel_scene.dart';
+import '../theme/theme.dart';
+
+/// แท็บ "ครัว" (cook ในต้นแบบ): ทำอาหาร 5 เมนู และถนอมอาหาร 4 วิธี
+/// ใช้ปลาจากคลัง 1 ตัว + วัตถุดิบ ได้อาหารเท่ากับจำนวนจานของปลาตัวนั้น
+class KitchenTab extends StatefulWidget {
+  const KitchenTab({super.key});
+
+  @override
+  State<KitchenTab> createState() => _KitchenTabState();
+}
+
+class _KitchenTabState extends State<KitchenTab> {
+  bool _preserve = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(Gap.m, Gap.m, Gap.m, 0),
+          child: Row(
+            children: [
+              Expanded(
+                child: PixelButton(
+                  label: 'ทำอาหาร',
+                  icon: const PixelIcon('fry', size: 26),
+                  style: _preserve
+                      ? PixelButtonStyle.wood
+                      : PixelButtonStyle.gold,
+                  onPressed: () => setState(() => _preserve = false),
+                ),
+              ),
+              const SizedBox(width: Gap.s),
+              Expanded(
+                child: PixelButton(
+                  label: 'ถนอมอาหาร',
+                  icon: const PixelIcon('jar', size: 26),
+                  style: _preserve
+                      ? PixelButtonStyle.gold
+                      : PixelButtonStyle.wood,
+                  onPressed: () => setState(() => _preserve = true),
+                ),
+              ),
+            ],
+          ),
+        ),
+        Expanded(child: _KitchenView(preserve: _preserve)),
+      ],
+    );
+  }
+}
+
+class _KitchenView extends ConsumerWidget {
+  const _KitchenView({required this.preserve});
+  final bool preserve;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final session = ref.watch(gameProvider)!;
+    final e = session.engine;
+    final s = session.state;
+    final ctl = ref.read(gameProvider.notifier);
+    final fish = e.fishForCooking;
+
+    return ListView(
+      key: PageStorageKey(preserve ? 'kitchen-pres' : 'kitchen-cook'),
+      padding: const EdgeInsets.all(Gap.m),
+      children: [
+        PageHeader(
+          scene: PixelScene(painterBuilder: RoomPainter.new),
+          title: preserve ? 'ถนอมอาหาร' : 'ครัวและสูตรอาหาร',
+          icon: PixelIcon(preserve ? 'jar' : 'tomyum', size: 30),
+          titleSize: 21,
+        ),
+
+        // ---------- ปลาที่ใช้ ----------
+        WoodPanel(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SectionTitle(
+                'ปลาที่ใช้',
+                icon: const PixelIcon('f_nila', size: 30),
+                trailing: Tag('${e.fishTotal} ตัว'),
+              ),
+              if (fish.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: Gap.s),
+                  child: Muted(
+                    'ไม่มีปลาในคลัง จับปลาที่บ่อก่อน',
+                    size: FontSize.body,
+                    align: TextAlign.center,
+                  ),
+                )
+              else
+                Wrap(
+                  spacing: Gap.s,
+                  runSpacing: Gap.s,
+                  children: [
+                    for (final f in kFish.values)
+                      if ((s.fishStock[f.id] ?? 0) > 0)
+                        _FishChoice(
+                          key: ValueKey('cook-fish-${f.id}'),
+                          spec: f,
+                          count: s.fishStock[f.id]!,
+                          selected: f.id == fish,
+                          onTap: () => ctl.run((e) {
+                            e.setCookFish(f.id);
+                            return const ActionResult.ok('');
+                          }),
+                        ),
+                  ],
+                ),
+            ],
+          ),
+        ),
+
+        if (!preserve)
+          // ---------- สูตรอาหาร ----------
+          WoodPanel(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const SectionTitle(
+                  'สูตรอาหาร',
+                  icon: PixelIcon('tomyum', size: 28),
+                ),
+                for (final r in kRecipes.values)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: Gap.s),
+                    child: _RecipeCard(
+                      key: ValueKey('recipe-${r.id}'),
+                      food: kFoods[r.id]!,
+                      details: [
+                        'ขาย ${kFoods[r.id]!.value} บาท',
+                        'อิ่ม +${kFoods[r.id]!.hunger}',
+                        'พลังงาน +${kFoods[r.id]!.energy}',
+                        '${kFoods[r.id]!.kcal} kcal',
+                        'โปรตีน ${kFoods[r.id]!.protein} g',
+                        'ปรุง ${r.minutes} นาที',
+                        'เก็บได้ ${kFoods[r.id]!.shelfDays} วัน',
+                      ],
+                      chips: [
+                        _fishChip(fish),
+                        ..._ingredientChips(r.need, s.inventory),
+                      ],
+                      action: 'ทำอาหาร',
+                      enabled: e.canCook(r.id),
+                      onPressed: () =>
+                          showResult(context, ctl.run((e) => e.cook(r.id))),
+                    ),
+                  ),
+              ],
+            ),
+          )
+        else ...[
+          // ---------- วิธีถนอม ----------
+          WoodPanel(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const SectionTitle(
+                  'วิธีถนอมอาหาร',
+                  icon: PixelIcon('jar', size: 28),
+                ),
+                for (final p in kPreserveMethods.values)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: Gap.s),
+                    child: _RecipeCard(
+                      key: ValueKey('preserve-${p.id}'),
+                      food: kFoods[p.id]!,
+                      title: '${p.name} → ${kFoods[p.id]!.name}',
+                      details: [
+                        p.description,
+                        'ใช้เวลา ${p.days} วัน',
+                        'ขาย ${kFoods[p.id]!.value} บาท',
+                      ],
+                      chips: [
+                        _fishChip(fish),
+                        ..._ingredientChips(p.need, s.inventory),
+                        _equipmentChip(
+                          kEquipment[p.equipment]!,
+                          e.freeCapacity(p.equipment),
+                          s.equipmentCount(p.equipment),
+                        ),
+                      ],
+                      action: 'เริ่มถนอม',
+                      enabled: e.canPreserve(p.id),
+                      onPressed: () => showResult(
+                        context,
+                        ctl.run((e) => e.startPreserve(p.id)),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+
+          // ---------- ตู้เย็น ----------
+          _FridgeStatus(
+            owned: s.equipmentCount('fridge') > 0,
+            power: s.power,
+          ),
+
+          // ---------- กำลังถนอม ----------
+          WoodPanel(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                SectionTitle(
+                  'กำลังถนอม',
+                  icon: const PixelIcon('cal', size: 26),
+                  trailing: Tag('${s.processing.length} ชุด'),
+                ),
+                if (s.processing.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: Gap.s),
+                    child: Muted(
+                      'ไม่มี',
+                      size: FontSize.body,
+                      align: TextAlign.center,
+                    ),
+                  ),
+                for (var i = 0; i < s.processing.length; i++)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: Gap.s),
+                    child: PaperCard(
+                      key: ValueKey('job-$i'),
+                      padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
+                      child: Row(
+                        children: [
+                          PixelIcon(
+                            kFoods[s.processing[i].method]!.icon,
+                            size: 36,
+                          ),
+                          const SizedBox(width: Gap.s),
+                          Expanded(
+                            child: Bold(
+                              '${kPreserveMethods[s.processing[i].method]!.name} x${s.processing[i].qty}',
+                              maxLines: 2,
+                            ),
+                          ),
+                          const SizedBox(width: Gap.s),
+                          Tag(
+                            'เหลือ ${s.processing[i].daysLeft} วัน',
+                            color: AquaColors.goldPale,
+                            icon: const PixelIcon('cal', size: 14),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  static Widget _fishChip(String fish) => _Chip(
+    icon: fish.isEmpty ? 'f_nila' : 'f_$fish',
+    text: 'ปลา 1',
+    ok: fish.isNotEmpty,
+  );
+
+  static List<Widget> _ingredientChips(
+    Map<String, int> need,
+    Map<String, int> inv,
+  ) => [
+    for (final n in need.entries)
+      _Chip(
+        icon: kIngredients[n.key]!.icon,
+        text: '${kIngredients[n.key]!.name} ${inv[n.key] ?? 0}/${n.value}',
+        ok: (inv[n.key] ?? 0) >= n.value,
+      ),
+  ];
+
+  static Widget _equipmentChip(EquipmentSpec eq, int free, int total) => _Chip(
+    icon: eq.icon,
+    text: '${eq.name} ว่าง $free/$total',
+    ok: free > 0,
+  );
+}
+
+/// ป้ายของที่ต้องใช้ — สีแดงเมื่อไม่พอ
+class _Chip extends StatelessWidget {
+  const _Chip({required this.icon, required this.text, required this.ok});
+  final String icon;
+  final String text;
+  final bool ok;
+
+  @override
+  Widget build(BuildContext context) => Tag(
+    text,
+    size: 13,
+    icon: PixelIcon(icon, size: 18),
+    color: ok ? AquaColors.creamDark : AquaColors.redPale,
+    textColor: ok ? AquaColors.text : AquaColors.redDark,
+  );
+}
+
+/// ตัวเลือกปลา: ไอคอน ชื่อ จำนวน → ได้กี่จาน
+class _FishChoice extends StatelessWidget {
+  const _FishChoice({
+    super.key,
+    required this.spec,
+    required this.count,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final FishSpec spec;
+  final int count;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Pressable(
+      label:
+          'ใช้${spec.name} มี $count ตัว ได้ ${spec.yieldDishes} จาน${selected ? ' (เลือกอยู่)' : ''}',
+      onTap: onTap,
+      child: ExcludeSemantics(
+        child: PaperCard(
+          fill: selected ? AquaColors.goldPale : AquaColors.paper,
+          border: selected ? AquaColors.goldDark : AquaColors.woodDark,
+          padding: const EdgeInsets.fromLTRB(6, 4, 10, 4),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              PixelIcon('f_${spec.id}', size: 40),
+              const SizedBox(width: Gap.xs),
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Bold('${spec.name} ($count)', size: 15),
+                  Muted('→ ${spec.yieldDishes} จาน', size: 13),
+                ],
+              ),
+              if (selected) ...[
+                const SizedBox(width: Gap.xs),
+                const PixelGlyph(Glyph.check, size: 16),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// การ์ดสูตร / วิธีถนอม: ไอคอน ชื่อ รายละเอียด ของที่ต้องใช้ ปุ่มทำ
+class _RecipeCard extends StatelessWidget {
+  const _RecipeCard({
+    super.key,
+    required this.food,
+    required this.details,
+    required this.chips,
+    required this.action,
+    required this.enabled,
+    required this.onPressed,
+    this.title,
+  });
+
+  final FoodSpec food;
+  final String? title;
+  final List<String> details;
+  final List<Widget> chips;
+  final String action;
+  final bool enabled;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return PaperCard(
+      padding: const EdgeInsets.all(Gap.s),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              PixelIcon(food.icon, size: 52),
+              const SizedBox(width: Gap.s),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Bold(title ?? food.name, size: FontSize.label),
+                    const SizedBox(height: 2),
+                    Muted(details.join(' · '), size: 13),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: Gap.s),
+          // ป้ายของที่ต้องใช้กว้างเต็มการ์ด (ชื่ออุปกรณ์ยาว) แล้วปุ่มอยู่ขวาล่าง
+          Wrap(spacing: Gap.xs, runSpacing: Gap.xs, children: chips),
+          const SizedBox(height: Gap.s),
+          Align(
+            alignment: Alignment.centerRight,
+            child: PixelButton(
+              label: action,
+              style: PixelButtonStyle.green,
+              onPressed: enabled ? onPressed : null,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// สถานะตู้เย็น (ช่วยให้อาหารสุกเสื่อมช้าลง แต่หยุดทำงานเมื่อไฟดับ)
+class _FridgeStatus extends StatelessWidget {
+  const _FridgeStatus({required this.owned, required this.power});
+  final bool owned;
+  final bool power;
+
+  @override
+  Widget build(BuildContext context) {
+    final (text, color) = !owned
+        ? ('ยังไม่มี (ซื้อที่ตลาด)', AquaColors.textSoft)
+        : power
+        ? ('ทำงาน — อาหารสุกเสื่อมช้าลงครึ่งหนึ่ง', AquaColors.ok)
+        : ('ไฟดับ ตู้เย็นหยุดทำงาน!', AquaColors.bad);
+    return WoodPanel(
+      child: Row(
+        children: [
+          const PixelIcon('fridge', size: 40),
+          const SizedBox(width: Gap.s),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Bold('ตู้เย็น (Refrigeration)'),
+                Text(
+                  text,
+                  key: const ValueKey('fridge-status'),
+                  style: TextStyle(
+                    color: color,
+                    fontWeight: FontWeight.w700,
+                    fontSize: FontSize.body,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

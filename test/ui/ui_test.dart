@@ -1,7 +1,9 @@
+import 'package:aqua_farm/game/game_engine.dart';
 import 'package:aqua_farm/save/save_repository.dart';
 import 'package:aqua_farm/ui/app.dart';
 import 'package:aqua_farm/ui/providers.dart';
 import 'package:aqua_farm/ui/screens/game_shell.dart';
+import 'package:aqua_farm/ui/screens/kitchen_tab.dart';
 import 'package:aqua_farm/ui/screens/market_tab.dart';
 import 'package:aqua_farm/ui/theme/theme.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -490,6 +492,146 @@ void main() {
       ];
       expect(tappables, isNotEmpty);
       for (final e in tappables) {
+        final size = (e.renderObject! as RenderBox).size;
+        expect(size.height, greaterThanOrEqualTo(kMinTap));
+        expect(size.width, greaterThanOrEqualTo(kMinTap));
+      }
+    });
+  });
+
+  group('ครัว', () {
+    Future<void> openKitchen(WidgetTester tester) async {
+      await tester.tap(
+        find.descendant(
+          of: find.byType(GameNavBar),
+          matching: find.text('ครัว'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(KitchenTab), findsOneWidget);
+    }
+
+    Finder kitchenScroll() => find
+        .descendant(
+          of: find.byType(KitchenTab),
+          matching: find.byType(Scrollable),
+        )
+        .first;
+
+    Future<void> scrollTo(WidgetTester tester, Finder f) async {
+      await tester.scrollUntilVisible(f, 200, scrollable: kitchenScroll());
+      await tester.ensureVisible(f);
+      await tester.pumpAndSettle();
+    }
+
+    Finder buttonIn(String key) => find.descendant(
+      of: find.byKey(ValueKey(key)),
+      matching: find.byType(PixelButton),
+    );
+
+    bool enabled(WidgetTester tester, Finder f) =>
+        tester.widget<PixelButton>(f).onPressed != null;
+
+    testWidgets('ไม่มีปลา: ทำอาหารไม่ได้ และบอกให้จับปลาก่อน', (tester) async {
+      await pumpApp(tester);
+      await startNewGame(tester);
+      await openKitchen(tester);
+      expect(find.text('ไม่มีปลาในคลัง จับปลาที่บ่อก่อน'), findsOneWidget);
+      for (final r in ['fry', 'garlic', 'tomyum', 'bake', 'herb']) {
+        await scrollTo(tester, buttonIn('recipe-$r'));
+        expect(enabled(tester, buttonIn('recipe-$r')), isFalse);
+      }
+    });
+
+    testWidgets('ทำปลาทอด: ใช้ปลา 1 ตัวและเครื่องปรุง ได้อาหารเข้าคลัง', (
+      tester,
+    ) async {
+      await pumpApp(tester);
+      await startNewGame(tester);
+      final s = container.read(gameProvider)!.state;
+      s.fishStock['nila'] = 1;
+      s.inventory['spice'] = 1;
+      await openKitchen(tester);
+
+      expect(find.byKey(const ValueKey('cook-fish-nila')), findsOneWidget);
+      final fry = buttonIn('recipe-fry');
+      await scrollTo(tester, fry);
+      expect(enabled(tester, fry), isTrue);
+      expect(enabled(tester, buttonIn('recipe-garlic')), isFalse);
+      await tester.tap(fry);
+      await tester.pump();
+      expect(find.text('ทำปลาทอดได้ 2 จาน (ใช้ปลานิล)'), findsOneWidget);
+      expect(s.fishStock['nila'], 0);
+      expect(s.inventory['spice'], 0);
+      expect(s.energy, 92);
+      expect(s.stock.any((b) => b.food == 'fry' && b.qty == 2), isTrue);
+      await tester.pump(const Duration(seconds: 3));
+      await tester.pumpAndSettle();
+      expect(enabled(tester, fry), isFalse);
+    });
+
+    testWidgets('เลือกปลาที่จะใช้ได้', (tester) async {
+      await pumpApp(tester);
+      await startNewGame(tester);
+      final s = container.read(gameProvider)!.state;
+      s.fishStock['nila'] = 1;
+      s.fishStock['dook'] = 1;
+      await openKitchen(tester);
+      final e = container.read(gameProvider)!.engine;
+      expect(e.fishForCooking, 'nila');
+      await tester.tap(find.byKey(const ValueKey('cook-fish-dook')));
+      await tester.pumpAndSettle();
+      expect(e.fishForCooking, 'dook');
+      expect(s.cookFish, 'dook');
+    });
+
+    testWidgets('ถนอมอาหาร: ต้องมีอุปกรณ์ว่าง แล้วเริ่มงานได้', (tester) async {
+      await pumpApp(tester);
+      await startNewGame(tester);
+      final s = container.read(gameProvider)!.state;
+      s.fishStock['nila'] = 2;
+      await openKitchen(tester);
+      await tester.tap(find.widgetWithText(PixelButton, 'ถนอมอาหาร'));
+      await tester.pumpAndSettle();
+
+      final dry = buttonIn('preserve-dried');
+      await scrollTo(tester, dry);
+      expect(find.text('แผงตากปลา ว่าง 0/0'), findsOneWidget);
+      expect(enabled(tester, dry), isFalse);
+
+      s.equipment['rack'] = 1;
+      container.read(gameProvider.notifier).run(
+        (e) => const ActionResult.ok(''),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('แผงตากปลา ว่าง 1/1'), findsOneWidget);
+      await tester.tap(dry);
+      await tester.pump();
+      expect(find.text('เริ่มตากแห้ง (Drying) ใช้เวลา 2 วัน'), findsOneWidget);
+      expect(s.processing.single.method, 'dried');
+      expect(s.fishStock['nila'], 1);
+      await tester.pump(const Duration(seconds: 3));
+      await tester.pumpAndSettle();
+      expect(find.text('แผงตากปลา ว่าง 0/1'), findsOneWidget);
+      expect(enabled(tester, dry), isFalse);
+      await scrollTo(tester, find.byKey(const ValueKey('fridge-status')));
+      expect(find.text('ยังไม่มี (ซื้อที่ตลาด)'), findsOneWidget);
+      await scrollTo(tester, find.byKey(const ValueKey('job-0')));
+      expect(find.text('เหลือ 2 วัน'), findsOneWidget);
+    });
+
+    testWidgets('ปุ่มในครัวสูงอย่างน้อย 48dp และภาพไม่เบลอ', (tester) async {
+      await pumpApp(tester);
+      await startNewGame(tester);
+      container.read(gameProvider)!.state.fishStock['nila'] = 1;
+      await openKitchen(tester);
+      for (final img in tester.widgetList<Image>(find.byType(Image))) {
+        expect(img.filterQuality, FilterQuality.none);
+      }
+      for (final e in [
+        ...find.byType(PixelButton).evaluate(),
+        ...find.byType(Pressable).evaluate(),
+      ]) {
         final size = (e.renderObject! as RenderBox).size;
         expect(size.height, greaterThanOrEqualTo(kMinTap));
         expect(size.width, greaterThanOrEqualTo(kMinTap));
