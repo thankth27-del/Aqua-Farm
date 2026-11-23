@@ -13,6 +13,7 @@ import '../../data/disaster_data.dart';
 import '../../data/fish_data.dart';
 import '../../game/game_state.dart';
 import '../providers.dart';
+import 'fish_swim.dart';
 import '../theme/colors.dart';
 
 const double kSceneW = 320;
@@ -56,21 +57,48 @@ abstract class PixelPainter extends CustomPainter {
     }
   }
 
-  /// spr(x,t,px,py,s) ปลา 1 ตัว
-  void fish(String type, num px, num py, int s) {
+  /// spr(x,t,px,py,s) ปลา 1 ตัว (หัวอยู่ซ้าย)
+  void fish(String type, num px, num py, int s) =>
+      fishSprite(type, px, py, s.toDouble());
+
+  /// ปลา 1 ตัว ขนาดพิกเซล [u] (ทศนิยมได้ ขอบยังคม) — [faceRight] กลับด้านภาพให้หัวไปทางขวา
+  void fishSprite(
+    String type,
+    num px,
+    num py,
+    double u, {
+    bool faceRight = false,
+  }) {
     final f = kFish[type]!;
     final fin = Color(f.finColor), body = Color(f.bodyColor);
-    rect(px + 8 * s, py + s, s, 3 * s, fin);
-    rect(px + 9 * s, py, s, 5 * s, fin);
-    rect(px + s, py, 6 * s, 5 * s, body);
-    rect(px, py + s, 8 * s, 3 * s, body);
-    if (f.stripe) rect(px + s, py + 2 * s, 7 * s, s, const Color(0xFF2F3A18));
-    if (f.hump) rect(px + 3 * s, py - s, 3 * s, s, body);
-    if (f.whiskers) {
-      rect(px - s, py + 2 * s, s, s, const Color(0xFF0A2229));
-      rect(px - s, py + 4 * s, s, s, const Color(0xFF0A2229));
+    // ช่อง (cx,cy,cw,ch) บนกริดปลา 10x5 → สี่เหลี่ยมที่ขอบปัดเป็นพิกเซลเต็ม
+    void cell(num cx, num cy, num cw, num ch, Color c) {
+      final gx = faceRight ? 10 - cx - cw : cx;
+      final x0 = _r(px + gx * u), x1 = _r(px + (gx + cw) * u);
+      final y0 = _r(py + cy * u), y1 = _r(py + (cy + ch) * u);
+      _p.color = c;
+      _c.drawRect(
+        Rect.fromLTRB(
+          x0.toDouble(),
+          y0.toDouble(),
+          x1.toDouble(),
+          y1.toDouble(),
+        ),
+        _p,
+      );
     }
-    rect(px + s, py + s, s, s, Colors.black);
+
+    cell(8, 1, 1, 3, fin);
+    cell(9, 0, 1, 5, fin);
+    cell(1, 0, 6, 5, body);
+    cell(0, 1, 8, 3, body);
+    if (f.stripe) cell(1, 2, 7, 1, const Color(0xFF2F3A18));
+    if (f.hump) cell(3, -1, 3, 1, body);
+    if (f.whiskers) {
+      cell(-1, 2, 1, 1, const Color(0xFF0A2229));
+      cell(-1, 4, 1, 1, const Color(0xFF0A2229));
+    }
+    cell(1, 1, 1, 1, Colors.black);
   }
 
   void draw(int t);
@@ -485,21 +513,38 @@ class PondSceneData {
   });
 
   factory PondSceneData.fromState(GameState s) => PondSceneData(
-    fish: [for (final f in s.pond) (f.type, f.mature)],
+    fish: [
+      for (final f in s.pond)
+        SwimFish(
+          key: f,
+          type: f.type,
+          growth: f.growth,
+          stressed: s.water < 60 || s.o2 < kFish[f.type]!.o2Need,
+          sick: fishSick(f),
+        ),
+    ],
     water: s.water,
     o2: s.o2,
     fed: s.fed > 0,
   );
 
-  final List<(String, bool)> fish;
+  final List<SwimFish> fish;
   final int water;
   final double o2;
   final bool fed;
 }
 
+/// ปลาป่วย: สุขภาพต่ำกว่าครึ่ง (ใช้แสดงผลเท่านั้น)
+bool fishSick(PondFish f) => f.health < 50;
+
 class PondPainter extends PixelPainter {
-  PondPainter(super.tick, this.data);
+  /// [swim] ต้องเป็นตัวเดิมตลอดอายุหน้าจอ (ปลาจำตำแหน่งของตัวเองไว้ในนั้น)
+  PondPainter(super.tick, this.data, [PondSwim? swim])
+    : swim = swim ?? PondSwim() {
+    this.swim.sync(data.fish, fed: data.fed);
+  }
   final PondSceneData data;
+  final PondSwim swim;
 
   @override
   void draw(int t) {
@@ -574,14 +619,16 @@ class PondPainter extends PixelPainter {
         );
       }
     }
-    for (var i = 0; i < data.fish.length; i++) {
-      final (type, mature) = data.fish[i];
-      // ว่ายไปทางหัว (ซ้าย) ทั่วทั้งบ่อ แล้ววนกลับจากขอบขวา
-      fish(
-        type,
-        330 - ((i * 67 + t * (.6 + (i % 3) * .35)) % 370),
-        50 + (i * 17) % 80 + _r(4 * math.sin((t + i * 8) / 9)),
-        mature ? 3 : 2,
+    // ปลาแต่ละตัวว่ายตามเป้าหมายของตัวเอง (ดู fish_swim.dart)
+    swim.advanceTo(t);
+    for (final s in swim.swimmers) {
+      final u = s.unit;
+      fishSprite(
+        s.fish.type,
+        s.x - 5 * u,
+        s.drawY(t) - 2.5 * u,
+        u,
+        faceRight: !s.faceLeft,
       );
     }
   }

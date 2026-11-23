@@ -193,6 +193,45 @@ void main() {
     expect(find.text('วันที่ 2'), findsOneWidget);
   });
 
+  testWidgets('ปลาในบ่อ: การ์ดต่อตัว มีป้ายป่วย/หิวชัดเจน', (tester) async {
+    await pumpApp(tester);
+    await startNewGame(tester);
+    await openFishShopCard(tester, 'nila');
+    await tester.tap(find.byKey(const ValueKey('qty-plus')));
+    await tester.pumpAndSettle();
+    await buyFish(tester);
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pumpAndSettle();
+    // ปลาตัวแรกป่วย (สุขภาพต่ำกว่าครึ่ง)
+    container
+        .read(gameProvider.notifier)
+        .update((e) => e.state.pond[0].health = 30);
+    await tester.tap(find.text('บ่อปลา'));
+    await tester.pumpAndSettle();
+
+    Finder inCard(int i, Finder f) =>
+        find.descendant(of: find.byKey(ValueKey('pond-fish-$i')), matching: f);
+    final list = find.byType(Scrollable).last;
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('pond-fish-1')),
+      200,
+      scrollable: list,
+    );
+    await tester.pumpAndSettle();
+    expect(inCard(0, find.text('ป่วย')), findsOneWidget);
+    expect(inCard(1, find.text('ป่วย')), findsNothing);
+    // ยังไม่ให้อาหาร: หิวทั้งสองตัว
+    expect(inCard(0, find.text('หิว')), findsNWidgets(2));
+    expect(inCard(1, find.text('หิว')), findsNWidgets(2));
+    expect(inCard(1, find.text('ปลานิล')), findsOneWidget);
+    expect(inCard(1, find.byType(PixelBar)), findsNWidgets(3));
+
+    container.read(gameProvider.notifier).run((e) => e.feed(2));
+    await tester.pumpAndSettle();
+    expect(inCard(1, find.text('หิว')), findsNothing);
+    expect(inCard(1, find.text('พอดี')), findsOneWidget);
+  });
+
   testWidgets('ช่องเซฟ: ลบต้องยืนยัน และเปลี่ยนชื่อได้', (tester) async {
     await pumpApp(tester);
     await startNewGame(tester);
@@ -616,9 +655,9 @@ void main() {
       expect(enabled(tester, dry), isFalse);
 
       s.equipment['rack'] = 1;
-      container.read(gameProvider.notifier).run(
-        (e) => const ActionResult.ok(''),
-      );
+      container
+          .read(gameProvider.notifier)
+          .run((e) => const ActionResult.ok(''));
       await tester.pumpAndSettle();
       expect(find.text('แผงตากปลา ว่าง 1/1'), findsOneWidget);
       await tester.tap(dry);
@@ -717,9 +756,7 @@ void main() {
       );
     });
 
-    testWidgets('กินอาหารต้องยืนยัน: ยกเลิกไม่กิน ตกลงแล้วกิน', (
-      tester,
-    ) async {
+    testWidgets('กินอาหารต้องยืนยัน: ยกเลิกไม่กิน ตกลงแล้วกิน', (tester) async {
       await pumpApp(tester);
       await startNewGame(tester);
       final s = container.read(gameProvider)!.state;
@@ -876,10 +913,8 @@ void main() {
     Finder next() => find.widgetWithText(PixelButton, 'ถัดไป');
     bool nextEnabled(WidgetTester t) =>
         t.widget<PixelButton>(next()).onPressed != null;
-    Finder navTab(String t) => find.descendant(
-      of: find.byType(GameNavBar),
-      matching: find.text(t),
-    );
+    Finder navTab(String t) =>
+        find.descendant(of: find.byType(GameNavBar), matching: find.text(t));
 
     testWidgets('กดถัดไปได้เมื่อทำขั้นนั้นสำเร็จ และชี้เมนูที่ต้องไป', (
       tester,
@@ -888,9 +923,9 @@ void main() {
       await startNewGame(tester, skipTutorial: false);
       expect(find.text('บทเรียน 1/9'), findsOneWidget);
       expect(
-        tester.widget<PixelButton>(
-          find.widgetWithText(PixelButton, 'ย้อนกลับ'),
-        ).onPressed,
+        tester
+            .widget<PixelButton>(find.widgetWithText(PixelButton, 'ย้อนกลับ'))
+            .onPressed,
         isNull,
       );
       await tester.tap(next());
@@ -898,7 +933,10 @@ void main() {
       await tester.tap(next());
       await tester.pumpAndSettle();
       expect(find.text('บทเรียน 3/9'), findsOneWidget);
-      expect(find.text('ไปที่เมนู "ปลา" เพื่อเข้าไปดูแลบ่อปลา'), findsOneWidget);
+      expect(
+        find.text('ไปที่เมนู "ปลา" เพื่อเข้าไปดูแลบ่อปลา'),
+        findsOneWidget,
+      );
       expect(nextEnabled(tester), isFalse);
 
       // เมนู "ปลา" กะพริบชี้ให้ไป

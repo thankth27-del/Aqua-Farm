@@ -6,6 +6,8 @@ import '../../data/fish_data.dart';
 import '../../game/tutorial.dart';
 import '../dialogs.dart';
 import '../providers.dart';
+import '../../game/game_state.dart';
+import '../scenes/fish_swim.dart';
 import '../scenes/pixel_scene.dart';
 import '../theme/theme.dart';
 import 'fish_detail_screen.dart';
@@ -74,11 +76,19 @@ class _FishTabState extends ConsumerState<FishTab> {
   }
 }
 
-class _PondView extends ConsumerWidget {
+class _PondView extends ConsumerStatefulWidget {
   const _PondView();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_PondView> createState() => _PondViewState();
+}
+
+class _PondViewState extends ConsumerState<_PondView> {
+  /// สถานะการว่ายของปลา — อยู่ตลอดอายุหน้าบ่อ (ปลาจำตำแหน่งตัวเองไว้)
+  final _swim = PondSwim();
+
+  @override
+  Widget build(BuildContext context) {
     final session = ref.watch(gameProvider)!;
     final e = session.engine;
     final s = session.state;
@@ -95,7 +105,7 @@ class _PondView extends ConsumerWidget {
         Padding(
           padding: const EdgeInsets.only(bottom: Gap.m),
           child: PixelScene(
-            painterBuilder: (t) => PondPainter(t, scene),
+            painterBuilder: (t) => PondPainter(t, scene, _swim),
             overlay: Padding(
               padding: const EdgeInsets.all(8),
               child: Align(
@@ -282,17 +292,7 @@ class _PondView extends ConsumerWidget {
                     align: TextAlign.center,
                   ),
                 ),
-              for (var i = 0; i < s.pond.length; i++)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: Gap.s),
-                  child: _FishRow(
-                    type: s.pond[i].type,
-                    growth: s.pond[i].growth,
-                    mature: s.pond[i].mature,
-                    health: s.pond[i].health.round(),
-                    phase: i / 5,
-                  ),
-                ),
+              if (s.pond.isNotEmpty) _FishCards(fish: s.pond, fed: s.fed),
             ],
           ),
         ),
@@ -371,95 +371,258 @@ class _Gauge extends StatelessWidget {
   }
 }
 
-/// ปลา 1 ตัวในบ่อ: ไอคอนว่าย + แถบโต + สุขภาพ
-class _FishRow extends StatelessWidget {
-  const _FishRow({
-    required this.type,
-    required this.growth,
-    required this.mature,
-    required this.health,
-    required this.phase,
-  });
+/// ระดับความอิ่มของปลาวันนี้ จากการให้อาหาร (0 = ยังไม่ให้, 1 น้อย, 2 พอดี, 3 มาก)
+const _fedLabels = ['หิว', 'น้อย', 'พอดี', 'มาก'];
 
-  final String type;
-  final int growth;
-  final bool mature;
-  final int health;
-  final double phase;
+/// รายชื่อปลาในบ่อ: การ์ดต่อตัว 2 คอลัมน์
+class _FishCards extends StatelessWidget {
+  const _FishCards({required this.fish, required this.fed});
+
+  final List<PondFish> fish;
+  final int fed;
 
   @override
   Widget build(BuildContext context) {
-    return PaperCard(
-      padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 48,
-            height: 34,
-            child: Center(
-              child: Bob(
-                dx: 3,
-                dy: 2,
-                phase: phase,
-                period: const Duration(milliseconds: 1600),
-                child: PixelIcon('f_$type', size: 44),
+    return LayoutBuilder(
+      builder: (context, c) {
+        final w = (c.maxWidth - Gap.s) / 2;
+        return Wrap(
+          spacing: Gap.s,
+          runSpacing: Gap.s,
+          children: [
+            for (var i = 0; i < fish.length; i++)
+              SizedBox(
+                width: w,
+                child: _FishCard(
+                  key: ValueKey('pond-fish-$i'),
+                  fish: fish[i],
+                  fed: fed,
+                ),
               ),
-            ),
-          ),
-          const SizedBox(width: Gap.s),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// ปลา 1 ตัว: ภาพพิกเซลใหญ่ (โตตามจริง) ชื่อ และแถบสุขภาพ / ความอิ่ม / การโต
+/// ปลาป่วยหรือหิวมีป้ายกระพริบที่มุมภาพ
+class _FishCard extends StatelessWidget {
+  const _FishCard({super.key, required this.fish, required this.fed});
+
+  final PondFish fish;
+  final int fed;
+
+  @override
+  Widget build(BuildContext context) {
+    final spec = kFish[fish.type]!;
+    final health = fish.health.round();
+    final sick = fishSick(fish);
+    final hungry = fed == 0;
+    final mature = fish.mature;
+    final healthColor = health >= 70
+        ? AquaColors.leafLight
+        : (health >= 50 ? AquaColors.gold : AquaColors.red);
+    // ภาพปลาโตตามการเติบโตจริง (สัดส่วนเดียวกับในบ่อ)
+    final iconSize = 66 * fishUnit(fish.growth) / 3 + 22;
+    final status = [
+      if (sick) 'ป่วย',
+      if (hungry) 'หิว',
+      if (mature) 'พร้อมจับ',
+    ];
+    return Semantics(
+      label:
+          '${spec.name} สุขภาพ $health ความอิ่ม ${_fedLabels[fed.clamp(0, 3)]} '
+          'โต ${fish.growth}%${status.isEmpty ? '' : ' (${status.join(' ')})'}',
+      child: ExcludeSemantics(
+        child: PaperCard(
+          fill: sick ? AquaColors.redPale : AquaColors.paper,
+          border: sick ? AquaColors.red : AquaColors.woodDark,
+          padding: const EdgeInsets.all(6),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SizedBox(
+                height: 76,
+                child: Stack(
                   children: [
-                    Expanded(
-                      child: Bold(
-                        kFish[type]!.name,
-                        size: FontSize.small,
-                        maxLines: 1,
+                    Positioned.fill(
+                      child: PixelBox(
+                        fill: sick ? AquaColors.waterDeep : AquaColors.water,
+                        px: 2,
+                        padding: EdgeInsets.zero,
+                        child: Center(
+                          child: PixelIcon('f_${fish.type}', size: iconSize),
+                        ),
                       ),
                     ),
-                    PixelGlyph(Glyph.heart, size: 12, color: AquaColors.red),
-                    const SizedBox(width: 3),
-                    Text(
-                      '$health',
-                      style: const TextStyle(
-                        fontSize: FontSize.small,
-                        fontWeight: FontWeight.w700,
+                    // สัญลักษณ์ที่มุมภาพ: ป่วย (ซ้ายบน) หิว (ขวาบน) พร้อมจับ (ซ้ายล่าง)
+                    if (sick)
+                      const Positioned(
+                        top: 4,
+                        left: 4,
+                        child: Blink(
+                          child: _Mark(
+                            color: AquaColors.red,
+                            child: PixelGlyph(
+                              Glyph.cross,
+                              size: 12,
+                              color: AquaColors.paper,
+                            ),
+                          ),
+                        ),
                       ),
-                    ),
+                    if (hungry)
+                      const Positioned(
+                        top: 4,
+                        right: 4,
+                        child: Blink(
+                          child: _Mark(
+                            color: AquaColors.gold,
+                            child: PixelIcon('fry', size: 16),
+                          ),
+                        ),
+                      ),
+                    if (mature)
+                      const Positioned(
+                        left: 4,
+                        bottom: 4,
+                        child: _Mark(
+                          color: AquaColors.goldLight,
+                          child: PixelGlyph(Glyph.star, size: 12),
+                        ),
+                      ),
                   ],
                 ),
-                const SizedBox(height: 2),
-                PixelBar(
-                  value: growth,
-                  color: mature ? AquaColors.gold : AquaColors.waterLight,
-                  height: 14,
+              ),
+              const SizedBox(height: Gap.xs),
+              Bold(spec.name, size: FontSize.small, maxLines: 1),
+              if (sick || hungry || mature)
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Wrap(
+                    spacing: 4,
+                    runSpacing: 2,
+                    children: [
+                      if (sick)
+                        const Tag(
+                          'ป่วย',
+                          size: 12,
+                          color: AquaColors.red,
+                          textColor: AquaColors.paper,
+                        ),
+                      if (hungry)
+                        const Tag('หิว', size: 12, color: AquaColors.gold),
+                      if (mature)
+                        const Tag(
+                          'พร้อมจับ',
+                          size: 12,
+                          color: AquaColors.goldLight,
+                        ),
+                    ],
+                  ),
                 ),
-              ],
-            ),
+              _Meter(
+                icon: const PixelGlyph(
+                  Glyph.heart,
+                  size: 11,
+                  color: AquaColors.health,
+                ),
+                label: 'สุขภาพ',
+                value: health,
+                color: healthColor,
+                text: '$health',
+              ),
+              _Meter(
+                icon: const PixelIcon('fry', size: 13),
+                label: 'อิ่ม',
+                value: (fed.clamp(0, 3) * 100 / 3).round(),
+                color: AquaColors.hunger,
+                text: _fedLabels[fed.clamp(0, 3)],
+                bad: hungry,
+              ),
+              _Meter(
+                icon: const PixelGlyph(
+                  Glyph.arrowRight,
+                  size: 11,
+                  color: AquaColors.waterLight,
+                ),
+                label: 'โต',
+                value: fish.growth,
+                color: mature ? AquaColors.gold : AquaColors.waterLight,
+                text: '${fish.growth}%',
+              ),
+            ],
           ),
-          const SizedBox(width: Gap.s),
-          SizedBox(
-            width: 74,
-            child: Align(
-              alignment: Alignment.centerRight,
-              child: mature
-                  ? const Tag('พร้อมจับ', color: AquaColors.gold)
-                  : Text(
-                      '$growth%',
-                      style: const TextStyle(
-                        fontSize: FontSize.body,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-            ),
+        ),
+      ),
+    );
+  }
+}
+
+/// ค่า 1 อย่าง: ไอคอน ป้าย ตัวเลข และแถบพิกเซลเต็มความกว้าง
+class _Meter extends StatelessWidget {
+  const _Meter({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.color,
+    required this.text,
+    this.bad = false,
+  });
+
+  final Widget icon;
+  final String label;
+  final int value;
+  final Color color;
+  final String text;
+  final bool bad;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              SizedBox(width: 14, child: Center(child: icon)),
+              const SizedBox(width: 4),
+              Expanded(child: Muted(label, size: 12)),
+              Text(
+                text,
+                maxLines: 1,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: bad ? AquaColors.bad : AquaColors.text,
+                ),
+              ),
+            ],
           ),
+          const SizedBox(height: 2),
+          PixelBar(value: value, color: color, height: 10),
         ],
       ),
     );
   }
+}
+
+/// กล่องสัญลักษณ์เล็กที่มุมภาพปลา
+class _Mark extends StatelessWidget {
+  const _Mark({required this.color, required this.child});
+  final Color color;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => PixelBox(
+    fill: color,
+    px: 2,
+    padding: const EdgeInsets.all(3),
+    child: child,
+  );
 }
 
 class _FishShop extends ConsumerWidget {
@@ -534,11 +697,7 @@ class _FishShop extends ConsumerWidget {
                           ),
                         ),
                       ),
-                      Bold(
-                        fish[i].name,
-                        size: FontSize.body,
-                        maxLines: 1,
-                      ),
+                      Bold(fish[i].name, size: FontSize.body, maxLines: 1),
                       const SizedBox(height: 2),
                       CoinTag(fish[i].buyPrice, boxed: true),
                     ],

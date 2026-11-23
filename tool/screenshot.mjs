@@ -106,6 +106,48 @@ try {
       await b.send('Input.dispatchMouseEvent', { type: 'mouseWheel', x: a[0], y: a[1], deltaX: 0, deltaY: a[2] });
       await b.sleep(900);
     }
+    // ["frames", "ชื่อ", จำนวน, ห่างกันms, [x,y,w,h] (ถ้ามี: ทำภาพรวมเฟรมเฉพาะส่วนนี้)]
+    // แคปต่อเนื่องเพื่อดูการเคลื่อนไหว แล้วรวมเป็นภาพเดียว (ชื่อ_sheet.png)
+    if (op === 'frames') {
+      const [name, count, every, clip] = a;
+      const shots = [];
+      const t0 = Date.now();
+      for (let i = 0; i < count; i++) {
+        const due = t0 + i * every;
+        const lag = due - Date.now();
+        if (lag > 0) await b.sleep(lag);
+        const at = Date.now() - t0;
+        const { data } = await b.send('Page.captureScreenshot', { format: 'png' });
+        writeFileSync(join(outDir, `${name}_${String(i).padStart(2, '0')}.png`), Buffer.from(data, 'base64'));
+        shots.push([data, at]);
+      }
+      console.log('frames', name, shots.map((s) => s[1]).join(','));
+      if (clip) {
+        const sheet = await b.evaluate(`(async () => {
+          const shots = ${JSON.stringify(shots)};
+          const [x, y, w, h] = ${JSON.stringify(clip)};
+          const s = 2, cols = 2, pad = 6;
+          const c = document.createElement('canvas');
+          const rows = Math.ceil(shots.length / cols);
+          c.width = cols * (w * s + pad) + pad; c.height = rows * (h * s + pad + 28) + pad;
+          const g = c.getContext('2d');
+          g.imageSmoothingEnabled = false;
+          g.fillStyle = '#2a1c12'; g.fillRect(0, 0, c.width, c.height);
+          for (let i = 0; i < shots.length; i++) {
+            const img = new Image();
+            img.src = 'data:image/png;base64,' + shots[i][0];
+            await img.decode();
+            const cx = pad + (i % cols) * (w * s + pad), cy = pad + Math.floor(i / cols) * (h * s + pad + 28);
+            g.drawImage(img, x * s, y * s, w * s, h * s, cx, cy + 28, w * s, h * s);
+            g.fillStyle = '#fff3c4'; g.font = 'bold 22px sans-serif';
+            g.fillText('t = ' + (shots[i][1] / 1000).toFixed(1) + ' s', cx + 4, cy + 22);
+          }
+          return c.toDataURL('image/png').split(',')[1];
+        })()`);
+        writeFileSync(join(outDir, `${name}_sheet.png`), Buffer.from(sheet, 'base64'));
+        console.log('saved', name + '_sheet');
+      }
+    }
     if (op === 'shot') {
       const { data } = await b.send('Page.captureScreenshot', { format: 'png' });
       writeFileSync(join(outDir, a[0] + '.png'), Buffer.from(data, 'base64'));
