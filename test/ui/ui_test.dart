@@ -1,3 +1,4 @@
+import 'package:aqua_farm/data/difficulty.dart';
 import 'package:aqua_farm/data/equipment_data.dart';
 import 'package:aqua_farm/game/game_engine.dart';
 import 'package:aqua_farm/save/save_repository.dart';
@@ -48,15 +49,19 @@ Future<void> pumpApp(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
-/// เมนูหลัก → เกมใหม่ → ช่อง 1 → ตั้งชื่อ → ตกลง
+/// เมนูหลัก → เกมใหม่ → ช่อง 1 → เลือกโหมด → ตั้งชื่อ → ตกลง
 /// (ข้ามบทเรียนเป็นค่าเริ่มต้น เพื่อทดสอบส่วนอื่นได้เต็มจอ)
 Future<void> startNewGame(
   WidgetTester tester, {
   bool skipTutorial = true,
+  Difficulty mode = Difficulty.normal,
 }) async {
   await tester.tap(find.text('เกมใหม่'));
   await tester.pumpAndSettle();
   await tester.tap(find.widgetWithText(PixelButton, 'เกมใหม่').first);
+  await tester.pumpAndSettle();
+  expect(find.text('เลือกความยาก'), findsOneWidget);
+  await tester.tap(find.byKey(ValueKey('mode-${mode.name}')));
   await tester.pumpAndSettle();
   expect(find.text('ตั้งชื่อ Save'), findsOneWidget);
   await tester.tap(find.text('ตกลง'));
@@ -110,7 +115,7 @@ void main() {
     expect(find.byKey(const ValueKey('tutorial')), findsNothing);
     expect(repo.listSlots()[1]!.name, 'ฟาร์มของฉัน');
     expect(find.text('500฿'), findsOneWidget);
-    expect(find.text('วันที่ 1'), findsOneWidget);
+    expect(find.text('วัน 1/30'), findsOneWidget);
     expect(find.text('2 วัน'), findsOneWidget);
     expect(find.text('Excellent'), findsOneWidget);
     expect(find.widgetWithText(PixelButton, 'จบวัน'), findsOneWidget);
@@ -202,7 +207,7 @@ void main() {
     );
     await tester.tap(find.text('เริ่มวันใหม่'));
     await tester.pumpAndSettle();
-    expect(find.text('วันที่ 2'), findsOneWidget);
+    expect(find.text('วัน 2/30'), findsOneWidget);
   });
 
   testWidgets('ปลาในบ่อ: การ์ดต่อตัว มีป้ายป่วย/หิวชัดเจน', (tester) async {
@@ -269,6 +274,78 @@ void main() {
     await tester.pumpAndSettle();
     // ปิดเสียงแล้ว: ไม่มีเสียงบี๊บเพิ่ม
     expect(beeper.beeps.sublist(before), [kBeepOk]);
+  });
+
+  testWidgets('เลือกโหมดก่อนตั้งชื่อ: ยกเลิกแล้วไม่สร้างเกม', (tester) async {
+    await pumpApp(tester);
+    await tester.tap(find.text('เกมใหม่'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(PixelButton, 'เกมใหม่').first);
+    await tester.pumpAndSettle();
+    for (final t in ['ง่าย', 'ปานกลาง', 'ยาก']) {
+      expect(find.text(t), findsOneWidget);
+    }
+    for (final t in ['รอดครบ 15 วัน', 'รอดครบ 30 วัน', 'รอดครบ 60 วัน']) {
+      expect(find.text(t), findsOneWidget);
+    }
+    await tester.tap(find.widgetWithText(PixelButton, 'ยกเลิก'));
+    await tester.pumpAndSettle();
+    expect(find.text('ตั้งชื่อ Save'), findsNothing);
+    expect(repo.listSlots()[1], isNull);
+    expect(container.read(gameProvider), isNull);
+  });
+
+  testWidgets('เกมใหม่โหมดยาก: แถบบนนับวัน 1/60 และช่องเซฟแสดงโหมด', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+    await startNewGame(tester, mode: Difficulty.hard);
+    expect(container.read(gameProvider)!.state.mode, Difficulty.hard);
+    expect(find.text('วัน 1/60'), findsOneWidget);
+    expect(repo.listSlots()[1]!.mode, Difficulty.hard);
+    await container.read(gameProvider.notifier).exitToMenu();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('โหลดเกม'));
+    await tester.pumpAndSettle();
+    expect(find.text('วัน 1/60'), findsOneWidget);
+    expect(find.text('ยาก'), findsOneWidget);
+  });
+
+  testWidgets('รอดถึงวันสุดท้าย: เปิดหน้าชนะพร้อมคะแนน ไม่บันทึกทับเซฟ', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+    await startNewGame(tester, mode: Difficulty.easy);
+    final ctl = container.read(gameProvider.notifier);
+    // ข้ามไปวันสุดท้าย (ให้อิ่มและปลอดภัยเพื่อไม่ให้ตายระหว่างทาง)
+    ctl.update((e) {
+      e.state
+        ..day = 15
+        ..hunger = 100
+        ..health = 100
+        ..money = 777;
+    });
+    await ctl.save();
+    await tester.pumpAndSettle();
+    expect(find.text('วัน 15/15'), findsOneWidget);
+    await tester.tap(find.widgetWithText(PixelButton, 'จบวัน'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('win')), findsOneWidget);
+    expect(find.text('ชนะ!'), findsOneWidget);
+    expect(find.text('รอดครบ 15 วัน'), findsOneWidget);
+    expect(find.text('โหมดง่าย'), findsOneWidget);
+    expect(find.text('เกรดรวม'), findsOneWidget);
+    expect(find.text('ภัยที่รอด'), findsOneWidget);
+    expect(find.text('เงินคงเหลือ'), findsOneWidget);
+    expect(find.text('15/15 วัน'), findsOneWidget);
+    // ไม่มีรายงานประจำวันซ้อน และเซฟยังเป็นวันที่ 15 ก่อนจบเกม
+    expect(find.textContaining('รายงานประจำวัน'), findsNothing);
+    expect(repo.listSlots()[1]!.day, 15);
+
+    await tester.tap(find.widgetWithText(PixelButton, 'กลับเมนูหลัก'));
+    await tester.pumpAndSettle();
+    expect(container.read(gameProvider), isNull);
+    expect(find.text('AQUA FARM'), findsOneWidget);
   });
 
   testWidgets('ช่องเซฟ: ลบต้องยืนยัน และเปลี่ยนชื่อได้', (tester) async {

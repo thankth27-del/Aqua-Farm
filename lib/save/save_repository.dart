@@ -7,6 +7,7 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/constants.dart';
+import '../data/difficulty.dart';
 import '../game/game_state.dart';
 
 /// ข้อมูลย่อของช่องเซฟ (ใช้แสดงในหน้าเลือกช่อง)
@@ -19,6 +20,7 @@ class SlotInfo {
     required this.day,
     required this.money,
     required this.pondCount,
+    this.mode = Difficulty.normal,
   });
 
   final int slot;
@@ -28,6 +30,9 @@ class SlotInfo {
   final int day;
   final int money;
   final int pondCount;
+
+  /// โหมดความยาก (เซฟเก่าที่ไม่มีโหมด = ปานกลาง)
+  final Difficulty mode;
 }
 
 class SaveException implements Exception {
@@ -90,6 +95,7 @@ class SaveRepository {
             day: (st['day'] as num).toInt(),
             money: (st['money'] as num).toInt(),
             pondCount: (st['pond'] as List).length,
+            mode: difficultyFromName(st['mode'] as String?),
           );
         }(),
     };

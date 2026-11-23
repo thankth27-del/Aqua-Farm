@@ -1,10 +1,12 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../../data/difficulty.dart';
 import '../../save/save_repository.dart';
 import '../dialogs.dart';
 import '../providers.dart';
 import '../theme/theme.dart';
+import '../widgets/mode_dialog.dart';
 import 'main_menu_screen.dart';
 
 /// เลือกช่องบันทึก 3 ช่อง: เกมใหม่ / โหลด / เปลี่ยนชื่อ / ลบ
@@ -12,12 +14,14 @@ class SlotsScreen extends ConsumerWidget {
   const SlotsScreen({super.key});
 
   Future<void> _new(BuildContext context, WidgetRef ref, int slot) async {
+    final mode = await modeDialog(context);
+    if (mode == null || !context.mounted) return;
     final name = await nameDialog(context, 'ตั้งชื่อ Save', 'ฟาร์มของฉัน');
     if (name == null || !context.mounted) return;
-    await ref.read(gameProvider.notifier).newGame(slot, name);
+    await ref.read(gameProvider.notifier).newGame(slot, name, mode: mode);
     if (!context.mounted) return;
     Navigator.of(context).popUntil((r) => r.isFirst);
-    toast(context, 'สร้างเกมใหม่: $name');
+    toast(context, 'สร้างเกมใหม่: $name (${kDifficulties[mode]!.name})');
   }
 
   void _load(BuildContext context, WidgetRef ref, SlotInfo info) {
@@ -182,7 +186,15 @@ class _SlotCard extends StatelessWidget {
               spacing: Gap.s,
               runSpacing: Gap.xs,
               children: [
-                Tag('วันที่ ${d.day}', icon: const PixelIcon('cal', size: 18)),
+                Tag(
+                  'วัน ${d.day}/${kDifficulties[d.mode]!.targetDays}',
+                  icon: const PixelIcon('cal', size: 18),
+                ),
+                Tag(
+                  kDifficulties[d.mode]!.name,
+                  color: modeColor(d.mode),
+                  textColor: AquaColors.paper,
+                ),
                 CoinTag(d.money, boxed: true, size: FontSize.small),
                 Tag(
                   '${d.pondCount}',

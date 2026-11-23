@@ -5,6 +5,7 @@ import 'providers.dart';
 import 'screens/game_over_screen.dart';
 import 'screens/game_shell.dart';
 import 'screens/main_menu_screen.dart';
+import 'screens/win_screen.dart';
 import 'theme/theme.dart';
 
 class AquaFarmApp extends ConsumerWidget {
@@ -35,7 +36,7 @@ class AquaFarmApp extends ConsumerWidget {
   }
 }
 
-/// สลับหน้าตามสถานะ: ไม่มีเกม → เมนูหลัก / เกมจบ → Game Over / อื่น ๆ → หน้าเกม
+/// สลับหน้าตามสถานะ: ไม่มีเกม → เมนูหลัก / เกมจบ → Game Over / ชนะ → หน้าชนะ / อื่น ๆ → หน้าเกม
 class _Root extends ConsumerWidget {
   const _Root();
 
@@ -44,6 +45,7 @@ class _Root extends ConsumerWidget {
     final session = ref.watch(gameProvider);
     if (session == null) return const MainMenuScreen();
     if (session.state.over) return const GameOverScreen();
+    if (session.state.won) return const WinScreen();
     return const GameShell();
   }
 }

@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../../data/difficulty.dart';
 import '../../data/disaster_data.dart';
 import '../../game/tutorial.dart';
 import '../dialogs.dart';
@@ -218,7 +219,8 @@ class TopBar extends ConsumerWidget {
 
   Future<void> _endDay(BuildContext context, WidgetRef ref) async {
     final r = await ref.read(gameProvider.notifier).endDay();
-    if (!context.mounted || r.gameOver) return;
+    // เกมจบ (แพ้หรือชนะ): หน้าหลักสลับไปหน้าจบเกมเอง ไม่ต้องเปิดรายงาน
+    if (!context.mounted || r.gameOver || r.won) return;
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         fullscreenDialog: true,
@@ -354,8 +356,12 @@ class TopBar extends ConsumerWidget {
                 flex: 5,
                 child: _Chip(
                   icon: const PixelIcon('cal', size: 22),
-                  text: 'วันที่ ${s.day}',
-                  tooltip: 'วันในเกม',
+                  key: const ValueKey('day-chip'),
+                  text: 'วัน ${s.day}/${e.targetDays}',
+                  tooltip:
+                      'วันที่ ${s.day} จาก ${e.targetDays} '
+                      '(โหมด${kDifficulties[s.mode]!.name} '
+                      'ความยากขั้น ${e.stage + 1}/$kDifficultyStages)',
                 ),
               ),
               Expanded(
@@ -500,6 +506,7 @@ class _Delta extends StatelessWidget {
 
 class _Chip extends StatelessWidget {
   const _Chip({
+    super.key,
     required this.icon,
     required this.text,
     required this.tooltip,

@@ -3,6 +3,7 @@ library;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../data/difficulty.dart';
 import '../game/game_engine.dart';
 import '../game/game_state.dart';
 import '../save/save_repository.dart';
@@ -40,8 +41,12 @@ class GameController extends Notifier<GameSession?> {
   }
 
   /// สร้างเกมใหม่ในช่องที่เลือก แล้วบันทึกทันที (newSlot)
-  Future<void> newGame(int slot, String name) async {
-    final e = GameEngine.newGame(name);
+  Future<void> newGame(
+    int slot,
+    String name, {
+    Difficulty mode = Difficulty.normal,
+  }) async {
+    final e = GameEngine.newGame(name, mode: mode);
     await _repo.save(slot, e.state);
     state = GameSession(e, slot, 0);
     ref.invalidate(slotsProvider);
@@ -99,7 +104,7 @@ class GameController extends Notifier<GameSession?> {
     state = null;
   }
 
-  /// ออกจากเกมโดยไม่บันทึก (ใช้หลัง Game Over)
+  /// ออกจากเกมโดยไม่บันทึก (ใช้หลัง Game Over / ชนะ)
   void close() => state = null;
 }
 
