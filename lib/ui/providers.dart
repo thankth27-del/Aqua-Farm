@@ -76,10 +76,10 @@ class GameController extends Notifier<GameSession?> {
     _bump();
   }
 
-  /// จบวัน แล้วบันทึกอัตโนมัติ (ยกเว้น Game Over)
+  /// จบวัน แล้วบันทึกอัตโนมัติ (ยกเว้นเกมจบ: Game Over หรือชนะ)
   Future<DayReport> endDay() async {
     final r = engine.endDay();
-    if (!r.gameOver) await _repo.save(state!.slot, engine.state);
+    if (!r.gameOver && !r.won) await _repo.save(state!.slot, engine.state);
     _bump();
     ref.invalidate(slotsProvider);
     return r;

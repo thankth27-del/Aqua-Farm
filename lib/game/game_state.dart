@@ -3,9 +3,11 @@
 library;
 
 import '../data/constants.dart';
+import '../data/difficulty.dart';
 import '../data/disaster_data.dart';
 import '../data/fish_data.dart';
 import '../data/ingredients.dart';
+import 'js_math.dart';
 
 double _d(Object? v, [double def = 0]) =>
     v == null ? def : (v as num).toDouble();
@@ -82,20 +84,34 @@ class UpcomingDisaster {
     required this.type,
     required this.startDay,
     required this.severity,
+    this.customDuration,
+    this.customWarnDays,
   });
   final DisasterType type;
   final int startDay;
   final double severity;
 
+  /// ความยาวภัย / ข่าวเตือนล่วงหน้า (ตามขั้นความยากตอนประกาศ)
+  /// null = เท่าต้นแบบ (เซฟเก่าและภัยแรกของเกม)
+  final int? customDuration;
+  final int? customWarnDays;
+
+  int get duration => customDuration ?? kDisasters[type]!.duration;
+  int get warnDays => customWarnDays ?? kDisasters[type]!.leadDays;
+
   Map<String, dynamic> toJson() => {
     'type': type.name,
     'start': startDay,
     'sev': severity,
+    'dur': ?customDuration,
+    'warn': ?customWarnDays,
   };
   factory UpcomingDisaster.fromJson(Map<String, dynamic> j) => UpcomingDisaster(
     type: disasterFromName(j['type'] as String),
     startDay: _i(j['start']),
     severity: _d(j['sev']),
+    customDuration: j['dur'] == null ? null : _i(j['dur']),
+    customWarnDays: j['warn'] == null ? null : _i(j['warn']),
   );
 }
 
@@ -274,6 +290,9 @@ class DayReport {
   /// สุขภาพหมด จบเกม
   bool gameOver = false;
 
+  /// รอดครบวันเป้าหมาย ชนะ
+  bool won = false;
+
   Map<String, dynamic> toJson() => {
     'day': day,
     'earned': earned,
@@ -289,6 +308,7 @@ class DayReport {
     'money': money,
     'g': grade,
     'over': gameOver,
+    'won': won,
   };
 
   factory DayReport.fromJson(Map<String, dynamic> j) {
@@ -305,7 +325,8 @@ class DayReport {
       ..fish = _i(j['fish'])
       ..money = _i(j['money'])
       ..grade = j['g'] as String
-      ..gameOver = (j['over'] as bool?) ?? false;
+      ..gameOver = (j['over'] as bool?) ?? false
+      ..won = (j['won'] as bool?) ?? false;
     for (final d in (j['done'] as List? ?? const [])) {
       r.done.add(DoneItem.fromJson(Map<String, dynamic>.from(d as Map)));
     }
@@ -317,15 +338,23 @@ class GameState {
   GameState._();
 
   /// สถานะเริ่มต้นของเกมใหม่ (def() ในต้นแบบ) — ยังไม่สุ่มราคา
-  factory GameState.initial({String slotName = ''}) {
-    final s = GameState._()..slotName = slotName;
+  factory GameState.initial({
+    String slotName = '',
+    Difficulty mode = Difficulty.normal,
+  }) {
+    final s = GameState._()
+      ..slotName = slotName
+      ..mode = mode;
     s.fishStock = {for (final k in kFish.keys) k: 0};
     s.inventory = {for (final k in kIngredients.keys) k: 0};
     s.stock = [StockBatch(food: 'dried', qty: 2)];
     s.upcoming = UpcomingDisaster(
       type: kFirstDisaster,
       startDay: kFirstDisasterDay,
-      severity: kFirstDisasterSeverity,
+      // ภัยแรกของเกมรุนแรงตามโหมด (ปานกลาง = ต้นแบบ)
+      severity: toFixed2(
+        kFirstDisasterSeverity * kDifficulties[mode]!.severity,
+      ),
     );
     return s;
   }
@@ -389,6 +418,22 @@ class GameState {
   bool over = false;
   String cookFish = '';
 
+  /// โหมดความยาก (เซฟเก่าที่ไม่มี = ปานกลาง)
+  Difficulty mode = Difficulty.normal;
+
+  /// รอดครบวันเป้าหมายแล้ว (ชนะ) — เกมที่จบแล้วไม่ถูกเซฟทับ
+  bool won = false;
+
+  /// คะแนนเกรดรายวันสะสม และจำนวนวันที่ได้เกรด (ใช้คิดเกรดรวม)
+  int gradePoints = 0;
+  int gradeDays = 0;
+
+  /// จำนวนภัยที่ผ่านพ้นมาได้
+  int survived = 0;
+
+  /// เกมจบแล้ว (แพ้หรือชนะ)
+  bool get finished => over || won;
+
   int equipmentCount(String id) => equipment[id] ?? 0;
 
   Map<String, dynamic> toJson() => {
@@ -430,6 +475,11 @@ class GameState {
     'goal': goal,
     'over': over,
     'cookFish': cookFish,
+    'mode': mode.name,
+    'won': won,
+    'gp': gradePoints,
+    'gd': gradeDays,
+    'surv': survived,
   };
 
   /// โหลดจาก JSON — ฟิลด์ที่ขาดใช้ค่าเริ่มต้น (เหมือน Object.assign(def(), o))
@@ -463,7 +513,12 @@ class GameState {
       ..tutOk = _i(j['tutOk'], -1)
       ..goal = _i(j['goal'], 5)
       ..over = (j['over'] as bool?) ?? false
-      ..cookFish = (j['cookFish'] as String?) ?? '';
+      ..cookFish = (j['cookFish'] as String?) ?? ''
+      ..mode = difficultyFromName(j['mode'] as String?)
+      ..won = (j['won'] as bool?) ?? false
+      ..gradePoints = _i(j['gp'])
+      ..gradeDays = _i(j['gd'])
+      ..survived = _i(j['surv']);
     if (j['pond'] != null) {
       s.pond = [for (final f in j['pond'] as List) PondFish.fromJson(m(f))];
     }

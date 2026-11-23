@@ -68,7 +68,7 @@ class StorageTab extends ConsumerWidget {
           }
           final ok = await confirmDialog(
             context,
-            'ยืนยันขาย${it.name} 1 จาน ได้ ${it.value} บาท?',
+            'ยืนยันขาย${it.name} 1 จาน ได้ ${e.foodSellPrice(it.id)} บาท?',
             icon: PixelIcon(it.icon, size: 56),
           );
           if (ok && context.mounted) {
@@ -119,10 +119,7 @@ class StorageTab extends ConsumerWidget {
           icon: const PixelIcon('crate', size: 30),
         ),
 
-        _SupplyPanel(
-          engine: e,
-          onGoal: (g) => ctl.run((e) => e.setGoal(g)),
-        ),
+        _SupplyPanel(engine: e, onGoal: (g) => ctl.run((e) => e.setGoal(g))),
 
         WoodPanel(
           child: Column(
@@ -402,7 +399,11 @@ class _BatchRow extends StatelessWidget {
                 child: PixelButton(
                   label: closed ? 'ปิด' : 'ขาย',
                   style: closed ? PixelButtonStyle.wood : PixelButtonStyle.gold,
-                  below: CoinTag(it.value, boxed: true, size: FontSize.small),
+                  below: CoinTag(
+                    engine.foodSellPrice(batch.food),
+                    boxed: true,
+                    size: FontSize.small,
+                  ),
                   onPressed: expired ? null : onSell,
                 ),
               ),
@@ -475,12 +476,7 @@ class _Slot extends StatelessWidget {
                     child: Center(child: PixelIcon(icon, size: iconSize)),
                   ),
                   const SizedBox(height: 2),
-                  Bold(
-                    name,
-                    size: 13,
-                    maxLines: 2,
-                    align: TextAlign.center,
-                  ),
+                  Bold(name, size: 13, maxLines: 2, align: TextAlign.center),
                 ],
               ),
             ),

@@ -113,11 +113,12 @@ class MarketTab extends ConsumerWidget {
                     _SellFishCard(
                       key: ValueKey('sell-fish-${f.id}'),
                       spec: f,
+                      price: e.fishSellPrice(f.id),
                       count: s.fishStock[f.id] ?? 0,
                       closed: closed,
                       onTap: () => act(
                         closed || (s.fishStock[f.id] ?? 0) <= 0,
-                        'ยืนยันขาย${f.name} 1 ตัว ได้ ${f.sellPrice} บาท?',
+                        'ยืนยันขาย${f.name} 1 ตัว ได้ ${e.fishSellPrice(f.id)} บาท?',
                         PixelIcon('f_${f.id}', size: 72),
                         (e) => e.sellFish(f.id),
                       ),
@@ -153,6 +154,7 @@ class MarketTab extends ConsumerWidget {
                   child: _FoodRow(
                     key: ValueKey('sell-food-$i'),
                     food: kFoods[s.stock[i].food]!,
+                    price: e.foodSellPrice(s.stock[i].food),
                     qty: s.stock[i].qty,
                     daysLeft: e.daysLeft(s.stock[i]),
                     expired: e.isExpired(s.stock[i]),
@@ -162,7 +164,7 @@ class MarketTab extends ConsumerWidget {
                       final it = kFoods[s.stock[i].food]!;
                       act(
                         closed,
-                        'ยืนยันขาย${it.name} 1 จาน ได้ ${it.value} บาท?',
+                        'ยืนยันขาย${it.name} 1 จาน ได้ ${e.foodSellPrice(it.id)} บาท?',
                         PixelIcon(it.icon, size: 56),
                         (e) => e.sellStock(i),
                       );
@@ -188,11 +190,12 @@ class MarketTab extends ConsumerWidget {
                   child: EquipmentRow(
                     key: ValueKey('eq-${eq.id}'),
                     spec: eq,
+                    price: e.equipmentPrice(eq.id),
                     owned: s.equipmentCount(eq.id),
                     closed: closed,
                     onBuy: () => act(
-                      closed || s.money < eq.price,
-                      'ยืนยันซื้อ${eq.name} ราคา ${eq.price} บาท?',
+                      closed || s.money < e.equipmentPrice(eq.id),
+                      'ยืนยันซื้อ${eq.name} ราคา ${e.equipmentPrice(eq.id)} บาท?',
                       PixelIcon(eq.icon, size: 56),
                       (e) => e.buyEquipment(eq.id),
                     ),
@@ -331,9 +334,7 @@ class _IngredientCard extends StatelessWidget {
           child: _CardFrame(
             badge: _Count(owned),
             footer: closed ? 'ปิด' : 'ซื้อ',
-            footerStyle: closed
-                ? PixelButtonStyle.wood
-                : PixelButtonStyle.gold,
+            footerStyle: closed ? PixelButtonStyle.wood : PixelButtonStyle.gold,
             children: [
               PixelIcon(spec.icon, size: 40),
               const SizedBox(height: 2),
@@ -379,12 +380,14 @@ class _SellFishCard extends StatelessWidget {
   const _SellFishCard({
     super.key,
     required this.spec,
+    required this.price,
     required this.count,
     required this.closed,
     required this.onTap,
   });
 
   final FishSpec spec;
+  final int price;
   final int count;
   final bool closed;
   final VoidCallback onTap;
@@ -393,7 +396,7 @@ class _SellFishCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final can = count > 0 && !closed;
     return Pressable(
-      label: 'ขาย${spec.name} ได้ ${spec.sellPrice} บาท มี $count ตัว',
+      label: 'ขาย${spec.name} ได้ $price บาท มี $count ตัว',
       onTap: onTap,
       child: Opacity(
         opacity: can ? 1 : .55,
@@ -409,7 +412,7 @@ class _SellFishCard extends StatelessWidget {
               ),
               const SizedBox(height: 2),
               Bold(spec.name, size: 15, maxLines: 1),
-              CoinTag(spec.sellPrice, boxed: true, size: 15),
+              CoinTag(price, boxed: true, size: 15),
             ],
           ),
         ),
@@ -477,6 +480,7 @@ class _FoodRow extends StatelessWidget {
   const _FoodRow({
     super.key,
     required this.food,
+    required this.price,
     required this.qty,
     required this.daysLeft,
     required this.expired,
@@ -486,6 +490,7 @@ class _FoodRow extends StatelessWidget {
   });
 
   final FoodSpec food;
+  final int price;
   final int qty;
   final int daysLeft;
   final bool expired;
@@ -529,7 +534,7 @@ class _FoodRow extends StatelessWidget {
           PixelButton(
             label: closed ? 'ปิด' : 'ขาย',
             style: closed ? PixelButtonStyle.wood : PixelButtonStyle.green,
-            below: CoinTag(food.value, boxed: true, size: FontSize.small),
+            below: CoinTag(price, boxed: true, size: FontSize.small),
             onPressed: expired ? null : onSell,
           ),
         ],
@@ -537,4 +542,3 @@ class _FoodRow extends StatelessWidget {
     );
   }
 }
-

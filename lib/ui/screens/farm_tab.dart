@@ -36,10 +36,7 @@ class FarmTab extends ConsumerWidget {
           title: 'ฟาร์ม',
           icon: const PixelIcon('house', size: 30),
         ),
-        if (hint != null) ...[
-          _HintBubble(hint),
-          const SizedBox(height: Gap.m),
-        ],
+        if (hint != null) ...[_HintBubble(hint), const SizedBox(height: Gap.m)],
         Spotlight(
           on: target == TutorialTarget.status,
           child: _CharacterCard(
@@ -105,10 +102,7 @@ class _TailPainter extends CustomPainter {
     for (var i = 0; i < 4; i++) {
       final w = 3.0 * (i + 1);
       p.color = AquaColors.ink;
-      canvas.drawRect(
-        Rect.fromLTWH(size.width - w, 4 + i * 3.0, w + 1, 3),
-        p,
-      );
+      canvas.drawRect(Rect.fromLTWH(size.width - w, 4 + i * 3.0, w + 1, 3), p);
       if (i > 0) {
         p.color = AquaColors.paper;
         canvas.drawRect(
@@ -265,7 +259,10 @@ class _DisasterCard extends ConsumerWidget {
           badge: 'วันที่ ${a.dayIndex + 1}/${a.duration}',
         ),
         const SizedBox(height: Gap.s),
-        Muted(d.dayTexts[a.dayIndex], size: FontSize.body),
+        Muted(
+          disasterDayText(a.type, a.duration, a.dayIndex),
+          size: FontSize.body,
+        ),
       ]);
     } else if (w > 0 && dz != null) {
       final d = kDisasters[dz.type]!;
@@ -288,7 +285,7 @@ class _DisasterCard extends ConsumerWidget {
               'เริ่มวันที่ ${dz.startDay}',
               icon: const PixelIcon('cal', size: 16),
             ),
-            Tag('นาน ${d.duration} วัน'),
+            Tag('นาน ${dz.duration} วัน'),
             Tag(
               severityLabel(dz.severity),
               color: AquaColors.redPale,
@@ -304,11 +301,7 @@ class _DisasterCard extends ConsumerWidget {
             const PixelIcon('shield', size: 28),
             const SizedBox(width: Gap.s),
             const Expanded(child: Bold('Readiness Check')),
-            OutlinedText(
-              '${rd.pct}%',
-              size: FontSize.title,
-              color: rc,
-            ),
+            OutlinedText('${rd.pct}%', size: FontSize.title, color: rc),
           ],
         ),
         const SizedBox(height: Gap.xs),
@@ -333,16 +326,13 @@ class _DisasterCard extends ConsumerWidget {
           runSpacing: Gap.xs,
           children: [
             Tag(
-              'เสบียง ${fmtNum(e.supplyDays)}/${d.duration} วัน',
+              'เสบียง ${fmtNum(e.supplyDays)}/${dz.duration} วัน',
               icon: const PixelIcon('crate', size: 16),
-              color: e.supplyDays >= d.duration
+              color: e.supplyDays >= dz.duration
                   ? AquaColors.creamDark
                   : AquaColors.redPale,
             ),
-            Tag(
-              e.waterStatus.label,
-              icon: const PixelIcon('drop', size: 16),
-            ),
+            Tag(e.waterStatus.label, icon: const PixelIcon('drop', size: 16)),
             CoinTag(s.money, boxed: true, size: FontSize.small),
           ],
         ),
@@ -422,7 +412,9 @@ class _PreparePanel extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final s = ref.watch(gameProvider)!.state;
+    final session = ref.watch(gameProvider)!;
+    final s = session.state;
+    final e = session.engine;
     final ctl = ref.read(gameProvider.notifier);
     return WoodPanel(
       key: const ValueKey('prepare'),
@@ -439,6 +431,7 @@ class _PreparePanel extends ConsumerWidget {
               child: EquipmentRow(
                 key: ValueKey('eq-$id'),
                 spec: kEquipment[id]!,
+                price: e.equipmentPrice(id),
                 owned: s.equipmentCount(id),
                 closed: s.marketClosed,
                 usage: [
@@ -448,13 +441,14 @@ class _PreparePanel extends ConsumerWidget {
                 onBuy: () async {
                   final q = kEquipment[id]!;
                   // ตลาดปิดหรือเงินไม่พอ → ให้ engine บอกเหตุผล ไม่ต้องถาม
-                  if (s.marketClosed || s.money < q.price) {
+                  final price = e.equipmentPrice(id);
+                  if (s.marketClosed || s.money < price) {
                     showResult(context, ctl.run((e) => e.buyEquipment(id)));
                     return;
                   }
                   final ok = await confirmDialog(
                     context,
-                    'ยืนยันซื้อ${q.name} ราคา ${q.price} บาท?',
+                    'ยืนยันซื้อ${q.name} ราคา $price บาท?',
                     icon: PixelIcon(q.icon, size: 56),
                   );
                   if (ok && context.mounted) {

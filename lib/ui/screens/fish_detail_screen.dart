@@ -250,7 +250,8 @@ class _FishDetailScreenState extends ConsumerState<FishDetailScreen> {
                         _Stat(
                           icon: const PixelIcon('coin', size: 26),
                           label: 'ขายเมื่อโตเต็มวัย',
-                          value: '${f.sellPrice}฿',
+                          value:
+                              '${ref.watch(gameProvider)!.engine.fishSellPrice(f.id)}฿',
                         ),
                         _Stat(
                           icon: const PixelIcon('cal', size: 26),

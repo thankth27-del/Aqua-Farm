@@ -143,7 +143,7 @@ class _KitchenView extends ConsumerWidget {
                       key: ValueKey('recipe-${r.id}'),
                       food: kFoods[r.id]!,
                       details: [
-                        'ขาย ${kFoods[r.id]!.value} บาท',
+                        'ขาย ${e.foodSellPrice(r.id)} บาท',
                         'อิ่ม +${kFoods[r.id]!.hunger}',
                         'พลังงาน +${kFoods[r.id]!.energy}',
                         '${kFoods[r.id]!.kcal} kcal',
@@ -184,7 +184,7 @@ class _KitchenView extends ConsumerWidget {
                       details: [
                         p.description,
                         'ใช้เวลา ${p.days} วัน',
-                        'ขาย ${kFoods[p.id]!.value} บาท',
+                        'ขาย ${e.foodSellPrice(p.id)} บาท',
                       ],
                       chips: [
                         _fishChip(fish),
@@ -208,10 +208,7 @@ class _KitchenView extends ConsumerWidget {
           ),
 
           // ---------- ตู้เย็น ----------
-          _FridgeStatus(
-            owned: s.equipmentCount('fridge') > 0,
-            power: s.power,
-          ),
+          _FridgeStatus(owned: s.equipmentCount('fridge') > 0, power: s.power),
 
           // ---------- กำลังถนอม ----------
           WoodPanel(
@@ -287,11 +284,8 @@ class _KitchenView extends ConsumerWidget {
       ),
   ];
 
-  static Widget _equipmentChip(EquipmentSpec eq, int free, int total) => _Chip(
-    icon: eq.icon,
-    text: '${eq.name} ว่าง $free/$total',
-    ok: free > 0,
-  );
+  static Widget _equipmentChip(EquipmentSpec eq, int free, int total) =>
+      _Chip(icon: eq.icon, text: '${eq.name} ว่าง $free/$total', ok: free > 0);
 }
 
 /// ป้ายของที่ต้องใช้ — สีแดงเมื่อไม่พอ

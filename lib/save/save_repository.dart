@@ -98,7 +98,8 @@ class SaveRepository {
   /// บันทึกเกม — ไม่บันทึกถ้าเกมจบแล้ว (เหมือนต้นแบบ) คืน false ถ้าข้าม
   Future<bool> save(int slot, GameState state) async {
     _checkSlot(slot);
-    if (state.over) return false;
+    // เกมที่จบแล้ว (แพ้หรือชนะ) ไม่บันทึกทับเซฟเดิม
+    if (state.finished) return false;
     final all = _all();
     all['$slot'] = {
       'v': kSaveVersion,

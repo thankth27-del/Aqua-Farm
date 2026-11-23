@@ -9,6 +9,7 @@ class EquipmentRow extends StatelessWidget {
   const EquipmentRow({
     super.key,
     required this.spec,
+    required this.price,
     required this.owned,
     required this.closed,
     required this.onBuy,
@@ -16,6 +17,9 @@ class EquipmentRow extends StatelessWidget {
   });
 
   final EquipmentSpec spec;
+
+  /// ราคาวันนี้ (ตามความยาก)
+  final int price;
   final int owned;
 
   /// ตลาดปิด: ปุ่มเป็น "ปิด" (กดแล้วบอกเหตุผล)
@@ -44,9 +48,7 @@ class EquipmentRow extends StatelessWidget {
                     Tag(
                       'x$owned',
                       size: 13,
-                      color: owned > 0
-                          ? AquaColors.gold
-                          : AquaColors.creamDark,
+                      color: owned > 0 ? AquaColors.gold : AquaColors.creamDark,
                     ),
                   ],
                 ),
@@ -59,7 +61,7 @@ class EquipmentRow extends StatelessWidget {
           PixelButton(
             label: closed ? 'ปิด' : 'ซื้อ',
             style: closed ? PixelButtonStyle.wood : PixelButtonStyle.gold,
-            below: CoinTag(spec.price, boxed: true, size: FontSize.small),
+            below: CoinTag(price, boxed: true, size: FontSize.small),
             onPressed: onBuy,
           ),
         ],

@@ -133,11 +133,17 @@ class FarmSceneData {
     final a = s.active;
     if (a != null && a.dayIndex >= 0) {
       type = a.type;
-      lvl = kDisasters[a.type]!.visualLevel[a.dayIndex] * .85;
+      lvl =
+          kDisasters[a.type]!.visualLevel[disasterBaseDay(
+            a.type,
+            a.duration,
+            a.dayIndex,
+          )] *
+          .85;
     } else if (warnDays > 0 && s.upcoming != null) {
-      final d = kDisasters[s.upcoming!.type]!;
-      type = d.type;
-      lvl = (d.leadDays + 1 - warnDays) / (d.leadDays + 1) * .5;
+      final lead = s.upcoming!.warnDays;
+      type = s.upcoming!.type;
+      lvl = (lead + 1 - warnDays) / (lead + 1) * .5;
     }
     return FarmSceneData(
       pond: [for (final f in s.pond) f.type],

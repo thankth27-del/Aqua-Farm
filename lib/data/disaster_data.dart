@@ -133,3 +133,26 @@ String severityLabel(double sev) => sev >= .6
     : sev >= .45
     ? 'ปานกลาง'
     : 'เบา';
+
+/// วันของภัยที่อาจถูกยืดออก (ภัยนาน [duration] วัน) → วันในข้อมูลต้นแบบ
+/// ช่วงที่รุนแรงที่สุด (visualLevel สูงสุด) ถูกยืด วันอื่นคงเดิม
+/// ถ้า duration เท่าต้นแบบ จะได้ [i] เดิม
+int disasterBaseDay(DisasterType type, int duration, int i) {
+  final d = kDisasters[type]!;
+  final extra = duration - d.duration;
+  if (extra <= 0) return i.clamp(0, d.duration - 1);
+  var peak = 0;
+  for (var k = 1; k < d.duration; k++) {
+    if (d.visualLevel[k] > d.visualLevel[peak]) peak = k;
+  }
+  if (i <= peak) return i;
+  if (i <= peak + extra) return peak;
+  return (i - extra).clamp(0, d.duration - 1);
+}
+
+/// ข้อความประจำวันของภัย (เลขวันตรงกับวันจริงเมื่อภัยถูกยืด)
+String disasterDayText(DisasterType type, int duration, int i) {
+  final t = kDisasters[type]!.dayTexts[disasterBaseDay(type, duration, i)];
+  if (duration == kDisasters[type]!.duration) return t;
+  return t.replaceFirst(RegExp(r'^วันที่ \d+'), 'วันที่ ${i + 1}');
+}

@@ -5,6 +5,7 @@ library;
 import 'dart:math';
 
 import '../data/constants.dart';
+import '../data/difficulty.dart';
 import '../data/disaster_data.dart';
 import '../data/equipment_data.dart';
 import '../data/fish_data.dart';
@@ -62,12 +63,46 @@ class Readiness {
   final int pct;
 }
 
+/// คะแนนสรุปตอนจบเกม (หน้าชนะ / Game Over)
+class GameSummary {
+  const GameSummary({
+    required this.mode,
+    required this.won,
+    required this.days,
+    required this.targetDays,
+    required this.grade,
+    required this.disastersSurvived,
+    required this.money,
+  });
+
+  final Difficulty mode;
+  final bool won;
+
+  /// รอดมาได้กี่วัน
+  final int days;
+  final int targetDays;
+
+  /// เกรดรวม S/A/B
+  final String grade;
+  final int disastersSurvived;
+
+  /// เงินคงเหลือ
+  final int money;
+}
+
 class GameEngine {
   GameEngine(this.state, {Random? random}) : random = random ?? Random();
 
   /// เริ่มเกมใหม่ (newSlot ในต้นแบบ): สุ่มราคา แล้วตั้งราคาเมื่อวาน = วันนี้
-  factory GameEngine.newGame(String slotName, {Random? random}) {
-    final e = GameEngine(GameState.initial(slotName: slotName), random: random);
+  factory GameEngine.newGame(
+    String slotName, {
+    Random? random,
+    Difficulty mode = Difficulty.normal,
+  }) {
+    final e = GameEngine(
+      GameState.initial(slotName: slotName, mode: mode),
+      random: random,
+    );
     e.rollPrices();
     e.state.prevPrices = Map.of(e.state.prices);
     e.calcWater();
@@ -110,14 +145,71 @@ class GameEngine {
   double get supplyDays => round1(supplyHunger / kHungerPerDay);
 
   int get feedUnit => s.pond.fold(0, (a, f) => a + kFish[f.type]!.feed);
-  int feedCost(int level) => kFeedCostMultiplier[level] * feedUnit;
+  int feedCost(int level) =>
+      jsRound(kFeedCostMultiplier[level] * feedUnit * buyMultiplier);
+
+  // ---------------------------------------------------------- difficulty
+
+  DifficultySpec get difficulty => kDifficulties[s.mode]!;
+
+  /// ต้องรอดครบกี่วันจึงชนะ
+  int get targetDays => difficulty.targetDays;
+
+  /// ความคืบหน้า = วันปัจจุบัน ÷ วันเป้าหมาย (0..1)
+  double get progress => min(1.0, s.day / targetDays);
+
+  /// ขั้นความยาก 0..5 (ขึ้นเป็นขั้นตามความคืบหน้า)
+  int get stage => difficultyStage(s.day, targetDays);
+
+  /// ตัวคูณราคาซื้อ (วัตถุดิบ อุปกรณ์ อาหารปลา)
+  double get buyMultiplier => difficulty.buy * kStageBuy[stage];
+
+  /// ตัวคูณราคาขาย (ปลา อาหาร) — ขึ้นช้ากว่าราคาซื้อ
+  double get sellMultiplier => difficulty.sell * kStageSell[stage];
+
+  /// ตัวคูณความรุนแรงของภัยที่ประกาศใหม่
+  double get severityMultiplier => difficulty.severity * kStageSeverity[stage];
+
+  /// ตัวคูณของเสียที่เกิดในบ่อต่อวัน (น้ำเสียเร็วขึ้น)
+  double get waterMultiplier => difficulty.water * kStageWater[stage];
+
+  /// ภัยชนิดนี้ถ้าประกาศตอนนี้ จะนานกี่วัน / เตือนล่วงหน้ากี่วัน
+  int disasterDuration(DisasterType t) =>
+      kDisasters[t]!.duration + kStageExtraDays[stage];
+  int disasterWarnDays(DisasterType t) =>
+      max(kMinWarnDays, kDisasters[t]!.leadDays - kStageWarnCut[stage]);
+
+  int equipmentPrice(String id) =>
+      jsRound(kEquipment[id]!.price * buyMultiplier);
+  int fishSellPrice(String type) =>
+      jsRound(kFish[type]!.sellPrice * sellMultiplier);
+  int foodSellPrice(String food) =>
+      jsRound(kFoods[food]!.value * sellMultiplier);
+
+  /// เกรดรวมของทั้งเกม จากเกรดรายวันเฉลี่ย (S=3 A=2 B=1)
+  String get overallGrade {
+    if (s.gradeDays == 0) return 'B';
+    final avg = s.gradePoints / s.gradeDays;
+    return avg >= kOverallS ? 'S' : (avg >= kOverallA ? 'A' : 'B');
+  }
+
+  /// คะแนนสรุปตอนจบเกม
+  GameSummary get summary => GameSummary(
+    mode: s.mode,
+    won: s.won,
+    days: s.won ? targetDays : s.day,
+    targetDays: targetDays,
+    grade: overallGrade,
+    disastersSurvived: s.survived,
+    money: s.money,
+  );
 
   /// อีกกี่วันภัยจะมา (0 = ไม่มีการเตือน)
   int get warnDays {
     final dz = s.upcoming;
     if (dz == null) return 0;
     final d = dz.startDay - s.day;
-    return d >= 1 && d <= kDisasters[dz.type]!.leadDays ? d : 0;
+    return d >= 1 && d <= dz.warnDays ? d : 0;
   }
 
   /// จำนวนอุปกรณ์ที่ต้องมีสำหรับภัยชนิดนี้
@@ -147,11 +239,10 @@ class GameEngine {
   Readiness? readiness() {
     final dz = s.upcoming;
     if (dz == null) return null;
-    final d = kDisasters[dz.type]!;
     final e = protection(dz.type);
     final pct = jsRound(
       (e * .5 +
-              min(1.0, supplyDays / d.duration) * .3 +
+              min(1.0, supplyDays / dz.duration) * .3 +
               (s.water >= 60 ? .1 : 0) +
               (s.money >= 100 ? .1 : 0)) *
           100,
@@ -171,7 +262,7 @@ class GameEngine {
   int get supplyNeedDays {
     final a = s.active;
     if (s.upcoming != null && a == null) {
-      return kDisasters[s.upcoming!.type]!.duration;
+      return s.upcoming!.duration;
     }
     if (a != null) return a.duration - a.dayIndex - 1;
     return 0;
@@ -242,7 +333,9 @@ class GameEngine {
     for (final ing in kIngredients.values) {
       s.prices[ing.id] = max(
         2,
-        jsRound(ing.basePrice * (0.6 + random.nextDouble() * 0.9)),
+        jsRound(
+          ing.basePrice * (0.6 + random.nextDouble() * 0.9) * buyMultiplier,
+        ),
       );
     }
   }
@@ -348,9 +441,10 @@ class GameEngine {
     }
     final f = kFish[type]!;
     s.fishStock[type] = s.fishStock[type]! - 1;
-    s.money += f.sellPrice;
-    s.earned += f.sellPrice;
-    return ActionResult.ok('ขาย${f.name} +${f.sellPrice} บาท');
+    final price = fishSellPrice(type);
+    s.money += price;
+    s.earned += price;
+    return ActionResult.ok('ขาย${f.name} +$price บาท');
   }
 
   /// ซื้อวัตถุดิบ 1 ชิ้น ราคาตามวันนี้ — UI ต้องแสดงหน้ายืนยันก่อนเรียก
@@ -366,7 +460,7 @@ class GameEngine {
   ActionResult buyEquipment(String id) {
     final e = kEquipment[id]!;
     if (s.marketClosed) return _closedMsg;
-    final err = _pay(e.price, kBuyEquipmentEnergy);
+    final err = _pay(equipmentPrice(id), kBuyEquipmentEnergy);
     if (err != null) return err;
     s.equipment[id] = s.equipmentCount(id) + 1;
     return ActionResult.ok('ซื้อ${e.name}แล้ว');
@@ -426,10 +520,11 @@ class GameEngine {
     if (s.marketClosed) return _closedMsg;
     final it = kFoods[b.food]!;
     b.qty--;
-    s.money += it.value;
-    s.earned += it.value;
+    final price = foodSellPrice(b.food);
+    s.money += price;
+    s.earned += price;
     if (b.qty <= 0) s.stock.removeAt(index);
-    return ActionResult.ok('ขาย${it.name} +${it.value} บาท');
+    return ActionResult.ok('ขาย${it.name} +$price บาท');
   }
 
   /// กินอาหาร 1 จาน (askEat + eatBatch)
@@ -511,8 +606,13 @@ class GameEngine {
     final a = s.active!;
     final d = kDisasters[a.type]!;
     final i = a.dayIndex;
+    // ภัยที่ถูกยืด: วันที่เพิ่มใช้ข้อมูลของวันที่รุนแรงที่สุด
+    final bi = disasterBaseDay(a.type, a.duration, i);
     final prot = protection(a.type);
-    final weights = kDisasterDayWeights.sublist(0, d.duration);
+    final weights = [
+      for (var k = 0; k < a.duration; k++)
+        kDisasterDayWeights[disasterBaseDay(a.type, a.duration, k)],
+    ];
     final w = weights[i] / weights.reduce((x, y) => x + y);
     final n = s.pond.length;
     final lost = min(
@@ -553,7 +653,7 @@ class GameEngine {
     }
 
     var foodLost = 0;
-    if (a.type == DisasterType.flood && d.marketClosed[i]) {
+    if (a.type == DisasterType.flood && d.marketClosed[bi]) {
       for (final b in s.stock) {
         final it = kFoods[b.food]!;
         if (it.kind == FoodKind.meal || b.food == 'dried') {
@@ -567,14 +667,14 @@ class GameEngine {
     }
 
     calcWater();
-    s.power = !d.powerOut[i];
-    s.marketClosed = d.marketClosed[i];
+    s.power = !d.powerOut[bi];
+    s.marketClosed = d.marketClosed[bi];
 
     return EventReport(
       type: a.type,
       dayIndex: i,
-      duration: d.duration,
-      text: d.dayTexts[i],
+      duration: a.duration,
+      text: disasterDayText(a.type, a.duration, i),
       lost: lost,
       cumulativeLost: a.lost,
       fishBefore: a.fishBefore,
@@ -585,9 +685,9 @@ class GameEngine {
       food: foodLost,
       cumulativeFood: a.foodLost,
       sandUsed: a.sandUsed,
-      last: i == d.duration - 1,
-      outage: d.powerOut[i],
-      marketClosed: d.marketClosed[i],
+      last: i == a.duration - 1,
+      outage: d.powerOut[bi],
+      marketClosed: d.marketClosed[bi],
     );
   }
 
@@ -599,7 +699,9 @@ class GameEngine {
 
     // ของเสียจากอาหารปลา + วงจรไนโตรเจนผ่านไบโอฟิลเตอร์
     s.ammonia +=
-        kFeedAmmonia[s.fed] * (fu > 14 ? 1.3 : 1) * max(1, fu / 4) + fu * .05;
+        (kFeedAmmonia[s.fed] * (fu > 14 ? 1.3 : 1) * max(1, fu / 4) +
+            fu * .05) *
+        waterMultiplier;
     final c = s.bio / 100;
     var t = s.ammonia * .6 * c;
     s.ammonia -= t;
@@ -675,7 +777,7 @@ class GameEngine {
     if (dz != null && s.day == dz.startDay) {
       s.active = ActiveDisaster(
         type: dz.type,
-        duration: kDisasters[dz.type]!.duration,
+        duration: dz.duration,
         severity: dz.severity,
         fishBefore: s.pond.length,
       );
@@ -689,14 +791,23 @@ class GameEngine {
       r.died += ev.lost;
       if (ev.last) {
         ev.supplyDaysAfter = supplyDays;
+        s.survived++;
         s.joy = max(0, s.joy - (ev.protectionPct >= 100 ? 5 : 15));
         final next =
             kDisasterOrder[(kDisasterOrder.indexOf(a.type) + 1) %
                 kDisasterOrder.length];
+        // ภัยถัดไปหนักขึ้นตามขั้นความยาก: รุนแรงขึ้น นานขึ้น เตือนช้าลง
+        // (ช่วงห่างระหว่างภัยเท่าต้นแบบ เตือนสั้นลงอย่างเดียว)
+        final dur = disasterDuration(next);
+        final warn = disasterWarnDays(next);
         s.upcoming = UpcomingDisaster(
           type: next,
           startDay: s.day + kDisasters[next]!.leadDays + kDisasterGapDays,
-          severity: toFixed2(.4 + random.nextDouble() * .3),
+          severity: toFixed2(
+            (.4 + random.nextDouble() * .3) * severityMultiplier,
+          ),
+          customDuration: dur == kDisasters[next]!.duration ? null : dur,
+          customWarnDays: warn == kDisasters[next]!.leadDays ? null : warn,
         );
         s.active = null;
       }
@@ -710,6 +821,8 @@ class GameEngine {
     r.money = s.money;
     r.grade = grade(r);
     if (r.grade == 'S') s.joy = min(100, s.joy + 10);
+    s.gradePoints += kGradePoints[r.grade]!;
+    s.gradeDays++;
 
     s.lastReport = r;
     s.earned = 0;
@@ -717,6 +830,10 @@ class GameEngine {
     if (s.health <= 0) {
       s.over = true;
       r.gameOver = true;
+    } else if (r.day >= targetDays) {
+      // รอดครบวันเป้าหมาย = ชนะ
+      s.won = true;
+      r.won = true;
     }
     return r;
   }
