@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../data/constants.dart';
 import '../data/difficulty.dart';
 import '../game/game_state.dart';
+import '../game/story.dart';
 
 /// ข้อมูลย่อของช่องเซฟ (ใช้แสดงในหน้าเลือกช่อง)
 class SlotInfo {
@@ -57,6 +58,45 @@ class SaveRepository {
 
   Future<void> setSoundOn(bool on) =>
       _prefs.setString(kSoundKey, on ? '1' : '0');
+
+  /// เล่นเนื้อเรื่องจบแล้ว = ปลดล็อกโหมดเอาชีวิตรอด
+  /// (เครื่องที่มีเซฟโหมดเอาชีวิตรอดอยู่แล้วก่อนมีเนื้อเรื่อง ถือว่าปลดล็อก จะได้ไม่เสียเซฟเดิม)
+  bool get survivalUnlocked =>
+      _prefs.getString(kSurvivalUnlockKey) == '1' ||
+      listSlots().values.any((s) => s != null);
+
+  Future<void> setSurvivalUnlocked(bool on) =>
+      _prefs.setString(kSurvivalUnlockKey, on ? '1' : '0');
+
+  /// มีเนื้อเรื่องที่เล่นค้างไว้ไหม
+  bool get hasStory => _prefs.getString(kStoryKey) != null;
+
+  /// บันทึกเนื้อเรื่อง (ความคืบหน้าบท + สถานะเกม)
+  Future<void> saveStory(StoryProgress p, GameState state) async {
+    final ok = await _prefs.setString(
+      kStoryKey,
+      jsonEncode({'v': kSaveVersion, 'p': p.toJson(), 'S': state.toJson()}),
+    );
+    if (!ok) throw const SaveException('บันทึกไม่ได้');
+  }
+
+  /// โหลดเนื้อเรื่อง — null ถ้ายังไม่มีหรือเซฟเสีย
+  (StoryProgress, GameState)? loadStory() {
+    final raw = _prefs.getString(kStoryKey);
+    if (raw == null) return null;
+    try {
+      final m = Map<String, dynamic>.from(jsonDecode(raw) as Map);
+      if ((m['v'] as num).toInt() != kSaveVersion) return null;
+      return (
+        StoryProgress.fromJson(Map<String, dynamic>.from(m['p'] as Map)),
+        GameState.fromJson(Map<String, dynamic>.from(m['S'] as Map)),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> deleteStory() => _prefs.remove(kStoryKey);
 
   Map<String, dynamic> _all() {
     final raw = _prefs.getString(kSaveKey);

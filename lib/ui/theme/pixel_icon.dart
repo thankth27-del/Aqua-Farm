@@ -164,6 +164,17 @@ enum Glyph {
     '#o+##o###.',
     'o.o######o',
     '...oooooo.',
+  ]),
+  lock([
+    '..ooo..',
+    '.o...o.',
+    '.o...o.',
+    'ooooooo',
+    'o#####o',
+    'o##o##o',
+    'o##o##o',
+    'o#####o',
+    'ooooooo',
   ]);
 
   const Glyph(this.rows);

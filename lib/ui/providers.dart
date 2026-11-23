@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/difficulty.dart';
 import '../game/game_engine.dart';
 import '../game/game_state.dart';
+import '../game/story.dart';
+import '../game/tutorial.dart';
 import '../save/save_repository.dart';
 
 /// ต้อง override ใน ProviderScope ด้วย SaveRepository ที่เปิดแล้ว
@@ -47,10 +49,30 @@ class GameController extends Notifier<GameSession?> {
     Difficulty mode = Difficulty.normal,
   }) async {
     final e = GameEngine.newGame(name, mode: mode);
+    // บทเรียน 9 ขั้นเดิมปิดในโหมดเอาชีวิตรอด (สอนในโหมดเนื้อเรื่องแทน)
+    e.state.tut = kTutorialSteps;
     await _repo.save(slot, e.state);
     state = GameSession(e, slot, 0);
     ref.invalidate(slotsProvider);
   }
+
+  /// เนื้อเรื่อง: StoryController ตัดสินบทหลังจบวัน และจัดการตอนออกเมนู
+  Future<void> Function(DayReport r)? _storyDay;
+  Future<void> Function()? _storyExit;
+
+  /// ใช้ engine ที่สร้างไว้แล้วในช่องเนื้อเรื่อง [kStorySlot]
+  void attachStory(
+    GameEngine e, {
+    required Future<void> Function(DayReport r) afterDay,
+    required Future<void> Function() onExit,
+  }) {
+    _storyDay = afterDay;
+    _storyExit = onExit;
+    state = GameSession(e, kStorySlot, 0);
+  }
+
+  /// เล่นเนื้อเรื่องอยู่ไหม
+  bool get isStory => state?.slot == kStorySlot;
 
   /// โหลดเกม — โยน SaveException ถ้าโหลดไม่ได้
   void load(int slot) {
@@ -84,7 +106,12 @@ class GameController extends Notifier<GameSession?> {
   /// จบวัน แล้วบันทึกอัตโนมัติ (ยกเว้นเกมจบ: Game Over หรือชนะ)
   Future<DayReport> endDay() async {
     final r = engine.endDay();
-    if (!r.gameOver && !r.won) await _repo.save(state!.slot, engine.state);
+    if (isStory) {
+      // เนื้อเรื่อง: ตัดสินผ่าน/แพ้บทและเซฟแยก (ไม่ Game Over ไม่ชนะด้วยจำนวนวัน)
+      await _storyDay?.call(r);
+    } else if (!r.gameOver && !r.won) {
+      await _repo.save(state!.slot, engine.state);
+    }
     _bump();
     ref.invalidate(slotsProvider);
     return r;
@@ -93,6 +120,10 @@ class GameController extends Notifier<GameSession?> {
   Future<bool> save() async {
     final s = state;
     if (s == null) return false;
+    if (isStory) {
+      _bump(); // StoryController เซฟเมื่อเกมเปลี่ยน
+      return true;
+    }
     final ok = await _repo.save(s.slot, s.state);
     ref.invalidate(slotsProvider);
     return ok;
@@ -100,6 +131,7 @@ class GameController extends Notifier<GameSession?> {
 
   /// กลับเมนูหลัก (บันทึกให้อัตโนมัติ)
   Future<void> exitToMenu() async {
+    if (isStory) return _storyExit?.call();
     await save();
     state = null;
   }

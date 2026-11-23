@@ -4,6 +4,7 @@ import 'package:material_ui/material_ui.dart';
 import '../../save/save_repository.dart';
 import '../dialogs.dart';
 import '../providers.dart';
+import '../story_provider.dart';
 import '../scenes/pixel_scene.dart';
 import '../theme/theme.dart';
 import 'slots_screen.dart';
@@ -24,11 +25,7 @@ class AquaLogo extends StatelessWidget {
             child: Bob(
               dy: 3,
               period: const Duration(milliseconds: 2400),
-              child: OutlinedText(
-                'AQUA FARM',
-                size: size,
-                stroke: size / 5,
-              ),
+              child: OutlinedText('AQUA FARM', size: size, stroke: size / 5),
             ),
           ),
           const SizedBox(height: Gap.xs),
@@ -81,7 +78,7 @@ class TitleBackdrop extends StatelessWidget {
   }
 }
 
-/// เมนูหลัก: เกมใหม่ / เล่นต่อ / โหลดเกม / เครดิต
+/// เมนูหลัก: เนื้อเรื่อง / เอาชีวิตรอด (ล็อกจนกว่าจะเล่นเนื้อเรื่องจบ) / เครดิต
 class MainMenuScreen extends ConsumerWidget {
   const MainMenuScreen({super.key});
 
@@ -95,11 +92,90 @@ class MainMenuScreen extends ConsumerWidget {
     }
   }
 
+  /// เนื้อเรื่อง: มีเซฟค้าง → เลือกเล่นต่อ/เริ่มใหม่, ไม่มี → เริ่มบท 1
+  Future<void> _story(BuildContext context, WidgetRef ref) async {
+    final story = ref.read(storyProvider.notifier);
+    final saved = ref.read(saveRepositoryProvider).loadStory();
+    if (saved == null) return story.startNew();
+    final ch = saved.$1.chapter;
+    final choice = await _sheet(context, 'เนื้อเรื่อง', [
+      ('continue', 'เล่นต่อ บทที่ $ch', PixelButtonStyle.green),
+      ('restart', 'เริ่มเนื้อเรื่องใหม่', PixelButtonStyle.wood),
+    ]);
+    if (!context.mounted) return;
+    if (choice == 'continue') {
+      if (!story.resume()) toast(context, 'โหลดเนื้อเรื่องไม่ได้', bad: true);
+    } else if (choice == 'restart' &&
+        await confirmDialog(context, 'เริ่มเนื้อเรื่องใหม่ตั้งแต่บทที่ 1?')) {
+      await story.startNew();
+    }
+  }
+
+  /// เอาชีวิตรอด: ล็อก → บอกวิธีปลดล็อก, ปลดล็อกแล้ว → เกมใหม่/เล่นต่อ/โหลดเกม
+  Future<void> _survival(BuildContext context, WidgetRef ref) async {
+    if (!ref.read(survivalUnlockedProvider)) {
+      toast(context, 'เล่นเนื้อเรื่องให้จบก่อน เพื่อปลดล็อกโหมดนี้', bad: true);
+      return;
+    }
+    final choice = await _sheet(context, 'เอาชีวิตรอด', [
+      ('new', 'เกมใหม่', PixelButtonStyle.gold),
+      ('continue', 'เล่นต่อ', PixelButtonStyle.green),
+      ('load', 'โหลดเกม', PixelButtonStyle.water),
+    ]);
+    if (!context.mounted) return;
+    if (choice == 'continue') {
+      _continue(context, ref);
+    } else if (choice != null) {
+      await Navigator.of(context)
+          .push(MaterialPageRoute<void>(builder: (_) => const SlotsScreen()));
+    }
+  }
+
+  Future<String?> _sheet(
+    BuildContext context,
+    String title,
+    List<(String, String, PixelButtonStyle)> items,
+  ) => showModalBottomSheet<String>(
+    context: context,
+    backgroundColor: Colors.transparent,
+    barrierColor: const Color(0xAA1B120B),
+    builder: (c) => SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(Gap.m),
+        child: WoodPanel(
+          margin: EdgeInsets.zero,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              OutlinedText(title),
+              for (final (id, label, style) in items) ...[
+                const SizedBox(height: Gap.s),
+                PixelButton(
+                  key: ValueKey('sheet-$id'),
+                  label: label,
+                  style: style,
+                  expand: true,
+                  onPressed: () => Navigator.pop(c, id),
+                ),
+              ],
+              const SizedBox(height: Gap.s),
+              PixelButton(
+                label: 'ปิด',
+                style: PixelButtonStyle.wood,
+                expand: true,
+                onPressed: () => Navigator.pop(c),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    void openSlots() => Navigator.of(
-      context,
-    ).push(MaterialPageRoute<void>(builder: (_) => const SlotsScreen()));
+    final unlocked = ref.watch(survivalUnlockedProvider);
+    final saved = ref.watch(storySavedProvider);
     return Scaffold(
       body: GrassBackground(
         child: Column(
@@ -115,41 +191,51 @@ class MainMenuScreen extends ConsumerWidget {
                   child: Column(
                     children: [
                       PixelButton(
-                        label: 'เกมใหม่',
-                        icon: const PixelGlyph(
-                          Glyph.plus,
-                          size: 22,
-                          color: AquaColors.paper,
-                        ),
+                        key: const ValueKey('menu-story'),
+                        label: 'เนื้อเรื่อง',
+                        icon: const PixelIcon('scroll', size: 28),
                         size: PixelButtonSize.large,
                         expand: true,
-                        onPressed: openSlots,
+                        below: Text(
+                          saved
+                              ? 'เล่นต่อจากบทที่ค้างไว้'
+                              : 'เรียนรู้ทีละบท 7 บท',
+                          style: const TextStyle(
+                            color: AquaColors.ink,
+                            fontSize: FontSize.small,
+                          ),
+                        ),
+                        onPressed: () => _story(context, ref),
                       ),
                       const SizedBox(height: Gap.m),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: PixelButton(
-                              label: 'เล่นต่อ',
-                              icon: const PixelGlyph(
-                                Glyph.arrowRight,
-                                size: 20,
-                                color: AquaColors.paper,
-                              ),
-                              style: PixelButtonStyle.green,
-                              onPressed: () => _continue(context, ref),
+                      Opacity(
+                        opacity: unlocked ? 1 : .55,
+                        child: PixelButton(
+                          key: const ValueKey('menu-survival'),
+                          label: 'เอาชีวิตรอด',
+                          icon: unlocked
+                              ? const PixelIcon('f_nila', size: 28)
+                              : const PixelGlyph(
+                                  Glyph.lock,
+                                  size: 22,
+                                  color: AquaColors.paper,
+                                ),
+                          style: unlocked
+                              ? PixelButtonStyle.green
+                              : PixelButtonStyle.wood,
+                          size: PixelButtonSize.large,
+                          expand: true,
+                          below: Text(
+                            unlocked
+                                ? '20 / 30 / 60 วัน'
+                                : 'ล็อกอยู่ · เล่นเนื้อเรื่องจบเพื่อปลดล็อก',
+                            style: const TextStyle(
+                              color: AquaColors.paper,
+                              fontSize: FontSize.small,
                             ),
                           ),
-                          const SizedBox(width: Gap.m),
-                          Expanded(
-                            child: PixelButton(
-                              label: 'โหลดเกม',
-                              icon: const PixelIcon('scroll', size: 24),
-                              style: PixelButtonStyle.water,
-                              onPressed: openSlots,
-                            ),
-                          ),
-                        ],
+                          onPressed: () => _survival(context, ref),
+                        ),
                       ),
                       const SizedBox(height: Gap.m),
                       PixelButton(
@@ -161,17 +247,12 @@ class MainMenuScreen extends ConsumerWidget {
                         ),
                         style: PixelButtonStyle.wood,
                         expand: true,
-                        onPressed: () => infoDialog(
-                          context,
-                          'Credits',
-                          const [
-                            'AQUA FARM: From Farm to Food',
-                            'โปรเจกต์ต้นแบบเกมจำลองฟาร์มปลา',
-                            'ค่าน้ำ ปลา และโภชนาการเป็นแบบจำลองเพื่อการเรียนรู้',
-                            'ฟอนต์ Mali (SIL Open Font License)',
-                          ],
-                          icon: const PixelIcon('f_nila', size: 72),
-                        ),
+                        onPressed: () => infoDialog(context, 'Credits', const [
+                          'AQUA FARM: From Farm to Food',
+                          'โปรเจกต์ต้นแบบเกมจำลองฟาร์มปลา',
+                          'ค่าน้ำ ปลา และโภชนาการเป็นแบบจำลองเพื่อการเรียนรู้',
+                          'ฟอนต์ Mali (SIL Open Font License)',
+                        ], icon: const PixelIcon('f_nila', size: 72)),
                       ),
                     ],
                   ),

@@ -9,9 +9,11 @@ import '../../data/ingredients.dart';
 import '../../game/game_engine.dart';
 import '../../game/game_state.dart';
 import '../dialogs.dart';
+import '../../game/story.dart';
 import '../providers.dart';
 import '../scenes/pixel_scene.dart';
 import '../theme/theme.dart';
+import '../widgets/story_gate.dart';
 
 /// แท็บ "คลัง" (store ในต้นแบบ): เสบียงฉุกเฉิน เป้าหมายเสบียง อาหาร (กิน ขาย ทิ้ง)
 /// วัตถุดิบสด และอุปกรณ์ — กิน ขาย ทิ้ง ต้องผ่านหน้ายืนยัน
@@ -33,11 +35,19 @@ class StorageTab extends ConsumerWidget {
       );
     }
 
+    final isStory = watchStory(ref) != null;
+    // เนื้อเรื่อง: ชี้ปุ่ม "กิน" ของจานแรกที่กินได้ตามลำดับบนจอ (อาหารสุกก่อน เพราะเสียเร็วกว่า)
+    final firstEdible = [
+      ...meals,
+      ...preserved,
+    ].firstWhere((i) => !e.isExpired(s.stock[i]), orElse: () => -1);
+
     Widget batch(int i) => Padding(
       padding: const EdgeInsets.only(bottom: Gap.s),
       child: _BatchRow(
         key: ValueKey('batch-$i'),
         engine: e,
+        pointEat: i == firstEdible,
         batch: s.stock[i],
         closed: s.marketClosed,
         onEat: () async {
@@ -110,52 +120,70 @@ class StorageTab extends ConsumerWidget {
         if (s.equipmentCount(q.id) > 0) q,
     ];
 
+    final supply = _SupplyPanel(
+      engine: e,
+      // เนื้อเรื่องใช้แค่ตัวคำนวณ "อาหารพอกิน" (ไม่ต้องเลื่อนผ่านเป้าหมายเอง)
+      showGoal: !isStory,
+      onGoal: (g) => ctl.run((e) => e.setGoal(g)),
+    );
+    // เนื้อเรื่อง: ถึงเวลากิน → อาหารขึ้นก่อนตัวคำนวณเสบียง
+    final story = watchStory(ref);
+    final eatFirst =
+        story != null &&
+        Story.nextTarget(story.$1, story.$2) == StoryTarget.eat;
+
     return ListView(
       padding: const EdgeInsets.all(Gap.m),
       children: [
-        PageHeader(
-          scene: PixelScene(painterBuilder: RoomPainter.new),
-          title: 'คลังสินค้า',
-          icon: const PixelIcon('crate', size: 30),
-        ),
-
-        _SupplyPanel(engine: e, onGoal: (g) => ctl.run((e) => e.setGoal(g))),
-
-        WoodPanel(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              SectionTitle(
-                'อาหารพร้อมรับประทาน',
-                icon: const PixelIcon('fry', size: 28),
-                trailing: Tag('${meals.length} ชุด'),
-              ),
-              if (meals.isEmpty) empty('ไม่มี'),
-              for (final i in meals) batch(i),
-            ],
+        if (!isStory)
+          PageHeader(
+            scene: PixelScene(painterBuilder: RoomPainter.new),
+            title: 'คลังสินค้า',
+            icon: const PixelIcon('crate', size: 30),
           ),
-        ),
 
-        WoodPanel(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              SectionTitle(
-                'อาหารถนอมแล้ว',
-                icon: const PixelIcon('jar', size: 28),
-                trailing: Tag('${preserved.length} ชุด'),
-              ),
-              if (preserved.isEmpty) empty('ไม่มี'),
-              for (final i in preserved) batch(i),
-              if (s.processing.isNotEmpty)
-                Muted(
-                  'กำลังถนอม ${s.processing.length} ชุด (ดูที่ครัว)',
-                  size: FontSize.body,
-                  align: TextAlign.center,
+        if (!eatFirst) supply,
+
+        // เนื้อเรื่อง: ซ่อนแผงอาหารที่ว่าง ให้จานที่ต้องกินขึ้นมาบนจอ
+        if (!isStory || meals.isNotEmpty)
+          WoodPanel(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                SectionTitle(
+                  'อาหารพร้อมรับประทาน',
+                  icon: const PixelIcon('fry', size: 28),
+                  trailing: Tag('${meals.length} ชุด'),
                 ),
-            ],
+                if (meals.isEmpty) empty('ไม่มี'),
+                for (final i in meals) batch(i),
+              ],
+            ),
           ),
-        ),
+
+        if (!isStory || preserved.isNotEmpty || s.processing.isNotEmpty)
+          WoodPanel(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                SectionTitle(
+                  'อาหารถนอมแล้ว',
+                  icon: const PixelIcon('jar', size: 28),
+                  trailing: Tag('${preserved.length} ชุด'),
+                ),
+                if (preserved.isEmpty) empty('ไม่มี'),
+                for (final i in preserved) batch(i),
+                if (s.processing.isNotEmpty)
+                  Muted(
+                    'กำลังถนอม ${s.processing.length} ชุด (ดูที่ครัว)',
+                    size: FontSize.body,
+                    align: TextAlign.center,
+                  ),
+              ],
+            ),
+          ),
+
+        if (eatFirst) supply,
 
         WoodPanel(
           child: Column(
@@ -229,9 +257,14 @@ class StorageTab extends ConsumerWidget {
 
 /// เสบียงฉุกเฉิน (คำนวณจากความอิ่ม) + เป้าหมายเสบียง
 class _SupplyPanel extends StatelessWidget {
-  const _SupplyPanel({required this.engine, required this.onGoal});
+  const _SupplyPanel({
+    required this.engine,
+    required this.onGoal,
+    this.showGoal = true,
+  });
   final GameEngine engine;
   final ValueChanged<int> onGoal;
+  final bool showGoal;
 
   @override
   Widget build(BuildContext context) {
@@ -277,49 +310,51 @@ class _SupplyPanel extends StatelessWidget {
             'มีอาหาร ${e.servings} จาน · ความอิ่มลดวันละ $kHungerPerDay ต้องกด "กิน" เองเมื่อหิว',
             size: 13,
           ),
-          const SizedBox(height: Gap.m),
-          const Bold('เป้าหมายเสบียง'),
-          const Muted(
-            'ตั้งเป้าเองเพื่อดูแถบความคืบหน้า (ไม่มีผลกับเกม)',
-            size: 13,
-          ),
-          const SizedBox(height: Gap.xs),
-          Row(
-            children: [
-              for (var i = 0; i < kSupplyGoals.length; i++) ...[
-                if (i > 0) const SizedBox(width: Gap.xs),
-                Expanded(
-                  child: PixelButton(
-                    key: ValueKey('goal-${kSupplyGoals[i]}'),
-                    label: '${kSupplyGoals[i]} วัน',
-                    style: s.goal == kSupplyGoals[i]
-                        ? PixelButtonStyle.gold
-                        : PixelButtonStyle.wood,
-                    onPressed: () => onGoal(kSupplyGoals[i]),
+          if (showGoal) ...[
+            const SizedBox(height: Gap.m),
+            const Bold('เป้าหมายเสบียง'),
+            const Muted(
+              'ตั้งเป้าเองเพื่อดูแถบความคืบหน้า (ไม่มีผลกับเกม)',
+              size: 13,
+            ),
+            const SizedBox(height: Gap.xs),
+            Row(
+              children: [
+                for (var i = 0; i < kSupplyGoals.length; i++) ...[
+                  if (i > 0) const SizedBox(width: Gap.xs),
+                  Expanded(
+                    child: PixelButton(
+                      key: ValueKey('goal-${kSupplyGoals[i]}'),
+                      label: '${kSupplyGoals[i]} วัน',
+                      style: s.goal == kSupplyGoals[i]
+                          ? PixelButtonStyle.gold
+                          : PixelButtonStyle.wood,
+                      onPressed: () => onGoal(kSupplyGoals[i]),
+                    ),
                   ),
-                ),
+                ],
               ],
-            ],
-          ),
-          const SizedBox(height: Gap.s),
-          PixelBar(
-            value: e.goalProgressPct,
-            color: reached ? AquaColors.grass : AquaColors.gold,
-            height: 20,
-          ),
-          const SizedBox(height: Gap.xs),
-          Bold(
-            reached
-                ? 'ถึงเป้าหมาย ${s.goal} วันแล้ว'
-                : 'ขาดอีก ${fmtNum(e.goalShortfall)} วันจึงถึงเป้า',
-            key: const ValueKey('goal-status'),
-            color: reached ? AquaColors.ok : AquaColors.text,
-          ),
-          const SizedBox(height: Gap.xs),
-          const Muted(
-            'ประโยชน์: กันขาดอาหารช่วงภัย รักษาสุขภาพ ลดการพึ่งตลาดที่อาจปิด ใช้ช่วงฟื้นฟู',
-            size: 13,
-          ),
+            ),
+            const SizedBox(height: Gap.s),
+            PixelBar(
+              value: e.goalProgressPct,
+              color: reached ? AquaColors.grass : AquaColors.gold,
+              height: 20,
+            ),
+            const SizedBox(height: Gap.xs),
+            Bold(
+              reached
+                  ? 'ถึงเป้าหมาย ${s.goal} วันแล้ว'
+                  : 'ขาดอีก ${fmtNum(e.goalShortfall)} วันจึงถึงเป้า',
+              key: const ValueKey('goal-status'),
+              color: reached ? AquaColors.ok : AquaColors.text,
+            ),
+            const SizedBox(height: Gap.xs),
+            const Muted(
+              'ประโยชน์: กันขาดอาหารช่วงภัย รักษาสุขภาพ ลดการพึ่งตลาดที่อาจปิด ใช้ช่วงฟื้นฟู',
+              size: 13,
+            ),
+          ],
         ],
       ),
     );
@@ -336,9 +371,13 @@ class _BatchRow extends StatelessWidget {
     required this.onEat,
     required this.onSell,
     required this.onDiscard,
+    this.pointEat = false,
   });
 
   final GameEngine engine;
+
+  /// เนื้อเรื่อง: ชี้ปุ่มกินของล็อตนี้
+  final bool pointEat;
   final StockBatch batch;
   final bool closed;
   final VoidCallback onEat;
@@ -394,31 +433,42 @@ class _BatchRow extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: PixelButton(
-                  label: 'กิน',
-                  style: PixelButtonStyle.green,
-                  onPressed: expired ? null : onEat,
-                ),
-              ),
-              const SizedBox(width: Gap.xs),
-              Expanded(
-                child: PixelButton(
-                  label: closed ? 'ปิด' : 'ขาย',
-                  style: closed ? PixelButtonStyle.wood : PixelButtonStyle.gold,
-                  below: CoinTag(
-                    engine.foodSellPrice(batch.food),
-                    boxed: true,
-                    size: FontSize.small,
+                child: _EatGate(
+                  point: pointEat,
+                  child: PixelButton(
+                    label: 'กิน',
+                    style: PixelButtonStyle.green,
+                    onPressed: expired ? null : onEat,
                   ),
-                  onPressed: expired ? null : onSell,
                 ),
               ),
               const SizedBox(width: Gap.xs),
               Expanded(
-                child: PixelButton(
-                  label: 'ทิ้ง',
-                  style: PixelButtonStyle.danger,
-                  onPressed: onDiscard,
+                child: StoryGate(
+                  target: StoryTarget.sellFood,
+                  child: PixelButton(
+                    label: closed ? 'ปิด' : 'ขาย',
+                    style: closed
+                        ? PixelButtonStyle.wood
+                        : PixelButtonStyle.gold,
+                    below: CoinTag(
+                      engine.foodSellPrice(batch.food),
+                      boxed: true,
+                      size: FontSize.small,
+                    ),
+                    onPressed: expired ? null : onSell,
+                  ),
+                ),
+              ),
+              const SizedBox(width: Gap.xs),
+              Expanded(
+                child: StoryGate(
+                  target: StoryTarget.sellFood,
+                  child: PixelButton(
+                    label: 'ทิ้ง',
+                    style: PixelButtonStyle.danger,
+                    onPressed: onDiscard,
+                  ),
                 ),
               ),
             ],
@@ -495,5 +545,23 @@ class _Slot extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// ปุ่มกิน: เนื้อเรื่องล็อกก่อนบทครัว และชี้เฉพาะล็อตแรกที่กินได้
+class _EatGate extends ConsumerWidget {
+  const _EatGate({required this.point, required this.child});
+  final bool point;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final story = watchStory(ref);
+    if (story == null) return child;
+    final (p, e) = story;
+    if (point || !Story.allows(p, e, StoryTarget.eat)) {
+      return StoryGate(target: StoryTarget.eat, child: child);
+    }
+    return child;
   }
 }

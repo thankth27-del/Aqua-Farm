@@ -7,11 +7,13 @@ import '../../data/fish_data.dart';
 import '../../data/food_data.dart';
 import '../../data/ingredients.dart';
 import '../../game/game_engine.dart';
+import '../../game/story.dart';
 import '../dialogs.dart';
 import '../providers.dart';
 import '../scenes/pixel_scene.dart';
 import '../theme/theme.dart';
 import '../widgets/equipment_row.dart';
+import '../widgets/story_gate.dart';
 
 /// แท็บ "ตลาด" (market ในต้นแบบ): ซื้อวัตถุดิบ ขายปลาในคลัง ขายอาหาร ซื้ออุปกรณ์ครัว
 /// ทุกการซื้อขายต้องผ่านหน้ายืนยัน · ตลาดปิดตอนเกิดภัย (ซื้อขายไม่ได้)
@@ -50,160 +52,208 @@ class MarketTab extends ConsumerWidget {
     final ingredients = kIngredients.values.toList();
     final fish = kFish.values.toList();
 
-    return ListView(
-      padding: const EdgeInsets.all(Gap.m),
-      children: [
-        PageHeader(
-          scene: PixelScene(painterBuilder: RoomPainter.new),
-          title: 'ตลาด',
-          icon: const PixelIcon('garlic', size: 30),
-        ),
-        if (closed) _ClosedBanner(engine: e),
+    final story = watchStory(ref);
+    final next = story == null ? null : Story.nextTarget(story.$1, story.$2);
+    if (story != null) {
+      // เนื้อเรื่อง: ของที่ชี้ให้ซื้อ/ขายอยู่แถวแรก ไม่ต้องเลื่อนหา
+      int first(bool hit) => hit ? 0 : 1;
+      ingredients.sort(
+        (a, b) => first(a.id == 'spice') - first(b.id == 'spice'),
+      );
+      fish.sort(
+        (a, b) =>
+            first((s.fishStock[a.id] ?? 0) > 0) -
+            first((s.fishStock[b.id] ?? 0) > 0),
+      );
+    }
 
-        // ---------- วัตถุดิบ ----------
-        WoodPanel(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const SectionTitle(
-                'วัตถุดิบ',
-                icon: PixelIcon('veg', size: 28),
-                trailing: Tag('ราคาเปลี่ยนทุกวัน'),
-              ),
-              _Grid(
-                children: [
-                  for (final g in ingredients)
-                    _IngredientCard(
-                      key: ValueKey('ing-${g.id}'),
-                      spec: g,
-                      price: s.prices[g.id] ?? g.basePrice,
-                      yesterday:
-                          s.prevPrices[g.id] ?? s.prices[g.id] ?? g.basePrice,
-                      owned: s.inventory[g.id] ?? 0,
-                      closed: closed,
-                      onTap: () {
-                        final p = s.prices[g.id] ?? g.basePrice;
-                        act(
-                          closed || s.money < p,
-                          'ยืนยันซื้อ${g.name} 1 ชิ้น ราคา $p บาท? (เงินคงเหลือ ${s.money - p} บาท)',
-                          PixelIcon(g.icon, size: 56),
-                          (e) => e.buyIngredient(g.id),
-                        );
-                      },
-                    ),
-                ],
-              ),
-            ],
+    /// การ์ดที่เนื้อเรื่องชี้ให้กด
+    Widget pick(bool on, StoryTarget target, Widget child) =>
+        on && next == target ? StoryGate(target: target, child: child) : child;
+
+    // ---------- วัตถุดิบ ----------
+    final ingredientPanel = WoodPanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const SectionTitle(
+            'วัตถุดิบ',
+            icon: PixelIcon('veg', size: 28),
+            trailing: Tag('ราคาเปลี่ยนทุกวัน'),
           ),
-        ),
-
-        // ---------- ขายปลาในคลัง ----------
-        WoodPanel(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+          _Grid(
             children: [
-              SectionTitle(
-                'ขายปลาในคลัง',
-                icon: const PixelIcon('f_nila', size: 30),
-                trailing: Tag('${e.fishTotal} ตัว'),
-              ),
-              _Grid(
-                children: [
-                  for (final f in fish)
-                    _SellFishCard(
-                      key: ValueKey('sell-fish-${f.id}'),
-                      spec: f,
-                      price: e.fishSellPrice(f.id),
-                      count: s.fishStock[f.id] ?? 0,
-                      closed: closed,
-                      onTap: () => act(
-                        closed || (s.fishStock[f.id] ?? 0) <= 0,
-                        'ยืนยันขาย${f.name} 1 ตัว ได้ ${e.fishSellPrice(f.id)} บาท?',
-                        PixelIcon('f_${f.id}', size: 72),
-                        (e) => e.sellFish(f.id),
-                      ),
-                    ),
-                ],
-              ),
-            ],
-          ),
-        ),
-
-        // ---------- ขายอาหาร ----------
-        WoodPanel(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              SectionTitle(
-                'ขายอาหาร',
-                icon: const PixelIcon('fry', size: 28),
-                trailing: Tag('${e.servings} จาน'),
-              ),
-              if (s.stock.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: Gap.s),
-                  child: Muted(
-                    'ยังไม่มีอาหาร ทำได้ที่ครัว',
-                    size: FontSize.body,
-                    align: TextAlign.center,
-                  ),
-                ),
-              for (var i = 0; i < s.stock.length; i++)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: Gap.s),
-                  child: _FoodRow(
-                    key: ValueKey('sell-food-$i'),
-                    food: kFoods[s.stock[i].food]!,
-                    price: e.foodSellPrice(s.stock[i].food),
-                    qty: s.stock[i].qty,
-                    daysLeft: e.daysLeft(s.stock[i]),
-                    expired: e.isExpired(s.stock[i]),
-                    nearExpiry: e.isNearExpiry(s.stock[i]),
+              for (final g in ingredients)
+                pick(
+                  g.id == 'spice',
+                  StoryTarget.buyIngredient,
+                  _IngredientCard(
+                    key: ValueKey('ing-${g.id}'),
+                    spec: g,
+                    price: s.prices[g.id] ?? g.basePrice,
+                    yesterday:
+                        s.prevPrices[g.id] ?? s.prices[g.id] ?? g.basePrice,
+                    owned: s.inventory[g.id] ?? 0,
                     closed: closed,
-                    onSell: () {
-                      final it = kFoods[s.stock[i].food]!;
+                    onTap: () {
+                      final p = s.prices[g.id] ?? g.basePrice;
                       act(
-                        closed,
-                        'ยืนยันขาย${it.name} 1 จาน ได้ ${e.foodSellPrice(it.id)} บาท?',
-                        PixelIcon(it.icon, size: 56),
-                        (e) => e.sellStock(i),
+                        closed || s.money < p,
+                        'ยืนยันซื้อ${g.name} 1 ชิ้น ราคา $p บาท? (เงินคงเหลือ ${s.money - p} บาท)',
+                        PixelIcon(g.icon, size: 56),
+                        (e) => e.buyIngredient(g.id),
                       );
                     },
                   ),
                 ),
             ],
           ),
-        ),
+        ],
+      ),
+    );
 
-        // ---------- อุปกรณ์ครัว ----------
-        WoodPanel(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+    // ---------- ขายปลาในคลัง ----------
+    final sellFishPanel = WoodPanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SectionTitle(
+            'ขายปลาในคลัง',
+            icon: const PixelIcon('f_nila', size: 30),
+            trailing: Tag('${e.fishTotal} ตัว'),
+          ),
+          _Grid(
             children: [
-              const SectionTitle(
-                'อุปกรณ์ครัว',
-                icon: PixelIcon('fridge', size: 28),
-              ),
-              for (final eq in kitchenEquipment)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: Gap.s),
-                  child: EquipmentRow(
-                    key: ValueKey('eq-${eq.id}'),
-                    spec: eq,
-                    price: e.equipmentPrice(eq.id),
-                    owned: s.equipmentCount(eq.id),
+              for (final f in fish)
+                pick(
+                  (s.fishStock[f.id] ?? 0) > 0,
+                  StoryTarget.sellFish,
+                  _SellFishCard(
+                    key: ValueKey('sell-fish-${f.id}'),
+                    spec: f,
+                    price: e.fishSellPrice(f.id),
+                    count: s.fishStock[f.id] ?? 0,
                     closed: closed,
-                    onBuy: () => act(
-                      closed || s.money < e.equipmentPrice(eq.id),
-                      'ยืนยันซื้อ${eq.name} ราคา ${e.equipmentPrice(eq.id)} บาท?',
-                      PixelIcon(eq.icon, size: 56),
-                      (e) => e.buyEquipment(eq.id),
+                    onTap: () => act(
+                      closed || (s.fishStock[f.id] ?? 0) <= 0,
+                      'ยืนยันขาย${f.name} 1 ตัว ได้ ${e.fishSellPrice(f.id)} บาท?',
+                      PixelIcon('f_${f.id}', size: 72),
+                      (e) => e.sellFish(f.id),
                     ),
                   ),
                 ),
             ],
           ),
-        ),
+        ],
+      ),
+    );
+
+    // ---------- ขายอาหาร ----------
+    final sellFoodPanel = WoodPanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SectionTitle(
+            'ขายอาหาร',
+            icon: const PixelIcon('fry', size: 28),
+            trailing: Tag('${e.servings} จาน'),
+          ),
+          if (s.stock.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: Gap.s),
+              child: Muted(
+                'ยังไม่มีอาหาร ทำได้ที่ครัว',
+                size: FontSize.body,
+                align: TextAlign.center,
+              ),
+            ),
+          for (var i = 0; i < s.stock.length; i++)
+            Padding(
+              padding: const EdgeInsets.only(bottom: Gap.s),
+              child: _FoodRow(
+                key: ValueKey('sell-food-$i'),
+                food: kFoods[s.stock[i].food]!,
+                price: e.foodSellPrice(s.stock[i].food),
+                qty: s.stock[i].qty,
+                daysLeft: e.daysLeft(s.stock[i]),
+                expired: e.isExpired(s.stock[i]),
+                nearExpiry: e.isNearExpiry(s.stock[i]),
+                closed: closed,
+                onSell: () {
+                  final it = kFoods[s.stock[i].food]!;
+                  act(
+                    closed,
+                    'ยืนยันขาย${it.name} 1 จาน ได้ ${e.foodSellPrice(it.id)} บาท?',
+                    PixelIcon(it.icon, size: 56),
+                    (e) => e.sellStock(i),
+                  );
+                },
+              ),
+            ),
+        ],
+      ),
+    );
+
+    // ---------- อุปกรณ์ครัว ----------
+    final toolPanel = WoodPanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const SectionTitle(
+            'อุปกรณ์ครัว',
+            icon: PixelIcon('fridge', size: 28),
+          ),
+          for (final eq in kitchenEquipment)
+            Padding(
+              padding: const EdgeInsets.only(bottom: Gap.s),
+              child: pick(
+                eq.id == 'rack',
+                StoryTarget.buyTool,
+                EquipmentRow(
+                  key: ValueKey('eq-${eq.id}'),
+                  spec: eq,
+                  price: e.equipmentPrice(eq.id),
+                  owned: s.equipmentCount(eq.id),
+                  closed: closed,
+                  onBuy: () => act(
+                    closed || s.money < e.equipmentPrice(eq.id),
+                    'ยืนยันซื้อ${eq.name} ราคา ${e.equipmentPrice(eq.id)} บาท?',
+                    PixelIcon(eq.icon, size: 56),
+                    (e) => e.buyEquipment(eq.id),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+
+    var sections = [
+      (StoryTarget.buyIngredient, ingredientPanel),
+      (StoryTarget.sellFish, sellFishPanel),
+      (StoryTarget.sellFood, sellFoodPanel),
+      (StoryTarget.buyTool, toolPanel),
+    ];
+    if (story != null) {
+      // เนื้อเรื่อง: แสดงเฉพาะส่วนที่บทนี้ใช้ ส่วนที่ต้องกดต่อไปอยู่บนสุด
+      final (p, ge) = story;
+      sections = [
+        for (final x in sections)
+          if (Story.allows(p, ge, x.$1)) x,
+      ]..sort((a, b) => (a.$1 == next ? 0 : 1) - (b.$1 == next ? 0 : 1));
+    }
+
+    return ListView(
+      padding: const EdgeInsets.all(Gap.m),
+      children: [
+        if (story == null)
+          PageHeader(
+            scene: PixelScene(painterBuilder: RoomPainter.new),
+            title: 'ตลาด',
+            icon: const PixelIcon('garlic', size: 30),
+          ),
+        if (closed) _ClosedBanner(engine: e),
+        for (final x in sections) x.$2,
       ],
     );
   }

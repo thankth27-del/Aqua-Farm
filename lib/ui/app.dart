@@ -1,11 +1,14 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../game/story.dart';
 import 'providers.dart';
 import 'screens/game_over_screen.dart';
 import 'screens/game_shell.dart';
 import 'screens/main_menu_screen.dart';
+import 'screens/story_summary_screen.dart';
 import 'screens/win_screen.dart';
+import 'story_provider.dart';
 import 'theme/theme.dart';
 
 class AquaFarmApp extends ConsumerWidget {
@@ -44,6 +47,11 @@ class _Root extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final session = ref.watch(gameProvider);
     if (session == null) return const MainMenuScreen();
+    // เนื้อเรื่องบทที่ 7: หน้าสรุป
+    final story = ref.watch(storyProvider);
+    if (session.slot == kStorySlot && (story?.finished ?? false)) {
+      return const StorySummaryScreen();
+    }
     if (session.state.over) return const GameOverScreen();
     if (session.state.won) return const WinScreen();
     return const GameShell();

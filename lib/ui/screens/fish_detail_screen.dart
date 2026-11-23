@@ -5,10 +5,13 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../data/constants.dart';
 import '../../data/fish_data.dart';
+import '../../game/story.dart';
 import '../dialogs.dart';
 import '../providers.dart';
 import '../scenes/pixel_scene.dart';
 import '../theme/theme.dart';
+import '../story_provider.dart';
+import '../widgets/story_gate.dart';
 
 /// รายละเอียดปลาก่อนซื้อ + เลือกจำนวน + หน้ายืนยันการซื้อ
 class FishDetailScreen extends ConsumerStatefulWidget {
@@ -21,6 +24,17 @@ class FishDetailScreen extends ConsumerStatefulWidget {
 
 class _FishDetailScreenState extends ConsumerState<FishDetailScreen> {
   int _qty = 1;
+
+  @override
+  void initState() {
+    super.initState();
+    // เนื้อเรื่องบท 1: ตั้งจำนวนให้ครบเป้าหมายเลย
+    final p = ref.read(storyProvider);
+    final s = ref.read(gameProvider)!.state;
+    if (p != null && p.chapter == 1 && s.pond.length < kStoryPondFish) {
+      _qty = kStoryPondFish - s.pond.length;
+    }
+  }
 
   Future<void> _buy(FishSpec f) async {
     final s = ref.read(gameProvider)!.state;
@@ -164,10 +178,13 @@ class _FishDetailScreenState extends ConsumerState<FishDetailScreen> {
                 const SizedBox(width: Gap.s),
                 Expanded(
                   flex: 3,
-                  child: PixelButton(
-                    label: 'ซื้อปลา',
-                    icon: const PixelIcon('coin', size: 24),
-                    onPressed: problem == null ? () => _buy(f) : null,
+                  child: StoryGate(
+                    target: StoryTarget.buyFish,
+                    child: PixelButton(
+                      label: 'ซื้อปลา',
+                      icon: const PixelIcon('coin', size: 24),
+                      onPressed: problem == null ? () => _buy(f) : null,
+                    ),
                   ),
                 ),
               ],

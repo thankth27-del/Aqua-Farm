@@ -16,6 +16,12 @@ const String kSaveKey = 'aquafarm_slots_v3';
 /// คีย์ตั้งค่าเสียง (ต่อเครื่อง)
 const String kSoundKey = 'aq_snd';
 
+/// คีย์เซฟเนื้อเรื่อง (ความคืบหน้าบท + สถานะเกม)
+const String kStoryKey = 'aquafarm_story_v1';
+
+/// คีย์บอกว่าเล่นเนื้อเรื่องจบแล้ว (ปลดล็อกโหมดเอาชีวิตรอด)
+const String kSurvivalUnlockKey = 'aquafarm_survival_unlocked';
+
 /// ช่องเซฟที่ใช้ได้
 const List<int> kSaveSlots = [1, 2, 3];
 

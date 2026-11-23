@@ -5,6 +5,7 @@ import '../../data/difficulty.dart';
 import '../../data/disaster_data.dart';
 import '../../data/equipment_data.dart';
 import '../../game/hints.dart';
+import '../../game/story.dart';
 import '../../game/tutorial.dart';
 import '../dialogs.dart';
 import '../providers.dart';
@@ -12,6 +13,7 @@ import '../scenes/pixel_scene.dart';
 import '../theme/theme.dart';
 import '../widgets/disaster_icon.dart';
 import '../widgets/equipment_row.dart';
+import '../widgets/story_gate.dart';
 import 'profile_screen.dart';
 
 /// ตำแหน่งแผง "เตรียมภัย" สำหรับปุ่มลัดจากการ์ดข่าวเตือนภัย
@@ -32,6 +34,37 @@ class FarmTab extends ConsumerWidget {
     final scene = FarmSceneData.fromState(s, e.warnDays);
     final hint = farmHint(e);
     final target = e.tutorialStep?.target;
+    final isStory = watchStory(ref) != null;
+
+    final character = Spotlight(
+      on: target == TutorialTarget.status,
+      child: _CharacterCard(
+        restSpotlight: target == TutorialTarget.home,
+        onRest: () => showResult(context, ctl.run((e) => e.rest())),
+        onPond: () => onOpenTab(1),
+      ),
+    );
+    final disaster = _DisasterCard(
+      onRepair: () => showResult(context, ctl.run((e) => e.repair())),
+    );
+    final prepare = KeyedSubtree(
+      key: _prepareKey,
+      child: Spotlight(
+        on: target == TutorialTarget.prepare,
+        child: const _PreparePanel(),
+      ),
+    );
+
+    // เนื้อเรื่อง: อุปกรณ์ที่ต้องซื้ออยู่บนสุด ไม่ต้องเลื่อนหา
+    if (isStory) {
+      return SingleChildScrollView(
+        padding: const EdgeInsets.all(Gap.m),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [prepare, disaster, character],
+        ),
+      );
+    }
 
     // Column ใน SingleChildScrollView: ทุกแผงถูกสร้างไว้ ปุ่มลัดเลื่อนไปหาได้เสมอ
     return SingleChildScrollView(
@@ -48,24 +81,9 @@ class FarmTab extends ConsumerWidget {
             _HintBubble(hint),
             const SizedBox(height: Gap.m),
           ],
-          Spotlight(
-            on: target == TutorialTarget.status,
-            child: _CharacterCard(
-              restSpotlight: target == TutorialTarget.home,
-              onRest: () => showResult(context, ctl.run((e) => e.rest())),
-              onPond: () => onOpenTab(1),
-            ),
-          ),
-          _DisasterCard(
-            onRepair: () => showResult(context, ctl.run((e) => e.repair())),
-          ),
-          KeyedSubtree(
-            key: _prepareKey,
-            child: Spotlight(
-              on: target == TutorialTarget.prepare,
-              child: const _PreparePanel(),
-            ),
-          ),
+          character,
+          disaster,
+          prepare,
         ],
       ),
     );
@@ -200,17 +218,24 @@ class _CharacterCard extends ConsumerWidget {
           const SizedBox(height: Gap.m),
           Spotlight(
             on: restSpotlight,
-            child: PixelButton(
-              label: 'พักผ่อน',
-              icon: const PixelIcon('house', size: 26),
-              trailing: const Tag(
-                '+40',
-                color: AquaColors.paper,
-                icon: PixelGlyph(Glyph.bolt, size: 14, color: AquaColors.gold),
+            child: StoryGate(
+              target: StoryTarget.rest,
+              child: PixelButton(
+                label: 'พักผ่อน',
+                icon: const PixelIcon('house', size: 26),
+                trailing: const Tag(
+                  '+40',
+                  color: AquaColors.paper,
+                  icon: PixelGlyph(
+                    Glyph.bolt,
+                    size: 14,
+                    color: AquaColors.gold,
+                  ),
+                ),
+                tooltip: 'พักผ่อน +40 พลังงาน',
+                expand: true,
+                onPressed: onRest,
               ),
-              tooltip: 'พักผ่อน +40 พลังงาน',
-              expand: true,
-              onPressed: onRest,
             ),
           ),
           const SizedBox(height: Gap.s),
@@ -517,40 +542,45 @@ class _PreparePanel extends ConsumerWidget {
           for (final id in order)
             Padding(
               padding: const EdgeInsets.only(bottom: Gap.s),
-              child: EquipmentRow(
-                key: ValueKey('eq-$id'),
-                spec: kEquipment[id]!,
-                price: e.equipmentPrice(id),
-                owned: s.equipmentCount(id),
-                closed: s.marketClosed,
-                badge: needs.containsKey(id)
-                    ? (s.equipmentCount(id) >= needs[id]!
-                          ? '${kDisasters[dType]!.name}: ครบแล้ว'
-                          : '${kDisasters[dType]!.name}: ยังขาด ${needs[id]! - s.equipmentCount(id)}')
-                    : null,
-                badgeOk:
-                    needs.containsKey(id) && s.equipmentCount(id) >= needs[id]!,
-                usage: [
-                  'ประโยชน์: ${kEquipment[id]!.use}',
-                  if (_usedWith(id).isNotEmpty) 'ใช้กับ: ${_usedWith(id)}',
-                ].join(' · '),
-                onBuy: () async {
-                  final q = kEquipment[id]!;
-                  // ตลาดปิดหรือเงินไม่พอ → ให้ engine บอกเหตุผล ไม่ต้องถาม
-                  final price = e.equipmentPrice(id);
-                  if (s.marketClosed || s.money < price) {
-                    showResult(context, ctl.run((e) => e.buyEquipment(id)));
-                    return;
-                  }
-                  final ok = await confirmDialog(
-                    context,
-                    'ยืนยันซื้อ${q.name} ราคา $price บาท?',
-                    icon: PixelIcon(q.icon, size: 56),
-                  );
-                  if (ok && context.mounted) {
-                    showResult(context, ctl.run((e) => e.buyEquipment(id)));
-                  }
-                },
+              child: _BuyGate(
+                // เนื้อเรื่อง: ชี้อุปกรณ์ชิ้นแรกที่ภัยนี้ต้องใช้
+                point: id == order.first && needs.containsKey(id),
+                child: EquipmentRow(
+                  key: ValueKey('eq-$id'),
+                  spec: kEquipment[id]!,
+                  price: e.equipmentPrice(id),
+                  owned: s.equipmentCount(id),
+                  closed: s.marketClosed,
+                  badge: needs.containsKey(id)
+                      ? (s.equipmentCount(id) >= needs[id]!
+                            ? '${kDisasters[dType]!.name}: ครบแล้ว'
+                            : '${kDisasters[dType]!.name}: ยังขาด ${needs[id]! - s.equipmentCount(id)}')
+                      : null,
+                  badgeOk:
+                      needs.containsKey(id) &&
+                      s.equipmentCount(id) >= needs[id]!,
+                  usage: [
+                    'ประโยชน์: ${kEquipment[id]!.use}',
+                    if (_usedWith(id).isNotEmpty) 'ใช้กับ: ${_usedWith(id)}',
+                  ].join(' · '),
+                  onBuy: () async {
+                    final q = kEquipment[id]!;
+                    // ตลาดปิดหรือเงินไม่พอ → ให้ engine บอกเหตุผล ไม่ต้องถาม
+                    final price = e.equipmentPrice(id);
+                    if (s.marketClosed || s.money < price) {
+                      showResult(context, ctl.run((e) => e.buyEquipment(id)));
+                      return;
+                    }
+                    final ok = await confirmDialog(
+                      context,
+                      'ยืนยันซื้อ${q.name} ราคา $price บาท?',
+                      icon: PixelIcon(q.icon, size: 56),
+                    );
+                    if (ok && context.mounted) {
+                      showResult(context, ctl.run((e) => e.buyEquipment(id)));
+                    }
+                  },
+                ),
               ),
             ),
         ],
@@ -657,5 +687,23 @@ class _EquipTile extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// ปุ่มซื้ออุปกรณ์กันภัย: เนื้อเรื่องล็อกจนถึงบทคำเตือน และชี้ชิ้นแรกที่ต้องใช้
+class _BuyGate extends ConsumerWidget {
+  const _BuyGate({required this.point, required this.child});
+  final bool point;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final story = watchStory(ref);
+    if (story == null) return child;
+    final (p, e) = story;
+    if (point || !Story.allows(p, e, StoryTarget.buyEquipment)) {
+      return StoryGate(target: StoryTarget.buyEquipment, child: child);
+    }
+    return child;
   }
 }

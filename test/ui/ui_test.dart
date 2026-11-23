@@ -1,3 +1,5 @@
+import 'package:aqua_farm/game/tutorial.dart';
+import 'package:aqua_farm/data/constants.dart';
 import 'package:aqua_farm/data/difficulty.dart';
 import 'package:aqua_farm/data/disaster_data.dart';
 import 'package:aqua_farm/data/equipment_data.dart';
@@ -7,11 +9,14 @@ import 'package:aqua_farm/save/save_repository.dart';
 import 'package:aqua_farm/ui/app.dart';
 import 'package:aqua_farm/ui/providers.dart';
 import 'package:aqua_farm/ui/screens/event_screen.dart';
+import 'package:aqua_farm/ui/screens/fish_tab.dart';
 import 'package:aqua_farm/ui/screens/game_shell.dart';
 import 'package:aqua_farm/ui/screens/kitchen_tab.dart';
 import 'package:aqua_farm/ui/screens/market_tab.dart';
 import 'package:aqua_farm/ui/screens/storage_tab.dart';
+import 'package:aqua_farm/game/story.dart';
 import 'package:aqua_farm/ui/sound.dart';
+import 'package:aqua_farm/ui/story_provider.dart';
 import 'package:aqua_farm/ui/theme/theme.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -31,12 +36,15 @@ class FakeBeeper implements Beeper {
   void dispose() {}
 }
 
-Future<void> pumpApp(WidgetTester tester) async {
+/// เปิดแอปที่เมนูหลัก — [unlocked] = เล่นเนื้อเรื่องจบแล้ว (โหมดเอาชีวิตรอดเปิด)
+Future<void> pumpApp(WidgetTester tester, {bool unlocked = true}) async {
   tester.view
     ..physicalSize = const Size(390, 844)
     ..devicePixelRatio = 1;
   addTearDown(tester.view.reset);
-  SharedPreferences.setMockInitialValues({});
+  SharedPreferences.setMockInitialValues({
+    if (unlocked) kSurvivalUnlockKey: '1',
+  });
   repo = SaveRepository(await SharedPreferences.getInstance());
   container = ProviderContainer(
     overrides: [
@@ -52,15 +60,22 @@ Future<void> pumpApp(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
-/// เมนูหลัก → เกมใหม่ → ช่อง 1 → เลือกโหมด → ตั้งชื่อ → ตกลง
-/// (ข้ามบทเรียนเป็นค่าเริ่มต้น เพื่อทดสอบส่วนอื่นได้เต็มจอ)
+/// เมนูหลัก → เอาชีวิตรอด → (เมนูย่อย) เกมใหม่ หรือ เล่นต่อ/โหลดเกม
+Future<void> openSurvival(WidgetTester tester, String item) async {
+  await tester.tap(find.byKey(const ValueKey('menu-survival')));
+  await tester.pumpAndSettle();
+  await tester.tap(find.byKey(ValueKey('sheet-$item')));
+  await tester.pumpAndSettle();
+}
+
+/// เมนูหลัก → เอาชีวิตรอด → เกมใหม่ → ช่อง 1 → เลือกโหมด → ตั้งชื่อ → ตกลง
+/// (โหมดเอาชีวิตรอดไม่เริ่มบทเรียน 9 ขั้น — skipTutorial: false = เปิดบทเรียนเอง)
 Future<void> startNewGame(
   WidgetTester tester, {
   bool skipTutorial = true,
   Difficulty mode = Difficulty.normal,
 }) async {
-  await tester.tap(find.text('เกมใหม่'));
-  await tester.pumpAndSettle();
+  await openSurvival(tester, 'new');
   await tester.tap(find.widgetWithText(PixelButton, 'เกมใหม่').first);
   await tester.pumpAndSettle();
   expect(find.text('เลือกความยาก'), findsOneWidget);
@@ -69,8 +84,8 @@ Future<void> startNewGame(
   expect(find.text('ตั้งชื่อ Save'), findsOneWidget);
   await tester.tap(find.text('ตกลง'));
   await tester.pumpAndSettle();
-  if (skipTutorial) {
-    await tester.tap(find.widgetWithText(PixelButton, 'ข้าม'));
+  if (!skipTutorial) {
+    container.read(gameProvider.notifier).update((e) => e.tutorialRestart());
     await tester.pumpAndSettle();
   }
 }
@@ -103,25 +118,218 @@ void main() {
   ) async {
     await pumpApp(tester);
     expect(find.text('AQUA FARM'), findsOneWidget);
-    for (final t in ['เกมใหม่', 'เล่นต่อ', 'โหลดเกม', 'เครดิต']) {
+    for (final t in ['เนื้อเรื่อง', 'เอาชีวิตรอด', 'เครดิต']) {
       expect(find.text(t), findsOneWidget);
     }
-    await tester.tap(find.text('เล่นต่อ'));
+    await tester.tap(find.byKey(const ValueKey('menu-survival')));
+    await tester.pumpAndSettle();
+    for (final t in ['เกมใหม่', 'เล่นต่อ', 'โหลดเกม']) {
+      expect(find.text(t), findsOneWidget);
+    }
+    await tester.tap(find.byKey(const ValueKey('sheet-continue')));
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
     expect(find.text('ยังไม่มีเซฟ'), findsOneWidget);
+  });
+
+  group('เนื้อเรื่อง: แถบเป้าหมายและไฮไลต์', () {
+    Future<void> startStory(WidgetTester tester) async {
+      await pumpApp(tester, unlocked: false);
+      await tester.tap(find.byKey(const ValueKey('menu-story')));
+      await tester.pumpAndSettle();
+    }
+
+    bool lit(WidgetTester tester, String target) =>
+        tester.widget<Spotlight>(find.byKey(ValueKey('story-gate-$target'))).on;
+
+    testWidgets(
+      'แถบเป้าหมายติดบนจอ: บท 1/7 เป้าหมาย คำอธิบายไม่เกิน 2 บรรทัด',
+      (tester) async {
+        await startStory(tester);
+        expect(find.byKey(const ValueKey('story-goal')), findsOneWidget);
+        expect(find.text('บทที่ 1/7 · ลงบ่อ'), findsOneWidget);
+        expect(
+          find.text('เป้าหมาย: ซื้อปลา 1 ชนิด 3 ตัวลงบ่อ แล้วดูแล 2 วัน'),
+          findsOneWidget,
+        );
+        final hint = tester.widget<Text>(
+          find.byKey(const ValueKey('story-hint')),
+        );
+        expect(hint.maxLines, 2);
+        // แถบเป้าหมายอยู่ใต้แถบบน ไม่อยู่ในส่วนที่เลื่อน
+        expect(
+          find.ancestor(
+            of: find.byKey(const ValueKey('story-goal')),
+            matching: find.byType(Scrollable),
+          ),
+          findsNothing,
+        );
+        // บทเรียน 9 ขั้นเดิมไม่แสดงในเนื้อเรื่อง และไม่มี "เล่นบทเรียนซ้ำ"
+        expect(find.byKey(const ValueKey('tutorial')), findsNothing);
+        await tester.tap(find.byTooltip('เมนู / พัก'));
+        await tester.pumpAndSettle();
+        expect(find.text('เล่นบทเรียนซ้ำ'), findsNothing);
+      },
+    );
+
+    testWidgets('บท 1: เปิดแค่แท็บปลา แท็บอื่นจางและกดไม่ได้', (tester) async {
+      await startStory(tester);
+      // เริ่มที่แท็บปลา (แท็บฟาร์มยังล็อก)
+      expect(find.byType(FishTab), findsOneWidget);
+      for (final i in [0, 2, 3, 4]) {
+        expect(find.byKey(ValueKey('nav-locked-$i')), findsOneWidget);
+      }
+      expect(find.byKey(const ValueKey('nav-locked-1')), findsNothing);
+      await tester.tap(
+        find.descendant(
+          of: find.byType(GameNavBar),
+          matching: find.text('ตลาด'),
+        ),
+        warnIfMissed: false,
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(MarketTab), findsNothing);
+    });
+
+    testWidgets('ปุ่มจบวันจางจนกว่าจะซื้อปลาครบและให้อาหาร แล้วจึงกะพริบ', (
+      tester,
+    ) async {
+      await startStory(tester);
+      expect(find.byKey(const ValueKey('story-locked-endDay')), findsOneWidget);
+      expect(find.text('ซื้อปลาให้ครบ 3 ตัวก่อน'), findsOneWidget);
+      final ctl = container.read(gameProvider.notifier);
+      ctl.update((e) => e.buyFish('nila', 3));
+      await tester.pumpAndSettle();
+      expect(find.text('ให้อาหารปลาก่อนจบวัน'), findsOneWidget);
+      expect(find.byKey(const ValueKey('story-locked-endDay')), findsOneWidget);
+      ctl.update((e) => e.feed(2));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('story-locked-endDay')), findsNothing);
+      expect(lit(tester, 'endDay'), isTrue);
+    });
+
+    testWidgets('ผ่านบทแล้ว: ปุ่ม "บทถัดไป" กะพริบ กดแล้วไปบท 2 เปิดแท็บตลาด', (
+      tester,
+    ) async {
+      await startStory(tester);
+      final p = container.read(storyProvider)!;
+      final ctl = container.read(gameProvider.notifier);
+      ctl.update((e) {
+        e.buyFish('nila', 3);
+        e.state.day = p.startDay + kStoryCareDays;
+      });
+      await tester.pumpAndSettle();
+      expect(find.text('ผ่านบทนี้แล้ว! กด "บทถัดไป"'), findsOneWidget);
+      expect(find.byKey(const ValueKey('story-locked-endDay')), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('story-next')));
+      await tester.pumpAndSettle();
+      expect(find.text('บทที่ 2/7 · ตลาด'), findsOneWidget);
+      expect(find.byKey(const ValueKey('nav-locked-2')), findsNothing);
+      expect(container.read(saveRepositoryProvider).loadStory()!.$1.chapter, 2);
+    });
+
+    testWidgets('แพ้บท: แถบเป้าหมายเป็นสีแดง บอกเหตุผล และลองใหม่ได้', (
+      tester,
+    ) async {
+      await startStory(tester);
+      final ctl = container.read(gameProvider.notifier);
+      ctl.update((e) {
+        e.buyFish('nila', 3);
+        e.feed(2);
+        e.state
+          ..hunger = 0
+          ..health = 5;
+      });
+      await tester.pumpAndSettle();
+      await ctl.endDay();
+      await tester.pumpAndSettle();
+      // ไม่ไปหน้า Game Over
+      expect(find.byType(GameShell), findsOneWidget);
+      // ปิดหน้ารายงาน (เปิดจากปุ่มจบวันเท่านั้น — ที่นี่เรียกตรง จึงไม่มี)
+      expect(find.text('แพ้บทนี้: สุขภาพหมด ตัวละครล้มป่วย'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('story-retry')));
+      await tester.pumpAndSettle();
+      expect(container.read(gameProvider)!.state.pond, isEmpty);
+      expect(find.text('บทที่ 1/7 · ลงบ่อ'), findsOneWidget);
+    });
+  });
+
+  group('เมนูหลัก: เนื้อเรื่อง / เอาชีวิตรอด', () {
+    testWidgets('ยังไม่จบเนื้อเรื่อง: เอาชีวิตรอดล็อก กดแล้วบอกวิธีปลดล็อก', (
+      tester,
+    ) async {
+      await pumpApp(tester, unlocked: false);
+      expect(
+        find.text('ล็อกอยู่ · เล่นเนื้อเรื่องจบเพื่อปลดล็อก'),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(const ValueKey('menu-survival')));
+      await tester.pump();
+      expect(find.text('เกมใหม่'), findsNothing);
+      expect(
+        find.text('เล่นเนื้อเรื่องให้จบก่อน เพื่อปลดล็อกโหมดนี้'),
+        findsOneWidget,
+      );
+      expect(container.read(gameProvider), isNull);
+    });
+
+    testWidgets('เนื้อเรื่อง: เริ่มบท 1 แล้วออกมาเล่นต่อได้จากเมนู', (
+      tester,
+    ) async {
+      await pumpApp(tester, unlocked: false);
+      expect(find.text('เรียนรู้ทีละบท 7 บท'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('menu-story')));
+      await tester.pumpAndSettle();
+      expect(container.read(gameProvider)!.slot, kStorySlot);
+      expect(container.read(storyProvider)!.chapter, 1);
+
+      await container.read(gameProvider.notifier).exitToMenu();
+      await tester.pumpAndSettle();
+      expect(find.text('เล่นต่อจากบทที่ค้างไว้'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('menu-story')));
+      await tester.pumpAndSettle();
+      expect(find.text('เล่นต่อ บทที่ 1'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('sheet-continue')));
+      await tester.pumpAndSettle();
+      expect(container.read(storyProvider)!.chapter, 1);
+      // เนื้อเรื่องไม่ใช้ช่องเซฟ 1-3
+      expect(repo.listSlots().values.whereType<SlotInfo>(), isEmpty);
+    });
+
+    testWidgets('จบเนื้อเรื่องแล้ว: เอาชีวิตรอดปลดล็อกทันที', (tester) async {
+      await pumpApp(tester, unlocked: false);
+      await tester.tap(find.byKey(const ValueKey('menu-story')));
+      await tester.pumpAndSettle();
+      final p = container.read(storyProvider)!
+        ..chapter = kStoryChapters
+        ..done = true;
+      expect(p.finished, isTrue);
+      await container.read(storyProvider.notifier).finish();
+      await tester.pumpAndSettle();
+      expect(find.text('20 / 30 / 60 วัน'), findsOneWidget);
+      await openSurvival(tester, 'new');
+      expect(find.text('เลือกช่องบันทึก'), findsWidgets);
+    });
+
+    testWidgets('มีเซฟเอาชีวิตรอดเดิมอยู่แล้ว: ไม่ล็อก (ไม่เสียเซฟเก่า)', (
+      tester,
+    ) async {
+      await pumpApp(tester, unlocked: false);
+      await repo.save(2, GameEngine.newGame('เดิม').state);
+      container.invalidate(survivalUnlockedProvider);
+      await tester.pumpAndSettle();
+      expect(find.text('20 / 30 / 60 วัน'), findsOneWidget);
+    });
   });
 
   testWidgets('สร้างเกมใหม่ในช่อง 1 แล้วเข้าหน้าฟาร์ม แถบบนและเมนูล่างครบ', (
     tester,
   ) async {
     await pumpApp(tester);
-    await startNewGame(tester, skipTutorial: false);
-    // เกมใหม่เริ่มบทเรียน และซ่อนคำแนะนำจนกว่าจะจบบทเรียน (ตามต้นแบบ)
-    expect(find.text('บทเรียน 1/9'), findsOneWidget);
-    expect(find.text('ซื้อปลาที่ร้านปลา แล้วปล่อยลงบ่อ'), findsNothing);
-    await tester.tap(find.widgetWithText(PixelButton, 'ข้าม'));
-    await tester.pumpAndSettle();
+    await startNewGame(tester);
+    // โหมดเอาชีวิตรอดไม่เริ่มบทเรียน 9 ขั้น (สอนในโหมดเนื้อเรื่องแทน)
     expect(find.byKey(const ValueKey('tutorial')), findsNothing);
+    expect(container.read(gameProvider)!.state.tut, kTutorialSteps);
     expect(repo.listSlots()[1]!.name, 'ฟาร์มของฉัน');
     expect(find.text('500฿'), findsOneWidget);
     expect(dayChip('1/30'), findsOneWidget);
@@ -295,8 +503,7 @@ void main() {
 
   testWidgets('เลือกโหมดก่อนตั้งชื่อ: ยกเลิกแล้วไม่สร้างเกม', (tester) async {
     await pumpApp(tester);
-    await tester.tap(find.text('เกมใหม่'));
-    await tester.pumpAndSettle();
+    await openSurvival(tester, 'new');
     await tester.tap(find.widgetWithText(PixelButton, 'เกมใหม่').first);
     await tester.pumpAndSettle();
     for (final t in ['ง่าย', 'ปานกลาง', 'ยาก']) {
@@ -322,8 +529,7 @@ void main() {
     expect(repo.listSlots()[1]!.mode, Difficulty.hard);
     await container.read(gameProvider.notifier).exitToMenu();
     await tester.pumpAndSettle();
-    await tester.tap(find.text('โหลดเกม'));
-    await tester.pumpAndSettle();
+    await openSurvival(tester, 'load');
     expect(find.text('วัน 1/60'), findsOneWidget);
     expect(find.text('ยาก'), findsOneWidget);
   });
@@ -589,8 +795,7 @@ void main() {
     await startNewGame(tester);
     await container.read(gameProvider.notifier).exitToMenu();
     await tester.pumpAndSettle();
-    await tester.tap(find.text('โหลดเกม'));
-    await tester.pumpAndSettle();
+    await openSurvival(tester, 'load');
 
     await tester.tap(find.text('ชื่อ'));
     await tester.pumpAndSettle();
@@ -1431,7 +1636,7 @@ void main() {
     tester,
   ) async {
     await pumpApp(tester);
-    final ctx = tester.element(find.text('เกมใหม่'));
+    final ctx = tester.element(find.text('เนื้อเรื่อง'));
     expect(Theme.of(ctx).textTheme.bodyMedium!.fontFamily, kFont);
     expect(DefaultTextStyle.of(ctx).style.fontFamily, kFont);
   });

@@ -3,11 +3,13 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../data/difficulty.dart';
 import '../../data/disaster_data.dart';
+import '../../game/story.dart';
 import '../../game/tutorial.dart';
 import '../dialogs.dart';
 import '../providers.dart';
 import '../sound.dart';
 import '../theme/theme.dart';
+import '../widgets/story_gate.dart';
 import '../widgets/tutorial_panel.dart';
 import 'farm_tab.dart';
 import 'fish_tab.dart';
@@ -60,9 +62,37 @@ class _GameShellState extends ConsumerState<GameShell> {
     _fishShop = false;
   });
 
+  /// เนื้อเรื่องเปลี่ยนบท → เปิดแท็บของสิ่งที่ต้องทำต่อ
+  void _followStory() {
+    final story = watchStory(ref);
+    if (story == null) return;
+    final (p, e) = story;
+    final next = Story.nextTarget(p, e);
+    final tab = next == null ? null : storyTabOf(next);
+    if (tab != null && Story.tabOpen(p, tab)) _select(tab);
+  }
+
   @override
   Widget build(BuildContext context) {
     final target = ref.watch(gameProvider)!.engine.tutorialStep?.target;
+    final story = watchStory(ref);
+    Set<int>? locked;
+    int? storyTab;
+    if (story != null) {
+      final (p, e) = story;
+      locked = {
+        for (var i = 0; i < tabs.length; i++)
+          if (!Story.tabOpen(p, i)) i,
+      };
+      // แท็บที่เปิดอยู่ถูกล็อกในบทนี้ → ไปแท็บแรกที่เปิดได้
+      if (locked.contains(_tab) && locked.length < tabs.length) {
+        _tab = [for (var i = 0; i < tabs.length; i++) i]
+            .firstWhere((i) => !locked!.contains(i));
+        _fishShop = false;
+      }
+      final next = Story.nextTarget(p, e);
+      storyTab = next == null ? null : storyTabOf(next);
+    }
     final body = switch (_tab) {
       0 => FarmTab(onOpenTab: _select),
       1 => FishTab(onShopChanged: (v) => setState(() => _fishShop = v)),
@@ -76,6 +106,7 @@ class _GameShellState extends ConsumerState<GameShell> {
           children: [
             // ข้อความแจ้งเตือนแสดงใต้แถบบนนี้
             ToastAnchor(child: TopBar(onReplayTutorial: () => _select(0))),
+            StoryGoalBar(onChapterChanged: _followStory),
             TutorialPanel(screen: _screen),
             Expanded(
               child: AnimatedSwitcher(
@@ -89,7 +120,10 @@ class _GameShellState extends ConsumerState<GameShell> {
       bottomNavigationBar: GameNavBar(
         selected: _tab,
         items: tabs,
-        highlight: target == null ? null : tabOf(target),
+        highlight: story != null
+            ? storyTab
+            : (target == null ? null : tabOf(target)),
+        locked: locked ?? const {},
         onSelect: _select,
       ),
     );
@@ -104,6 +138,7 @@ class GameNavBar extends StatelessWidget {
     required this.items,
     required this.onSelect,
     this.highlight,
+    this.locked = const {},
   });
 
   final int selected;
@@ -112,6 +147,9 @@ class GameNavBar extends StatelessWidget {
 
   /// ช่องที่บทเรียนชี้ (กะพริบ) — ไม่ชี้ช่องที่เปิดอยู่แล้ว
   final int? highlight;
+
+  /// ช่องที่ยังไม่เปิดในบทนี้ของเนื้อเรื่อง (จาง กดไม่ได้)
+  final Set<int> locked;
 
   @override
   Widget build(BuildContext context) {
@@ -129,12 +167,28 @@ class GameNavBar extends StatelessWidget {
               child: Spotlight(
                 on: i == highlight && i != selected,
                 pad: 0,
-                child: _NavItem(
-                  label: items[i].$1,
-                  icon: items[i].$2,
-                  selected: i == selected,
-                  onTap: () => onSelect(i),
-                ),
+                child: locked.contains(i)
+                    ? Semantics(
+                        enabled: false,
+                        child: IgnorePointer(
+                          child: Opacity(
+                            key: ValueKey('nav-locked-$i'),
+                            opacity: .35,
+                            child: _NavItem(
+                              label: items[i].$1,
+                              icon: items[i].$2,
+                              selected: false,
+                              onTap: () {},
+                            ),
+                          ),
+                        ),
+                      )
+                    : _NavItem(
+                        label: items[i].$1,
+                        icon: items[i].$2,
+                        selected: i == selected,
+                        onTap: () => onSelect(i),
+                      ),
               ),
             ),
         ],
@@ -233,6 +287,7 @@ class TopBar extends ConsumerWidget {
 
   Future<void> _menu(BuildContext context, WidgetRef ref) async {
     final ctl = ref.read(gameProvider.notifier);
+    final isStory = ctl.isStory;
     final choice = await showModalBottomSheet<String>(
       context: context,
       backgroundColor: Colors.transparent,
@@ -287,14 +342,16 @@ class TopBar extends ConsumerWidget {
                     );
                   },
                 ),
-                const SizedBox(height: Gap.s),
-                PixelButton(
-                  label: 'เล่นบทเรียนซ้ำ',
-                  icon: const PixelIcon('scroll', size: 24),
-                  style: PixelButtonStyle.green,
-                  expand: true,
-                  onPressed: () => Navigator.pop(c, 'tutorial'),
-                ),
+                if (!isStory) ...[
+                  const SizedBox(height: Gap.s),
+                  PixelButton(
+                    label: 'เล่นบทเรียนซ้ำ',
+                    icon: const PixelIcon('scroll', size: 24),
+                    style: PixelButtonStyle.green,
+                    expand: true,
+                    onPressed: () => Navigator.pop(c, 'tutorial'),
+                  ),
+                ],
                 const SizedBox(height: Gap.s),
                 PixelButton(
                   label: 'กลับเมนูหลัก',
@@ -361,7 +418,10 @@ class TopBar extends ConsumerWidget {
                   icon: const PixelIcon('cal', size: 22),
                   key: const ValueKey('day-chip'),
                   caption: 'วันที่',
-                  text: '${s.day}/${e.targetDays}',
+                  // เนื้อเรื่องไม่มีวันเป้าหมาย (จบเมื่อผ่านบท)
+                  text: session.slot == kStorySlot
+                      ? '${s.day}'
+                      : '${s.day}/${e.targetDays}',
                   tooltip:
                       'วันที่ ${s.day} จาก ${e.targetDays} '
                       '(โหมด${kDifficulties[s.mode]!.name} '
@@ -410,19 +470,22 @@ class TopBar extends ConsumerWidget {
                 onPressed: () => _menu(context, ref),
               ),
               const SizedBox(width: Gap.s),
-              PixelButton(
-                label: 'จบวัน',
-                icon: const PixelGlyph(
-                  Glyph.moon,
-                  size: 22,
-                  color: AquaColors.goldPale,
+              StoryGate(
+                target: StoryTarget.endDay,
+                child: PixelButton(
+                  label: 'จบวัน',
+                  icon: const PixelGlyph(
+                    Glyph.moon,
+                    size: 22,
+                    color: AquaColors.goldPale,
+                  ),
+                  trailing: const PixelGlyph(
+                    Glyph.arrowRight,
+                    size: 18,
+                    color: AquaColors.paper,
+                  ),
+                  onPressed: () => _endDay(context, ref),
                 ),
-                trailing: const PixelGlyph(
-                  Glyph.arrowRight,
-                  size: 18,
-                  color: AquaColors.paper,
-                ),
-                onPressed: () => _endDay(context, ref),
               ),
             ],
           ),
@@ -612,29 +675,28 @@ class _AlertChip extends StatelessWidget {
         depth: 3,
         depthColor: AquaColors.redDark,
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (icon) ...[
-              const PixelIcon('warn', size: 22),
-              const SizedBox(width: 6),
-            ],
-            Flexible(
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  text,
-                  maxLines: 1,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 16,
-                  ),
+        // ย่อทั้งไอคอนและข้อความเมื่อแถบแคบ (เช่น มีป้ายไฟดับด้วย) — ไม่ล้นขอบ
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (icon) ...[
+                const PixelIcon('warn', size: 22),
+                const SizedBox(width: 6),
+              ],
+              Text(
+                text,
+                maxLines: 1,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 16,
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
