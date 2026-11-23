@@ -6,6 +6,7 @@ import 'package:aqua_farm/game/game_state.dart';
 import 'package:aqua_farm/save/save_repository.dart';
 import 'package:aqua_farm/ui/app.dart';
 import 'package:aqua_farm/ui/providers.dart';
+import 'package:aqua_farm/ui/screens/event_screen.dart';
 import 'package:aqua_farm/ui/screens/game_shell.dart';
 import 'package:aqua_farm/ui/screens/kitchen_tab.dart';
 import 'package:aqua_farm/ui/screens/market_tab.dart';
@@ -459,6 +460,89 @@ void main() {
       expect(find.text('น้ำท่วม: ยังขาด 4'), findsOneWidget);
     },
   );
+
+  testWidgets('วันที่ภัยเกิด: จบวันแล้วเห็นฉากภัยก่อน แล้วไปรายงานเอง', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+    await startNewGame(tester);
+    final ctl = container.read(gameProvider.notifier);
+    ctl.update((e) {
+      e.state
+        ..day = 6
+        ..hunger = 100;
+    });
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(PixelButton, 'จบวัน'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.byKey(const ValueKey('event-screen')), findsOneWidget);
+    expect(find.text('น้ำท่วม วันที่ 1/4'), findsOneWidget);
+    // ครบเวลาแล้วไปหน้ารายงานเอง
+    await tester.pump(kEventSceneDuration);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('event-screen')), findsNothing);
+    expect(find.textContaining('รายงานประจำวัน'), findsOneWidget);
+  });
+
+  testWidgets('วันที่ภัยเกิด: กด "ดูรายงานทันที" ข้ามฉากภัยได้', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+    await startNewGame(tester);
+    container.read(gameProvider.notifier).update((e) {
+      e.state
+        ..day = 6
+        ..hunger = 100;
+    });
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(PixelButton, 'จบวัน'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.tap(find.widgetWithText(PixelButton, 'ดูรายงานทันที'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('event-screen')), findsNothing);
+    expect(find.textContaining('รายงานประจำวัน'), findsOneWidget);
+  });
+
+  testWidgets('วันปกติ: จบวันแล้วไปหน้ารายงานเลย ไม่มีฉากภัย', (tester) async {
+    await pumpApp(tester);
+    await startNewGame(tester);
+    await tester.tap(find.widgetWithText(PixelButton, 'จบวัน'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('event-screen')), findsNothing);
+    expect(find.textContaining('รายงานประจำวัน'), findsOneWidget);
+  });
+
+  testWidgets('ปุ่ม ? ที่ตัวละคร: เปิดหน้าข้อมูลตัวละคร แล้วกลับได้', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+    await startNewGame(tester);
+    final s = container.read(gameProvider)!.state;
+    final open = find.byKey(const ValueKey('open-profile'));
+    await tester.scrollUntilVisible(
+      open,
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(open);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('profile-screen')), findsOneWidget);
+    expect(find.text('${s.character} — เจ้าของฟาร์ม'), findsOneWidget);
+    for (final t in ['อิ่ม', 'พลังงาน', 'สุขภาพ', 'ความสุข']) {
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('profile-screen')),
+          matching: find.text(t),
+        ),
+        findsOneWidget,
+      );
+    }
+    await tester.tap(find.widgetWithText(PixelButton, 'กลับ'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('profile-screen')), findsNothing);
+  });
 
   testWidgets('บ่อปลา: ค่าน้ำมีสีและคำแนะนำ ปุ่มจับปลาบอกเหตุผล', (
     tester,

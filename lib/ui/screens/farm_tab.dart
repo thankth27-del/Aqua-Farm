@@ -12,6 +12,7 @@ import '../scenes/pixel_scene.dart';
 import '../theme/theme.dart';
 import '../widgets/disaster_icon.dart';
 import '../widgets/equipment_row.dart';
+import 'profile_screen.dart';
 
 /// ตำแหน่งแผง "เตรียมภัย" สำหรับปุ่มลัดจากการ์ดข่าวเตือนภัย
 final _prepareKey = GlobalKey();
@@ -151,14 +152,7 @@ class _CharacterCard extends ConsumerWidget {
           SectionTitle(
             s.character,
             icon: const PixelIcon('face', size: 30),
-            trailing: _HelpButton(
-              title: 'เจ้าของฟาร์ม',
-              lines: const [
-                'ความอิ่มลดลง 20/วัน',
-                'อิ่มหมด → สุขภาพลด',
-                'สุขภาพ 0 = Game Over',
-              ],
-            ),
+            trailing: const _ProfileButton(),
           ),
           StatBar(
             icon: const PixelIcon('fry', size: 24),
@@ -233,17 +227,18 @@ class _CharacterCard extends ConsumerWidget {
   }
 }
 
-class _HelpButton extends StatelessWidget {
-  const _HelpButton({required this.title, required this.lines});
-  final String title;
-  final List<String> lines;
+/// เปิดหน้าข้อมูลตัวละคร (prof ในต้นแบบ)
+class _ProfileButton extends StatelessWidget {
+  const _ProfileButton();
 
   @override
   Widget build(BuildContext context) => PixelIconButton(
+    key: const ValueKey('open-profile'),
     icon: const PixelGlyph(Glyph.question, size: 20, color: AquaColors.paper),
-    tooltip: 'อธิบาย',
+    tooltip: 'ข้อมูลตัวละคร',
     style: PixelButtonStyle.water,
-    onPressed: () => infoDialog(context, title, lines),
+    onPressed: () => Navigator.of(context)
+        .push(MaterialPageRoute<void>(builder: (_) => const ProfileScreen())),
   );
 }
 

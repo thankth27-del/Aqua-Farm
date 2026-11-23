@@ -93,7 +93,7 @@ const List<double> kStageWater = [1, 1, 1.1, 1.2, 1.3, 1.4];
 
 /// เกรดรวมตอนชนะ: เฉลี่ยคะแนนเกรดรายวัน (S=3 A=2 B=1)
 const Map<String, int> kGradePoints = {'S': 3, 'A': 2, 'B': 1};
-const double kOverallS = 2.5;
+const double kOverallS = 2.1;
 const double kOverallA = 1.75;
 
 /// ขั้นความยาก 0..5 จากความคืบหน้า = วันปัจจุบัน ÷ วันเป้าหมาย

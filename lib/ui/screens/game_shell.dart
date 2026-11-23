@@ -13,6 +13,7 @@ import 'farm_tab.dart';
 import 'fish_tab.dart';
 import 'kitchen_tab.dart';
 import 'market_tab.dart';
+import 'event_screen.dart';
 import 'report_screen.dart';
 import 'storage_tab.dart';
 
@@ -224,7 +225,8 @@ class TopBar extends ConsumerWidget {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         fullscreenDialog: true,
-        builder: (_) => const ReportScreen(),
+        builder: (_) =>
+            r.event != null ? const EventScreen() : const ReportScreen(),
       ),
     );
   }
