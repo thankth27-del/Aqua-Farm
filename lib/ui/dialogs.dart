@@ -1,40 +1,25 @@
-/// หน้ายืนยัน ช่องใส่ชื่อ และ toast
+/// หน้ายืนยัน ช่องใส่ชื่อ และ toast (ใช้หน้าต่างจากชุดดีไซน์กลาง)
 library;
 
 import 'package:material_ui/material_ui.dart';
 
 import '../game/game_engine.dart';
-import 'theme.dart';
+import 'theme/theme.dart';
 
 /// หน้ายืนยัน — คืน true เมื่อกด "ตกลง" (ใช้กับทุกการซื้อ ขาย ทิ้ง)
 Future<bool> confirmDialog(
   BuildContext context,
   String message, {
   String ok = 'ตกลง',
+  Widget? icon,
+  bool danger = false,
 }) async {
   final r = await showDialog<bool>(
     context: context,
     barrierDismissible: false,
-    builder: (c) => AlertDialog(
-      content: Text(
-        message,
-        textAlign: TextAlign.center,
-        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-      ),
-      actionsAlignment: MainAxisAlignment.center,
-      actions: [
-        PixelButton(
-          label: ok,
-          style: PixelButtonStyle.gold,
-          onPressed: () => Navigator.pop(c, true),
-        ),
-        PixelButton(
-          label: 'ยกเลิก',
-          style: PixelButtonStyle.dark,
-          onPressed: () => Navigator.pop(c, false),
-        ),
-      ],
-    ),
+    barrierColor: const Color(0xAA1B120B),
+    builder: (c) =>
+        ConfirmDialog(message: message, ok: ok, icon: icon, danger: danger),
   );
   return r ?? false;
 }
@@ -43,17 +28,30 @@ Future<bool> confirmDialog(
 Future<void> infoDialog(
   BuildContext context,
   String title,
-  List<String> lines,
-) {
+  List<String> lines, {
+  Widget? icon,
+}) {
   return showDialog<void>(
     context: context,
-    builder: (c) => AlertDialog(
-      title: GoldTitle(title),
-      content: Column(
+    barrierColor: const Color(0xAA1B120B),
+    builder: (c) => PixelDialog(
+      title: title,
+      icon: icon,
+      body: Column(
         mainAxisSize: MainAxisSize.min,
-        children: [for (final l in lines) Muted(l, size: 14)],
+        children: [
+          for (final l in lines)
+            Padding(
+              padding: const EdgeInsets.only(bottom: Gap.xs),
+              child: Muted(
+                l,
+                size: FontSize.body,
+                color: AquaColors.text,
+                align: TextAlign.center,
+              ),
+            ),
+        ],
       ),
-      actionsAlignment: MainAxisAlignment.center,
       actions: [
         PixelButton(
           label: 'กลับ',
@@ -70,6 +68,7 @@ Future<String?> nameDialog(BuildContext context, String title, String initial) {
   return showDialog<String>(
     context: context,
     barrierDismissible: false,
+    barrierColor: const Color(0xAA1B120B),
     builder: (c) => _NameDialog(title: title, initial: initial),
   );
 }
@@ -104,32 +103,29 @@ class _NameDialogState extends State<_NameDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(
-        widget.title,
-        textAlign: TextAlign.center,
-        style: const TextStyle(fontWeight: FontWeight.bold),
-      ),
-      content: TextField(
+    return PixelDialog(
+      title: widget.title,
+      icon: const PixelIcon('house', size: 56),
+      body: TextField(
         controller: _ctl,
         maxLength: 16,
         textAlign: TextAlign.center,
         autofocus: true,
+        style: const TextStyle(
+          fontSize: FontSize.label,
+          fontWeight: FontWeight.w700,
+          color: AquaColors.text,
+        ),
         decoration: InputDecoration(errorText: _error, counterText: ''),
         onSubmitted: (_) => _ok(),
       ),
-      actionsAlignment: MainAxisAlignment.center,
       actions: [
         PixelButton(
-          label: 'ตกลง',
-          style: PixelButtonStyle.gold,
-          onPressed: _ok,
-        ),
-        PixelButton(
           label: 'ยกเลิก',
-          style: PixelButtonStyle.dark,
+          style: PixelButtonStyle.wood,
           onPressed: () => Navigator.pop(context),
         ),
+        PixelButton(label: 'ตกลง', onPressed: _ok),
       ],
     );
   }
@@ -143,12 +139,8 @@ void toast(BuildContext context, String message, {bool bad = false}) {
     ..hideCurrentSnackBar()
     ..showSnackBar(
       SnackBar(
-        content: Text(
-          message,
-          textAlign: TextAlign.center,
-          style: bad ? const TextStyle(color: Colors.white) : null,
-        ),
-        backgroundColor: bad ? AquaColors.red : null,
+        content: ToastBubble(message, bad: bad),
+        padding: EdgeInsets.zero,
         duration: const Duration(milliseconds: 2600),
       ),
     );

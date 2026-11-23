@@ -1,7 +1,8 @@
 import 'package:aqua_farm/save/save_repository.dart';
 import 'package:aqua_farm/ui/app.dart';
 import 'package:aqua_farm/ui/providers.dart';
-import 'package:aqua_farm/ui/theme.dart';
+import 'package:aqua_farm/ui/screens/game_shell.dart';
+import 'package:aqua_farm/ui/theme/theme.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
@@ -50,6 +51,13 @@ Future<void> openFishShopCard(WidgetTester tester, String id) async {
   await tester.pumpAndSettle();
 }
 
+Future<void> buyFish(WidgetTester tester) async {
+  await tester.tap(find.widgetWithText(PixelButton, 'ซื้อปลา'));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('ตกลง'));
+  await tester.pumpAndSettle();
+}
+
 void main() {
   testWidgets('เมนูหลักมีปุ่มครบ และเล่นต่อเมื่อไม่มีเซฟแจ้งเตือน', (
     tester,
@@ -74,10 +82,10 @@ void main() {
     expect(find.text('วันที่ 1'), findsOneWidget);
     expect(find.text('2 วัน'), findsOneWidget);
     expect(find.text('Excellent'), findsOneWidget);
-    expect(find.text('จบวัน ▶'), findsOneWidget);
+    expect(find.widgetWithText(PixelButton, 'จบวัน'), findsOneWidget);
     for (final t in ['ฟาร์ม', 'ปลา', 'ตลาด', 'ครัว', 'คลัง']) {
       expect(
-        find.descendant(of: find.byType(NavigationBar), matching: find.text(t)),
+        find.descendant(of: find.byType(GameNavBar), matching: find.text(t)),
         findsOneWidget,
       );
     }
@@ -91,8 +99,8 @@ void main() {
     await startNewGame(tester);
     await openFishShopCard(tester, 'nila');
 
-    await tester.tap(find.text('+'));
-    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('qty-plus')));
+    await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(PixelButton, 'ซื้อปลา'));
     await tester.pumpAndSettle();
     expect(
@@ -103,17 +111,14 @@ void main() {
     await tester.pumpAndSettle();
     expect(container.read(gameProvider)!.state.pond, isEmpty);
 
-    await tester.tap(find.widgetWithText(PixelButton, 'ซื้อปลา'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('ตกลง'));
-    await tester.pumpAndSettle();
+    await buyFish(tester);
     final s = container.read(gameProvider)!.state;
     expect(s.pond.length, 2);
     expect(s.money, 420);
     expect(find.text('420฿'), findsOneWidget);
   });
 
-  testWidgets('บ่อปลา: ให้อาหาร แล้วจบวันเห็นรายงาน และบันทึกอัตโนมัติ', (
+  testWidgets('เงินเปลี่ยน: ตัวเลขนับลงทีละน้อย และมีเหรียญลอยแล้วหายไป', (
     tester,
   ) async {
     await pumpApp(tester);
@@ -122,7 +127,23 @@ void main() {
     await tester.tap(find.widgetWithText(PixelButton, 'ซื้อปลา'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('ตกลง'));
+    // กลางแอนิเมชัน: ตัวเลขยังไม่ถึงค่าสุดท้าย และมีตัวเลข -40 ลอยอยู่
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 150));
+    expect(find.text('460฿'), findsNothing);
+    expect(find.text('-40'), findsOneWidget);
     await tester.pumpAndSettle();
+    expect(find.text('460฿'), findsOneWidget);
+    expect(find.text('-40'), findsNothing);
+  });
+
+  testWidgets('บ่อปลา: ให้อาหาร แล้วจบวันเห็นรายงาน และบันทึกอัตโนมัติ', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+    await startNewGame(tester);
+    await openFishShopCard(tester, 'nila');
+    await buyFish(tester);
 
     // รอ toast "ซื้อปลา..." หายก่อน แล้วสลับไปบ่อปลา เลื่อนลงหาปุ่มให้อาหาร
     await tester.pump(const Duration(seconds: 3));
@@ -130,19 +151,24 @@ void main() {
     await tester.tap(find.text('บ่อปลา'));
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
-      find.text('พอดี 2฿'),
+      find.text('พอดี'),
       200,
       scrollable: find.byType(Scrollable).last,
     );
-    await tester.tap(find.text('พอดี 2฿'));
+    await tester.tap(find.text('พอดี'));
     await tester.pump();
     expect(find.text('ให้อาหารพอดี ปลาโตดี'), findsOneWidget);
     expect(container.read(gameProvider)!.state.fed, 2);
 
-    await tester.tap(find.text('จบวัน ▶'));
+    await tester.tap(find.widgetWithText(PixelButton, 'จบวัน'));
     await tester.pumpAndSettle();
     expect(find.text('รายงานประจำวัน — วันที่ 1'), findsOneWidget);
     expect(repo.load(1).day, 2);
+    await tester.scrollUntilVisible(
+      find.text('เริ่มวันใหม่'),
+      200,
+      scrollable: find.byType(Scrollable).last,
+    );
     await tester.tap(find.text('เริ่มวันใหม่'));
     await tester.pumpAndSettle();
     expect(find.text('วันที่ 2'), findsOneWidget);
@@ -161,7 +187,8 @@ void main() {
     await tester.enterText(find.byType(TextField), 'ฟาร์มใหม่');
     await tester.tap(find.text('ตกลง'));
     await tester.pumpAndSettle();
-    expect(find.text('ช่อง 1: ฟาร์มใหม่'), findsOneWidget);
+    expect(find.text('ฟาร์มใหม่'), findsOneWidget);
+    expect(find.widgetWithText(PixelButton, 'เกมใหม่'), findsNWidgets(2));
 
     await tester.tap(find.text('ลบ').first);
     await tester.pumpAndSettle();
@@ -175,24 +202,54 @@ void main() {
     await tester.tap(find.widgetWithText(PixelButton, 'ลบ').last);
     await tester.pumpAndSettle();
     expect(repo.listSlots()[1], isNull);
-    expect(find.text('ช่อง 1: ว่าง'), findsOneWidget);
+    expect(find.text('ฟาร์มใหม่'), findsNothing);
+    expect(find.widgetWithText(PixelButton, 'เกมใหม่'), findsNWidgets(3));
   });
 
   testWidgets('ภาพพิกเซลไม่เบลอ และปุ่มกดสูงอย่างน้อย 48dp', (tester) async {
     await pumpApp(tester);
     await startNewGame(tester);
+
+    void checkScreen() {
+      final images = tester.widgetList<Image>(find.byType(Image));
+      expect(images, isNotEmpty);
+      for (final img in images) {
+        expect(img.filterQuality, FilterQuality.none);
+      }
+      final tappables = [
+        ...find.byType(PixelButton).evaluate(),
+        ...find.byType(Pressable).evaluate(),
+        ...find
+            .descendant(
+              of: find.byType(GameNavBar),
+              matching: find.byType(GestureDetector),
+            )
+            .evaluate(),
+      ];
+      expect(tappables, isNotEmpty);
+      for (final e in tappables) {
+        final size = (e.renderObject! as RenderBox).size;
+        expect(size.height, greaterThanOrEqualTo(kMinTap));
+        expect(size.width, greaterThanOrEqualTo(kMinTap));
+      }
+    }
+
+    // หน้าฟาร์ม บ่อปลา ร้านปลา
+    checkScreen();
     await tester.tap(find.text('ปลา'));
     await tester.pumpAndSettle();
+    checkScreen();
+    await tester.tap(find.text('ร้านปลา').first);
+    await tester.pumpAndSettle();
+    checkScreen();
+  });
 
-    final images = tester.widgetList<Image>(find.byType(Image));
-    expect(images, isNotEmpty);
-    for (final img in images) {
-      expect(img.filterQuality, FilterQuality.none);
-    }
-    for (final e in find.byType(ElevatedButton).evaluate()) {
-      final size = tester.getSize(find.byWidget(e.widget));
-      expect(size.height, greaterThanOrEqualTo(kMinTap));
-      expect(size.width, greaterThanOrEqualTo(kMinTap));
-    }
+  testWidgets('ใช้ฟอนต์ไทยที่ฝังในแอป (Mali) กับข้อความทั้งเกม', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+    final ctx = tester.element(find.text('เกมใหม่'));
+    expect(Theme.of(ctx).textTheme.bodyMedium!.fontFamily, kFont);
+    expect(DefaultTextStyle.of(ctx).style.fontFamily, kFont);
   });
 }

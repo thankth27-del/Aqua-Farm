@@ -1,6 +1,13 @@
 // แคปหน้าจอเกมเวอร์ชันเว็บที่ขนาด iPhone (390x844)
 // รัน: node tool/screenshot.mjs <โฟลเดอร์ build web> <โฟลเดอร์ผลลัพธ์> <ไฟล์ขั้นตอน .json>
-// ขั้นตอน: ["wait", ms] | ["click", x, y] | ["scroll", x, y, dy] | ["shot", "ชื่อไฟล์"]
+// ขั้นตอน:
+//   ["wait", ms]                 รอ
+//   ["click", x, y]              แตะที่พิกัด
+//   ["tap", "ข้อความ", n?]        แตะปุ่ม/ข้อความที่ตรงกัน (ตัวที่ n นับจาก 0, ค่าลบนับจากท้าย)
+//   ["scroll", x, y, dy]         เลื่อนจอ
+//   ["scrollTo", "ข้อความ"]       เลื่อนจนเห็นข้อความ
+//   ["shot", "ชื่อไฟล์"]           บันทึกภาพ
+// "tap" ใช้ semantics ของ Flutter web (เปิดให้อัตโนมัติ) จึงไม่ผูกกับตำแหน่งปุ่ม
 import { createServer } from 'node:http';
 import { mkdirSync, readFileSync, writeFileSync, existsSync, statSync } from 'node:fs';
 import { extname, join, resolve } from 'node:path';
@@ -8,7 +15,7 @@ import { launch } from './cdp.mjs';
 
 const [webDir, outDir, stepsFile] = process.argv.slice(2).map((p) => resolve(p));
 mkdirSync(outDir, { recursive: true });
-const steps = JSON.parse(readFileSync(stepsFile, 'utf8'));
+const steps = JSON.parse(readFileSync(stepsFile, 'utf8').replace(/^﻿/, ''));
 
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.json': 'application/json',
   '.wasm': 'application/wasm', '.png': 'image/png', '.otf': 'font/otf', '.ttf': 'font/ttf', '.css': 'text/css' };
@@ -19,18 +26,62 @@ const server = createServer((req, res) => {
   res.end(readFileSync(p));
 }).listen(8765);
 
+// หาตำแหน่งกลางของโหนด semantics ที่ข้อความตรงกัน (ตรงทั้งหมดก่อน แล้วค่อยแบบมีคำนั้นอยู่)
+const findJs = (text, n, op = 'tap') => `(() => {
+  const ph = document.querySelector('flt-semantics-placeholder');
+  if (ph) ph.click();
+  const t = ${JSON.stringify(text)};
+  // ไม่นับส่วนที่อยู่ใต้เมนูล่าง (สูงราว 90px) เพื่อไม่ให้แตะโดนเมนูแทน
+  const limit = ${op === 'tap' ? 'innerHeight' : 'innerHeight - 100'};
+  const all = [...document.querySelectorAll('flt-semantics')].filter((e) => {
+    const r = e.getBoundingClientRect();
+    return r.width > 0 && r.height > 0 && r.bottom > 0 && r.top < limit;
+  });
+  const label = (e) => ((e.getAttribute('aria-label') || '') + ' ' + [...e.childNodes]
+    .filter((c) => c.nodeType === 3).map((c) => c.textContent).join(' ')).trim();
+  let m = all.filter((e) => label(e) === t);
+  if (!m.length) m = all.filter((e) => label(e).split(/\\s+/).includes(t) || label(e).includes(t));
+  if (!m.length) return null;
+  // เลือกโหนดในสุด (เล็กสุด) ที่ตรง เพื่อไม่แตะกรอบใหญ่
+  m.sort((a, b) => a.getBoundingClientRect().width * a.getBoundingClientRect().height
+    - b.getBoundingClientRect().width * b.getBoundingClientRect().height);
+  const i = ${n};
+  m.sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top);
+  const e = m[i < 0 ? m.length + i : i];
+  if (!e) return null;
+  const r = e.getBoundingClientRect();
+  return [r.left + r.width / 2, r.top + r.height / 2];
+})()`;
+
 const b = await launch({ width: 390, height: 844, scale: 2 });
+const click = async (x, y) => {
+  for (const type of ['mousePressed', 'mouseReleased']) {
+    await b.send('Input.dispatchMouseEvent', { type, x, y, button: 'left', clickCount: 1 });
+    await b.sleep(60);
+  }
+  await b.sleep(900);
+};
 try {
   await b.send('Page.enable');
   await b.send('Page.navigate', { url: 'http://127.0.0.1:8765/' });
-  await b.sleep(6000);
+  await b.sleep(7000);
+  await b.evaluate(findJs('', 0));
+  await b.sleep(800);
   for (const [op, ...a] of steps) {
     if (op === 'wait') await b.sleep(a[0]);
-    if (op === 'click') {
-      for (const type of ['mousePressed', 'mouseReleased']) {
-        await b.send('Input.dispatchMouseEvent', { type, x: a[0], y: a[1], button: 'left', clickCount: 1 });
+    if (op === 'click') await click(a[0], a[1]);
+    if (op === 'tap' || op === 'scrollTo') {
+      let p = null;
+      for (let k = 0; k < 12 && !p; k++) {
+        p = await b.evaluate(findJs(a[0], a[1] ?? 0, op));
+        if (!p && op === 'scrollTo') {
+          await b.send('Input.dispatchMouseEvent', { type: 'mouseWheel', x: 195, y: 500, deltaX: 0, deltaY: 250 });
+          await b.sleep(500);
+        } else if (!p) await b.sleep(400);
       }
-      await b.sleep(900);
+      if (!p) throw new Error(`ไม่พบ "${a[0]}"`);
+      if (op === 'tap') await click(p[0], p[1]);
+      console.log(op, a[0], p.map(Math.round).join(','));
     }
     if (op === 'scroll') {
       await b.send('Input.dispatchMouseEvent', { type: 'mouseWheel', x: a[0], y: a[1], deltaX: 0, deltaY: a[2] });

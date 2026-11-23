@@ -64,6 +64,16 @@ flutter:
   assets:
     - assets/pixel/
 
+  # ฟอนต์ไทยกลมมน Mali (SIL OFL 1.1 — ดู assets/fonts/Mali-OFL.txt) ฝังในแอป ไม่ดึงจากเน็ต
+  fonts:
+    - family: Mali
+      fonts:
+        - asset: assets/fonts/Mali-Regular.ttf
+        - asset: assets/fonts/Mali-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Mali-Bold.ttf
+          weight: 700
+
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
 

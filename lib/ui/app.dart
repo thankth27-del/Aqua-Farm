@@ -5,25 +5,29 @@ import 'providers.dart';
 import 'screens/game_over_screen.dart';
 import 'screens/game_shell.dart';
 import 'screens/main_menu_screen.dart';
-import 'theme.dart';
+import 'theme/theme.dart';
 
-class AquaFarmApp extends StatelessWidget {
+class AquaFarmApp extends ConsumerWidget {
   const AquaFarmApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final loops = ref.watch(sceneAnimationProvider);
     return MaterialApp(
       title: 'AQUA FARM',
       debugShowCheckedModeBanner: false,
       theme: buildAquaTheme(),
       home: const _Root(),
       // เกมแนวตั้งเท่านั้น: บนจอกว้าง (เช่นเปิดเว็บบนคอม) จำกัดความกว้างเท่ามือถือแล้ววางกลางจอ
-      builder: (context, child) => ColoredBox(
-        color: const Color(0xFF020B0E),
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: kMaxPhoneWidth),
-            child: child,
+      builder: (context, child) => MotionSettings(
+        loops: loops,
+        child: ColoredBox(
+          color: AquaColors.bgGreenDeep,
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: kMaxPhoneWidth),
+              child: child,
+            ),
           ),
         ),
       ),

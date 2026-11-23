@@ -6,7 +6,7 @@ import '../../data/fish_data.dart';
 import '../dialogs.dart';
 import '../providers.dart';
 import '../scenes/pixel_scene.dart';
-import '../theme.dart';
+import '../theme/theme.dart';
 import 'fish_detail_screen.dart';
 
 /// แท็บ "ปลา": บ่อปลา และร้านปลา
@@ -25,23 +25,23 @@ class _FishTabState extends State<FishTab> {
     return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+          padding: const EdgeInsets.fromLTRB(Gap.m, Gap.m, Gap.m, 0),
           child: Row(
             children: [
               Expanded(
                 child: PixelButton(
                   label: 'บ่อปลา',
-                  icon: const PixelIcon('drop', size: 20),
-                  style: _shop ? PixelButtonStyle.dark : PixelButtonStyle.gold,
+                  icon: const PixelIcon('drop', size: 24),
+                  style: _shop ? PixelButtonStyle.wood : PixelButtonStyle.gold,
                   onPressed: () => setState(() => _shop = false),
                 ),
               ),
-              const SizedBox(width: 6),
+              const SizedBox(width: Gap.s),
               Expanded(
                 child: PixelButton(
                   label: 'ร้านปลา',
-                  icon: const PixelIcon('f_nila', size: 22),
-                  style: _shop ? PixelButtonStyle.gold : PixelButtonStyle.dark,
+                  icon: const PixelIcon('f_nila', size: 30),
+                  style: _shop ? PixelButtonStyle.gold : PixelButtonStyle.wood,
                   onPressed: () => setState(() => _shop = true),
                 ),
               ),
@@ -68,72 +68,101 @@ class _PondView extends ConsumerWidget {
     final fu = e.feedUnit;
     final scene = PondSceneData.fromState(s);
 
-    Widget stat(String t) => Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Text(t, style: const TextStyle(fontSize: 13)),
-    );
-
     return ListView(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(Gap.m),
       children: [
-        PixelScene(painterBuilder: (t) => PondPainter(t, scene)),
-        const SizedBox(height: 10),
-        PixelPanel(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'คุณภาพน้ำ: ${ws.label} (${s.water}%)',
-                style: TextStyle(
-                  color: wc,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
+        // ฉากบ่อใต้น้ำ + ป้ายจำนวนปลา/คุณภาพน้ำ
+        Padding(
+          padding: const EdgeInsets.only(bottom: Gap.m),
+          child: PixelScene(
+            painterBuilder: (t) => PondPainter(t, scene),
+            overlay: Padding(
+              padding: const EdgeInsets.all(8),
+              child: Align(
+                alignment: Alignment.topLeft,
+                child: Tag(
+                  '${s.pond.length}/$kPondCapacity',
+                  color: AquaColors.paper,
+                  icon: const PixelIcon('f_nila', size: 22),
                 ),
               ),
-              PixelBar(value: s.water, color: wc),
-              Row(
+            ),
+          ),
+        ),
+        WoodPanel(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SectionTitle(
+                'คุณภาพน้ำ',
+                icon: const PixelIcon('drop', size: 28),
+                trailing: Tag(
+                  '${ws.label} ${s.water}%',
+                  color: wc,
+                  textColor: AquaColors.ink,
+                ),
+              ),
+              PixelBar(value: s.water, color: wc, height: 22),
+              const SizedBox(height: Gap.m),
+              GridView.count(
+                crossAxisCount: 3,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                mainAxisSpacing: Gap.s,
+                crossAxisSpacing: Gap.s,
+                childAspectRatio: 1.45,
                 children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        stat('Ammonia ${s.ammonia.toStringAsFixed(2)} ppm'),
-                        stat('Nitrate ${s.nitrate.toStringAsFixed(1)} ppm'),
-                        stat('อุณหภูมิ ${s.temp.toStringAsFixed(1)}°C'),
-                      ],
+                  _Gauge('NH3', s.ammonia.toStringAsFixed(2), 'ppm'),
+                  _Gauge('NO2', s.nitrite.toStringAsFixed(2), 'ppm'),
+                  _Gauge('NO3', s.nitrate.toStringAsFixed(1), 'ppm'),
+                  _Gauge(
+                    'อุณหภูมิ',
+                    s.temp.toStringAsFixed(1),
+                    '°C',
+                    icon: const PixelGlyph(
+                      Glyph.sun,
+                      size: 14,
+                      color: AquaColors.gold,
                     ),
                   ),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        stat('Nitrite ${s.nitrite.toStringAsFixed(2)} ppm'),
-                        stat('ออกซิเจน ${_num(s.o2)}%'),
-                        stat('กรองชีวภาพ ${s.bio}%'),
-                      ],
-                    ),
+                  _Gauge(
+                    'ออกซิเจน',
+                    _num(s.o2),
+                    '%',
+                    icon: const PixelIcon('bub', size: 16),
+                  ),
+                  _Gauge(
+                    'กรองชีวภาพ',
+                    '${s.bio}',
+                    '%',
+                    icon: const PixelIcon('filt', size: 16),
                   ),
                 ],
               ),
+              const SizedBox(height: Gap.s),
               const Muted(
                 'ค่าน้ำเป็นแบบจำลองเพื่อการเรียนรู้ ไม่ใช่คำแนะนำการเลี้ยงจริง',
-                size: 12,
+                size: 13,
+                align: TextAlign.center,
               ),
             ],
           ),
         ),
-        PixelPanel(
+        WoodPanel(
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(
-                'ให้อาหาร ($fu หน่วย/วัน)${s.fed > 0 ? ' — วันนี้ให้แล้ว' : ''}',
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 15,
-                ),
+              SectionTitle(
+                'ให้อาหาร',
+                icon: const PixelIcon('fry', size: 28),
+                trailing: s.fed > 0
+                    ? Tag(
+                        'ให้แล้ว',
+                        color: AquaColors.leafLight,
+                        icon: passGlyph(true, size: 12),
+                      )
+                    : Tag('$fu หน่วย/วัน'),
               ),
-              const SizedBox(height: 6),
               Row(
                 children: [
                   for (final (lv, name) in const [
@@ -143,7 +172,15 @@ class _PondView extends ConsumerWidget {
                   ]) ...[
                     Expanded(
                       child: PixelButton(
-                        label: '$name ${e.feedCost(lv)}฿',
+                        label: name,
+                        style: lv == 2
+                            ? PixelButtonStyle.green
+                            : PixelButtonStyle.water,
+                        below: CoinTag(
+                          e.feedCost(lv),
+                          boxed: true,
+                          size: FontSize.small,
+                        ),
                         onPressed: s.fed > 0
                             ? null
                             : () => showResult(
@@ -152,35 +189,54 @@ class _PondView extends ConsumerWidget {
                               ),
                       ),
                     ),
-                    if (lv < 3) const SizedBox(width: 6),
+                    if (lv < 3) const SizedBox(width: Gap.s),
                   ],
                 ],
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: Gap.m),
               Row(
                 children: [
                   Expanded(
                     child: PixelButton(
-                      label: 'เปลี่ยนน้ำ $kChangeWaterCost฿',
+                      label: 'เปลี่ยนน้ำ',
+                      icon: const PixelIcon('drop', size: 22),
+                      style: PixelButtonStyle.water,
+                      below: const CoinTag(
+                        kChangeWaterCost,
+                        boxed: true,
+                        size: FontSize.small,
+                      ),
                       onPressed: () =>
                           showResult(context, ctl.run((e) => e.changeWater())),
                     ),
                   ),
-                  const SizedBox(width: 6),
+                  const SizedBox(width: Gap.s),
                   Expanded(
                     child: PixelButton(
-                      label: 'เติมอากาศ $kAerateCost฿',
-                      icon: const PixelIcon('bub', size: 18),
+                      label: 'เติมอากาศ',
+                      icon: const PixelIcon('bub', size: 22),
+                      style: PixelButtonStyle.water,
+                      below: const CoinTag(
+                        kAerateCost,
+                        boxed: true,
+                        size: FontSize.small,
+                      ),
                       onPressed: () =>
                           showResult(context, ctl.run((e) => e.aerate())),
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: Gap.m),
               PixelButton(
-                label: 'จับปลา (${e.matureCount})',
-                style: PixelButtonStyle.gold,
+                label: 'จับปลา',
+                icon: const PixelIcon('net', size: 28),
+                trailing: Tag(
+                  '${e.matureCount}',
+                  color: AquaColors.paper,
+                  icon: const PixelIcon('f_nila', size: 20),
+                ),
+                tooltip: 'ปลาที่โตพอจับ ${e.matureCount} ตัว',
                 expand: true,
                 onPressed: () =>
                     showResult(context, ctl.run((e) => e.catchFish())),
@@ -188,48 +244,34 @@ class _PondView extends ConsumerWidget {
             ],
           ),
         ),
-        PixelPanel(
+        WoodPanel(
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(
-                'ปลาในบ่อ ${s.pond.length}/$kPondCapacity',
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 15,
-                ),
+              SectionTitle(
+                'ปลาในบ่อ',
+                icon: const PixelIcon('f_nila', size: 30),
+                trailing: Tag('${s.pond.length}/$kPondCapacity'),
               ),
-              const SizedBox(height: 4),
               if (s.pond.isEmpty)
-                const Muted('ยังไม่มีปลา ไปซื้อที่ร้านปลา', size: 14),
-              for (final f in s.pond)
-                Row(
-                  children: [
-                    PixelIcon('f_${f.type}', size: 26),
-                    const SizedBox(width: 6),
-                    SizedBox(
-                      width: 84,
-                      child: Text(
-                        kFish[f.type]!.name,
-                        style: const TextStyle(fontSize: 12),
-                      ),
-                    ),
-                    Expanded(
-                      child: PixelBar(
-                        value: f.growth,
-                        color: f.mature ? AquaColors.gold : AquaColors.primary,
-                        height: 12,
-                      ),
-                    ),
-                    SizedBox(
-                      width: 92,
-                      child: Text(
-                        '${f.mature ? 'พร้อมจับ' : '${f.growth}%'} · ♥${f.health.round()}',
-                        textAlign: TextAlign.right,
-                        style: const TextStyle(fontSize: 12),
-                      ),
-                    ),
-                  ],
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: Gap.s),
+                  child: Muted(
+                    'ยังไม่มีปลา ไปซื้อที่ร้านปลา',
+                    size: FontSize.body,
+                    align: TextAlign.center,
+                  ),
+                ),
+              for (var i = 0; i < s.pond.length; i++)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: Gap.s),
+                  child: _FishRow(
+                    type: s.pond[i].type,
+                    growth: s.pond[i].growth,
+                    mature: s.pond[i].mature,
+                    health: s.pond[i].health.round(),
+                    phase: i / 5,
+                  ),
                 ),
             ],
           ),
@@ -242,72 +284,243 @@ class _PondView extends ConsumerWidget {
 String _num(double v) =>
     v == v.roundToDouble() ? v.toInt().toString() : v.toStringAsFixed(1);
 
+/// ช่องค่าน้ำ 1 ค่า
+class _Gauge extends StatelessWidget {
+  const _Gauge(this.label, this.value, this.unit, {this.icon});
+  final String label;
+  final String value;
+  final String unit;
+  final Widget? icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: '$label $value $unit',
+      child: ExcludeSemantics(
+        child: PaperCard(
+          padding: const EdgeInsets.fromLTRB(6, 4, 6, 4),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  if (icon != null) ...[icon!, const SizedBox(width: 3)],
+                  Flexible(
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AquaColors.textSoft,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text.rich(
+                  TextSpan(
+                    children: [
+                      TextSpan(
+                        text: value,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      TextSpan(
+                        text: ' $unit',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AquaColors.textSoft,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// ปลา 1 ตัวในบ่อ: ไอคอนว่าย + แถบโต + สุขภาพ
+class _FishRow extends StatelessWidget {
+  const _FishRow({
+    required this.type,
+    required this.growth,
+    required this.mature,
+    required this.health,
+    required this.phase,
+  });
+
+  final String type;
+  final int growth;
+  final bool mature;
+  final int health;
+  final double phase;
+
+  @override
+  Widget build(BuildContext context) {
+    return PaperCard(
+      padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 48,
+            height: 34,
+            child: Center(
+              child: Bob(
+                dx: 3,
+                dy: 2,
+                phase: phase,
+                period: const Duration(milliseconds: 1600),
+                child: PixelIcon('f_$type', size: 44),
+              ),
+            ),
+          ),
+          const SizedBox(width: Gap.s),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Bold(
+                        kFish[type]!.name,
+                        size: FontSize.small,
+                        maxLines: 1,
+                      ),
+                    ),
+                    PixelGlyph(Glyph.heart, size: 12, color: AquaColors.red),
+                    const SizedBox(width: 3),
+                    Text(
+                      '$health',
+                      style: const TextStyle(
+                        fontSize: FontSize.small,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                PixelBar(
+                  value: growth,
+                  color: mature ? AquaColors.gold : AquaColors.waterLight,
+                  height: 14,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: Gap.s),
+          SizedBox(
+            width: 74,
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: mature
+                  ? const Tag('พร้อมจับ', color: AquaColors.gold)
+                  : Text(
+                      '$growth%',
+                      style: const TextStyle(
+                        fontSize: FontSize.body,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _FishShop extends ConsumerWidget {
   const _FishShop();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final s = ref.watch(gameProvider)!.state;
+    final fish = kFish.values.toList();
     return ListView(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(Gap.m),
       children: [
-        const GoldTitle('ร้านปลา'),
-        Muted(
-          'แตะการ์ดเพื่อดูรายละเอียดก่อนซื้อ · บ่อ ${s.pond.length}/$kPondCapacity ตัว',
-          size: 14,
+        PageHeader(
+          scene: PixelScene(painterBuilder: RoomPainter.new),
+          title: 'ร้านปลา',
+          icon: const PixelIcon('f_nila', size: 34),
+        ),
+        Row(
+          children: [
+            Tag(
+              'บ่อ ${s.pond.length}/$kPondCapacity',
+              color: AquaColors.paper,
+              icon: const PixelIcon('drop', size: 16),
+            ),
+            const SizedBox(width: Gap.s),
+            CoinTag(s.money, boxed: true, size: FontSize.small),
+            const SizedBox(width: Gap.s),
+            const Expanded(
+              child: Muted(
+                'แตะเพื่อดูก่อนซื้อ',
+                color: AquaColors.cream,
+                align: TextAlign.right,
+              ),
+            ),
+          ],
         ),
         if (s.marketClosed)
-          const Muted(
-            'ตลาดปิดชั่วคราว ซื้อไม่ได้',
-            color: AquaColors.bad,
-            size: 14,
+          const Padding(
+            padding: EdgeInsets.only(top: Gap.s),
+            child: ToastBubble('ตลาดปิดชั่วคราว ซื้อไม่ได้', bad: true),
           ),
-        const SizedBox(height: 10),
+        const SizedBox(height: Gap.m),
         GridView.count(
           crossAxisCount: 2,
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          mainAxisSpacing: 10,
-          crossAxisSpacing: 10,
-          childAspectRatio: 1.25,
+          mainAxisSpacing: Gap.m,
+          crossAxisSpacing: Gap.m,
+          childAspectRatio: 1.02,
           children: [
-            for (final f in kFish.values)
-              InkWell(
-                key: ValueKey('fish-card-${f.id}'),
+            for (var i = 0; i < fish.length; i++)
+              Pressable(
+                key: ValueKey('fish-card-${fish[i].id}'),
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute<void>(
-                    builder: (_) => FishDetailScreen(fishId: f.id),
+                    builder: (_) => FishDetailScreen(fishId: fish[i].id),
                   ),
                 ),
-                child: PixelPanel(
+                child: WoodPanel(
                   margin: EdgeInsets.zero,
                   padding: const EdgeInsets.all(6),
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      PixelIcon('f_${f.id}', size: 72),
-                      const SizedBox(height: 6),
-                      Text(
-                        f.name,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
+                      Expanded(
+                        child: Center(
+                          child: Bob(
+                            dx: 2,
+                            dy: 2,
+                            phase: i / fish.length,
+                            child: PixelIcon('f_${fish[i].id}', size: 84),
+                          ),
                         ),
                       ),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const PixelIcon('coin', size: 14),
-                          const SizedBox(width: 3),
-                          Text(
-                            '${f.buyPrice}',
-                            style: const TextStyle(
-                              color: AquaColors.gold,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
+                      Bold(
+                        fish[i].name,
+                        size: FontSize.body,
+                        maxLines: 1,
                       ),
+                      const SizedBox(height: 2),
+                      CoinTag(fish[i].buyPrice, boxed: true),
                     ],
                   ),
                 ),

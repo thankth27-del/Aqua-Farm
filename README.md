@@ -77,7 +77,9 @@ flutter build web --release --base-href /<ชื่อ repo>/   # build แบ�
 | `lib/game/` | ตรรกะเกม (Dart ล้วน ไม่ผูกกับ UI) |
 | `lib/save/` | เซฟ 3 ช่อง (shared_preferences) |
 | `lib/ui/` | หน้าจอแนวตั้ง (Riverpod) |
+| `lib/ui/theme/` | ชุดดีไซน์กลาง: สี ฟอนต์ กรอบไม้ ปุ่มพิกเซล แถบสถานะ ป้ายราคา หน้าต่างยืนยัน แอนิเมชัน |
 | `assets/pixel/` | ภาพพิกเซลที่ส่งออกจากต้นแบบ |
+| `assets/fonts/` | ฟอนต์ไทย Mali (SIL OFL 1.1) ฝังในแอป |
 | `web/` | หน้าเว็บ ไอคอน และ manifest ของ PWA |
 | `tool/` | สคริปต์ Node: ส่งออกภาพพิกเซล, สร้างไอคอน, แคปหน้าจอ, ทดสอบเซฟบน Safari |
 
@@ -94,4 +96,11 @@ node tool/make_icons.mjs       # สร้างไอคอนแอป → web
 npm i playwright && npx playwright install webkit
 flutter build web --release --base-href /aqua_farm/ -o <โฟลเดอร์>/aqua_farm
 node tool/safari_save_test.mjs <โฟลเดอร์> <โฟลเดอร์รูปผลลัพธ์>
+```
+
+แคปหน้าจอขนาด iPhone (390x844) ตามขั้นตอนใน `tool/shots_after.json` (แตะปุ่มตามข้อความ ไม่ผูกกับตำแหน่ง):
+
+```bash
+flutter build web --release -o <โฟลเดอร์>
+node tool/screenshot.mjs <โฟลเดอร์> screenshots/after tool/shots_after.json
 ```

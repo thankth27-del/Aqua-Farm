@@ -4,7 +4,8 @@ import 'package:material_ui/material_ui.dart';
 import '../../save/save_repository.dart';
 import '../dialogs.dart';
 import '../providers.dart';
-import '../theme.dart';
+import '../theme/theme.dart';
+import 'main_menu_screen.dart';
 
 /// เลือกช่องบันทึก 3 ช่อง: เกมใหม่ / โหลด / เปลี่ยนชื่อ / ลบ
 class SlotsScreen extends ConsumerWidget {
@@ -49,6 +50,8 @@ class SlotsScreen extends ConsumerWidget {
       context,
       'ลบเซฟ ${info.name}? ย้อนกลับไม่ได้',
       ok: 'ลบ',
+      danger: true,
+      icon: const PixelIcon('warn', size: 48),
     )) {
       return;
     }
@@ -59,90 +62,171 @@ class SlotsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final slots = ref.watch(slotsProvider);
+    final top = MediaQuery.paddingOf(context).top;
     return Scaffold(
-      body: SafeArea(
+      body: GrassBackground(
         child: ListView(
-          padding: const EdgeInsets.all(16),
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.paddingOf(context).bottom + Gap.l,
+          ),
           children: [
-            const GoldTitle('เลือกช่องบันทึก'),
-            const Muted('เมนูหลัก → ช่องบันทึก → ฟาร์ม'),
-            const SizedBox(height: 12),
-            for (final e in slots.entries)
-              _slotCard(context, ref, e.key, e.value),
-            const SizedBox(height: 8),
-            PixelButton(
-              label: 'กลับ',
-              style: PixelButtonStyle.dark,
-              expand: true,
-              onPressed: () => Navigator.of(context).pop(),
+            SizedBox(
+              height: 230 + top,
+              child: const TitleBackdrop(logoSize: 40),
+            ),
+            Transform.translate(
+              offset: const Offset(0, -24),
+              child: const Center(
+                child: WoodSign(
+                  'เลือกช่องบันทึก',
+                  icon: PixelIcon('scroll', size: 28),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: Gap.m),
+              child: Column(
+                children: [
+                  for (final e in slots.entries)
+                    _SlotCard(
+                      slot: e.key,
+                      info: e.value,
+                      onNew: () => _new(context, ref, e.key),
+                      onLoad: () => _load(context, ref, e.value!),
+                      onRename: () => _rename(context, ref, e.value!),
+                      onDelete: () => _delete(context, ref, e.value!),
+                    ),
+                  PixelButton(
+                    label: 'กลับ',
+                    icon: const PixelGlyph(
+                      Glyph.arrowRight,
+                      flipX: true,
+                      size: 20,
+                      color: AquaColors.paper,
+                    ),
+                    style: PixelButtonStyle.wood,
+                    expand: true,
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
       ),
     );
   }
+}
 
-  Widget _slotCard(BuildContext context, WidgetRef ref, int slot, SlotInfo? d) {
-    return PixelPanel(
+class _SlotCard extends StatelessWidget {
+  const _SlotCard({
+    required this.slot,
+    required this.info,
+    required this.onNew,
+    required this.onLoad,
+    required this.onRename,
+    required this.onDelete,
+  });
+
+  final int slot;
+  final SlotInfo? info;
+  final VoidCallback onNew;
+  final VoidCallback onLoad;
+  final VoidCallback onRename;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final d = info;
+    return WoodPanel(
+      padding: const EdgeInsets.all(Gap.m),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
-              PixelIcon(d == null ? 'crate' : 'house', size: 40),
-              const SizedBox(width: 10),
+              Semantics(
+                label: 'ช่อง $slot',
+                child: ExcludeSemantics(
+                  child: PixelBox(
+                    fill: d == null ? AquaColors.creamDark : AquaColors.gold,
+                    depth: 3,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 2,
+                    ),
+                    child: OutlinedText(
+                      '$slot',
+                      size: 30,
+                      color: d == null ? AquaColors.paper : AquaColors.goldPale,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: Gap.m),
+              PixelIcon(d == null ? 'crate' : 'house', size: 44),
+              const SizedBox(width: Gap.m),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'ช่อง $slot: ${d?.name ?? 'ว่าง'}',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
-                    ),
-                    Muted(
-                      d == null
-                          ? 'ยังไม่มีข้อมูล'
-                          : 'วันที่ ${d.day} · ${d.money}฿ · ปลา ${d.pondCount} · เซฟ v${d.version}',
-                    ),
-                  ],
+                child: Bold(
+                  d?.name ?? 'ช่องว่าง',
+                  size: FontSize.label + 2,
+                  color: d == null ? AquaColors.textSoft : AquaColors.text,
+                  maxLines: 1,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          if (d != null) ...[
+            const SizedBox(height: Gap.s),
+            Wrap(
+              spacing: Gap.s,
+              runSpacing: Gap.xs,
+              children: [
+                Tag('วันที่ ${d.day}', icon: const PixelIcon('cal', size: 18)),
+                CoinTag(d.money, boxed: true, size: FontSize.small),
+                Tag(
+                  '${d.pondCount}',
+                  icon: const PixelIcon('f_nila', size: 22),
+                ),
+              ],
+            ),
+          ],
+          const SizedBox(height: Gap.m),
           if (d == null)
             PixelButton(
               label: 'เกมใหม่',
-              style: PixelButtonStyle.gold,
+              icon: const PixelGlyph(
+                Glyph.plus,
+                size: 20,
+                color: AquaColors.paper,
+              ),
+              style: PixelButtonStyle.green,
               expand: true,
-              onPressed: () => _new(context, ref, slot),
+              onPressed: onNew,
             )
           else
             Row(
               children: [
                 Expanded(
-                  child: PixelButton(
-                    label: 'โหลด',
-                    style: PixelButtonStyle.gold,
-                    onPressed: () => _load(context, ref, d),
-                  ),
+                  flex: 3,
+                  child: PixelButton(label: 'โหลด', onPressed: onLoad),
                 ),
-                const SizedBox(width: 6),
+                const SizedBox(width: Gap.s),
                 Expanded(
+                  flex: 2,
                   child: PixelButton(
                     label: 'ชื่อ',
-                    onPressed: () => _rename(context, ref, d),
+                    style: PixelButtonStyle.water,
+                    onPressed: onRename,
                   ),
                 ),
-                const SizedBox(width: 6),
+                const SizedBox(width: Gap.s),
                 Expanded(
+                  flex: 2,
                   child: PixelButton(
                     label: 'ลบ',
-                    style: PixelButtonStyle.dark,
-                    onPressed: () => _delete(context, ref, d),
+                    style: PixelButtonStyle.danger,
+                    onPressed: onDelete,
                   ),
                 ),
               ],

@@ -13,6 +13,7 @@ import '../../data/disaster_data.dart';
 import '../../data/fish_data.dart';
 import '../../game/game_state.dart';
 import '../providers.dart';
+import '../theme/colors.dart';
 
 const double kSceneW = 320;
 const double kSceneH = 180;
@@ -382,9 +383,10 @@ class FarmPainter extends PixelPainter {
     }
     final pond = data.pond.take(8).toList();
     for (var i = 0; i < pond.length; i++) {
+      // ปลาหันหัวไปทางซ้าย จึงว่ายไปทางซ้าย
       fish(
         pond[i],
-        200 + ((i * 31 + t * .3 * (1 + i % 3)) % 62),
+        262 - ((i * 31 + t * .3 * (1 + i % 3)) % 62),
         131 + (i % 3) * 7,
         1,
       );
@@ -574,9 +576,10 @@ class PondPainter extends PixelPainter {
     }
     for (var i = 0; i < data.fish.length; i++) {
       final (type, mature) = data.fish[i];
+      // ว่ายไปทางหัว (ซ้าย) ทั่วทั้งบ่อ แล้ววนกลับจากขอบขวา
       fish(
         type,
-        10 + ((i * 37 + t * (.5 + (i % 3) * .3)) % 140),
+        330 - ((i * 67 + t * (.6 + (i % 3) * .35)) % 370),
         50 + (i * 17) % 80 + _r(4 * math.sin((t + i * 8) / 9)),
         mature ? 3 : 2,
       );
@@ -584,12 +587,88 @@ class PondPainter extends PixelPainter {
   }
 }
 
+/// ฉากห้องไม้ (ร้าน ตลาด ครัว คลัง รายงาน) — พอร์ตจาก room() ของต้นแบบ
+class RoomPainter extends PixelPainter {
+  RoomPainter(super.tick);
+
+  @override
+  void draw(int t) {
+    rect(0, 0, 320, 180, const Color(0xFF8B6546));
+    for (var x = 0; x < 320; x += 16) {
+      rect(x, 0, 2, 130, const Color(0xFF9B7552));
+      rect(x + 8, 0, 1, 130, const Color(0xFF7A5638));
+    }
+    rect(0, 128, 320, 52, const Color(0xFF5E3B26));
+    for (var y = 128; y < 180; y += 10) {
+      rect(0, y, 320, 1, const Color(0xFF3D2616));
+    }
+    for (var x = 0; x < 320; x += 40) {
+      rect(x + (x % 80 != 0 ? 0 : 20), 128, 1, 52, const Color(0xFF3D2616));
+    }
+    rect(0, 126, 320, 4, const Color(0xFF8A5A3A));
+    // หน้าต่าง
+    rect(212, 28, 70, 56, const Color(0xFF8A5A3A));
+    rect(216, 32, 62, 48, const Color(0xFF38BDF8));
+    for (var i = 0; i < 9; i++) {
+      rect(220 + (i * 17) % 54, 36 + (i * 11) % 40, 1, 1, Colors.white);
+    }
+    ellipse(262, 48, 5, 5, const Color(0xFFF4EBC8));
+    rect(246, 32, 2, 48, const Color(0xFF8A5A3A));
+    rect(216, 56, 62, 2, const Color(0xFF8A5A3A));
+    // ชั้นวางและโหล
+    rect(30, 60, 100, 5, const Color(0xFF8A5A3A));
+    rect(30, 100, 100, 5, const Color(0xFF8A5A3A));
+    for (final j in const [
+      (0xFFD8453A, 34),
+      (0xFFE9B949, 52),
+      (0xFF5DB857, 70),
+      (0xFFF2E2C2, 88),
+      (0xFF9BD64B, 106),
+    ]) {
+      rect(j.$2, 42, 13, 18, const Color(0xFFC9D8EE));
+      rect(j.$2 + 1, 46, 11, 13, Color(j.$1));
+      rect(j.$2, 40, 13, 3, const Color(0xFFC9985E));
+    }
+    rect(36, 82, 28, 18, const Color(0xFFC9985E));
+    rect(70, 82, 28, 18, const Color(0xFFC9985E));
+    rect(104, 86, 20, 14, const Color(0xFFC9985E));
+    // โคมไฟ
+    rect(160, 0, 2, 34, const Color(0xFF161022));
+    final f = t % 23 < 2;
+    ellipse(
+      161,
+      42,
+      12,
+      12,
+      f ? _rgba(233, 185, 73, .2) : _rgba(233, 185, 73, .32),
+    );
+    rect(155, 34, 12, 16, const Color(0xFFE9B949));
+    rect(158, 37, 6, 10, const Color(0xFFFFF3C4));
+  }
+}
+
 /// วิดเจ็ตฉาก — เดินเฟรมทุก 100ms เหมือนต้นแบบ (ปิดได้ผ่าน sceneAnimationProvider)
 class PixelScene extends ConsumerStatefulWidget {
-  const PixelScene({super.key, required this.painterBuilder, this.overlay});
+  const PixelScene({
+    super.key,
+    required this.painterBuilder,
+    this.overlay,
+    this.cover = false,
+    this.alignment = Alignment.center,
+    this.framed = true,
+  });
 
   final PixelPainter Function(ValueListenable<int> tick) painterBuilder;
   final Widget? overlay;
+
+  /// เต็มพื้นที่ (ครอปขอบ) แทนการคงสัดส่วน 16:9 — ใช้เป็นพื้นหลังหน้าเริ่มเกม
+  final bool cover;
+
+  /// จุดที่ให้อยู่กลางภาพเมื่อ cover
+  final Alignment alignment;
+
+  /// มีกรอบเข้มรอบฉาก
+  final bool framed;
 
   @override
   ConsumerState<PixelScene> createState() => _PixelSceneState();
@@ -619,22 +698,33 @@ class _PixelSceneState extends ConsumerState<PixelScene> {
 
   @override
   Widget build(BuildContext context) {
-    return AspectRatio(
-      aspectRatio: kSceneW / kSceneH,
-      child: Container(
-        decoration: BoxDecoration(
-          border: Border.all(color: const Color(0xFF0A2229), width: 3),
-        ),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            RepaintBoundary(
-              child: CustomPaint(painter: widget.painterBuilder(_tick)),
-            ),
-            ?widget.overlay,
-          ],
-        ),
-      ),
+    Widget paint = RepaintBoundary(
+      child: CustomPaint(painter: widget.painterBuilder(_tick)),
     );
+    if (widget.cover) {
+      paint = ClipRect(
+        child: FittedBox(
+          fit: BoxFit.cover,
+          alignment: widget.alignment,
+          child: SizedBox(width: kSceneW, height: kSceneH, child: paint),
+        ),
+      );
+    }
+    Widget scene = Stack(
+      fit: StackFit.expand,
+      children: [paint, ?widget.overlay],
+    );
+    if (widget.framed) {
+      scene = DecoratedBox(
+        position: DecorationPosition.foreground,
+        decoration: BoxDecoration(
+          border: Border.all(color: AquaColors.ink, width: 3),
+        ),
+        child: scene,
+      );
+    }
+    scene = ExcludeSemantics(child: scene);
+    if (widget.cover) return scene;
+    return AspectRatio(aspectRatio: kSceneW / kSceneH, child: scene);
   }
 }
