@@ -11,6 +11,7 @@ import '../dialogs.dart';
 import '../providers.dart';
 import '../scenes/pixel_scene.dart';
 import '../theme/theme.dart';
+import '../widgets/equipment_row.dart';
 
 /// แท็บ "ตลาด" (market ในต้นแบบ): ซื้อวัตถุดิบ ขายปลาในคลัง ขายอาหาร ซื้ออุปกรณ์ครัว
 /// ทุกการซื้อขายต้องผ่านหน้ายืนยัน · ตลาดปิดตอนเกิดภัย (ซื้อขายไม่ได้)
@@ -184,7 +185,7 @@ class MarketTab extends ConsumerWidget {
               for (final eq in kitchenEquipment)
                 Padding(
                   padding: const EdgeInsets.only(bottom: Gap.s),
-                  child: _EquipmentRow(
+                  child: EquipmentRow(
                     key: ValueKey('eq-${eq.id}'),
                     spec: eq,
                     owned: s.equipmentCount(eq.id),
@@ -537,53 +538,3 @@ class _FoodRow extends StatelessWidget {
   }
 }
 
-/// แถวอุปกรณ์ครัว: ไอคอน ชื่อ คำอธิบาย จำนวนที่มี ปุ่มซื้อ
-class _EquipmentRow extends StatelessWidget {
-  const _EquipmentRow({
-    super.key,
-    required this.spec,
-    required this.owned,
-    required this.closed,
-    required this.onBuy,
-  });
-
-  final EquipmentSpec spec;
-  final int owned;
-  final bool closed;
-  final VoidCallback onBuy;
-
-  @override
-  Widget build(BuildContext context) {
-    return PaperCard(
-      padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
-      child: Row(
-        children: [
-          PixelIcon(spec.icon, size: 44),
-          const SizedBox(width: Gap.s),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Flexible(child: Bold(spec.name, maxLines: 1)),
-                    const SizedBox(width: Gap.xs),
-                    _Count(owned),
-                  ],
-                ),
-                Muted(spec.description, size: 13),
-              ],
-            ),
-          ),
-          const SizedBox(width: Gap.s),
-          PixelButton(
-            label: closed ? 'ปิด' : 'ซื้อ',
-            style: closed ? PixelButtonStyle.wood : PixelButtonStyle.gold,
-            below: CoinTag(spec.price, boxed: true, size: FontSize.small),
-            onPressed: onBuy,
-          ),
-        ],
-      ),
-    );
-  }
-}

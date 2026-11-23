@@ -3,8 +3,11 @@ library;
 
 import '../data/disaster_data.dart';
 import 'game_engine.dart';
+import 'tutorial.dart';
 
-String farmHint(GameEngine e) {
+/// null ระหว่างบทเรียน (ต้นแบบซ่อนคำแนะนำจนกว่าจะจบบทเรียน)
+String? farmHint(GameEngine e) {
+  if (e.tutorialActive) return null;
   final s = e.state;
   final a = s.active;
   if (a != null) {

@@ -3,6 +3,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../data/constants.dart';
 import '../../data/fish_data.dart';
+import '../../game/tutorial.dart';
 import '../dialogs.dart';
 import '../providers.dart';
 import '../scenes/pixel_scene.dart';
@@ -10,18 +11,27 @@ import '../theme/theme.dart';
 import 'fish_detail_screen.dart';
 
 /// แท็บ "ปลา": บ่อปลา และร้านปลา
-class FishTab extends StatefulWidget {
-  const FishTab({super.key});
+class FishTab extends ConsumerStatefulWidget {
+  const FishTab({super.key, this.onShopChanged});
+
+  /// แจ้งว่ากำลังดูร้านปลา (true) หรือบ่อปลา (false) — ใช้กับบทเรียน
+  final ValueChanged<bool>? onShopChanged;
 
   @override
-  State<FishTab> createState() => _FishTabState();
+  ConsumerState<FishTab> createState() => _FishTabState();
 }
 
-class _FishTabState extends State<FishTab> {
+class _FishTabState extends ConsumerState<FishTab> {
   bool _shop = false;
+
+  void _set(bool shop) {
+    setState(() => _shop = shop);
+    widget.onShopChanged?.call(shop);
+  }
 
   @override
   Widget build(BuildContext context) {
+    final target = ref.watch(gameProvider)!.engine.tutorialStep?.target;
     return Column(
       children: [
         Padding(
@@ -29,20 +39,30 @@ class _FishTabState extends State<FishTab> {
           child: Row(
             children: [
               Expanded(
-                child: PixelButton(
-                  label: 'บ่อปลา',
-                  icon: const PixelIcon('drop', size: 24),
-                  style: _shop ? PixelButtonStyle.wood : PixelButtonStyle.gold,
-                  onPressed: () => setState(() => _shop = false),
+                child: Spotlight(
+                  on: _shop && target == TutorialTarget.pond,
+                  child: PixelButton(
+                    label: 'บ่อปลา',
+                    icon: const PixelIcon('drop', size: 24),
+                    style: _shop
+                        ? PixelButtonStyle.wood
+                        : PixelButtonStyle.gold,
+                    onPressed: () => _set(false),
+                  ),
                 ),
               ),
               const SizedBox(width: Gap.s),
               Expanded(
-                child: PixelButton(
-                  label: 'ร้านปลา',
-                  icon: const PixelIcon('f_nila', size: 30),
-                  style: _shop ? PixelButtonStyle.gold : PixelButtonStyle.wood,
-                  onPressed: () => setState(() => _shop = true),
+                child: Spotlight(
+                  on: !_shop && target == TutorialTarget.shop,
+                  child: PixelButton(
+                    label: 'ร้านปลา',
+                    icon: const PixelIcon('f_nila', size: 30),
+                    style: _shop
+                        ? PixelButtonStyle.gold
+                        : PixelButtonStyle.wood,
+                    onPressed: () => _set(true),
+                  ),
                 ),
               ),
             ],

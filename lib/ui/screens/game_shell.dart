@@ -2,9 +2,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../data/disaster_data.dart';
+import '../../game/tutorial.dart';
 import '../dialogs.dart';
 import '../providers.dart';
 import '../theme/theme.dart';
+import '../widgets/tutorial_panel.dart';
 import 'farm_tab.dart';
 import 'fish_tab.dart';
 import 'kitchen_tab.dart';
@@ -23,6 +25,9 @@ class GameShell extends ConsumerStatefulWidget {
 class _GameShellState extends ConsumerState<GameShell> {
   int _tab = 0;
 
+  /// แท็บปลากำลังเปิดร้านปลาอยู่ไหม (แยก "บ่อปลา" กับ "ร้านปลา" ให้บทเรียน)
+  bool _fishShop = false;
+
   static const tabs = [
     ('ฟาร์ม', 'house'),
     ('ปลา', 'f_nila'),
@@ -31,11 +36,35 @@ class _GameShellState extends ConsumerState<GameShell> {
     ('คลัง', 'crate'),
   ];
 
+  /// แท็บที่บทเรียนชี้
+  static int tabOf(TutorialTarget t) => switch (t) {
+    TutorialTarget.status ||
+    TutorialTarget.home ||
+    TutorialTarget.prepare => 0,
+    TutorialTarget.pond || TutorialTarget.shop => 1,
+    TutorialTarget.kitchen => 3,
+    TutorialTarget.storage => 4,
+  };
+
+  GameScreen get _screen => switch (_tab) {
+    0 => GameScreen.farm,
+    1 => _fishShop ? GameScreen.shop : GameScreen.pond,
+    2 => GameScreen.market,
+    3 => GameScreen.kitchen,
+    _ => GameScreen.storage,
+  };
+
+  void _select(int i) => setState(() {
+    _tab = i;
+    _fishShop = false;
+  });
+
   @override
   Widget build(BuildContext context) {
+    final target = ref.watch(gameProvider)!.engine.tutorialStep?.target;
     final body = switch (_tab) {
-      0 => FarmTab(onOpenTab: (i) => setState(() => _tab = i)),
-      1 => const FishTab(),
+      0 => FarmTab(onOpenTab: _select),
+      1 => FishTab(onShopChanged: (v) => setState(() => _fishShop = v)),
       2 => const MarketTab(),
       3 => const KitchenTab(),
       _ => const StorageTab(),
@@ -45,7 +74,8 @@ class _GameShellState extends ConsumerState<GameShell> {
         child: Column(
           children: [
             // ข้อความแจ้งเตือนแสดงใต้แถบบนนี้
-            const ToastAnchor(child: TopBar()),
+            ToastAnchor(child: TopBar(onReplayTutorial: () => _select(0))),
+            TutorialPanel(screen: _screen),
             Expanded(
               child: AnimatedSwitcher(
                 duration: const Duration(milliseconds: 180),
@@ -58,7 +88,8 @@ class _GameShellState extends ConsumerState<GameShell> {
       bottomNavigationBar: GameNavBar(
         selected: _tab,
         items: tabs,
-        onSelect: (i) => setState(() => _tab = i),
+        highlight: target == null ? null : tabOf(target),
+        onSelect: _select,
       ),
     );
   }
@@ -71,11 +102,15 @@ class GameNavBar extends StatelessWidget {
     required this.selected,
     required this.items,
     required this.onSelect,
+    this.highlight,
   });
 
   final int selected;
   final List<(String, String)> items;
   final ValueChanged<int> onSelect;
+
+  /// ช่องที่บทเรียนชี้ (กะพริบ) — ไม่ชี้ช่องที่เปิดอยู่แล้ว
+  final int? highlight;
 
   @override
   Widget build(BuildContext context) {
@@ -90,11 +125,15 @@ class GameNavBar extends StatelessWidget {
         children: [
           for (var i = 0; i < items.length; i++)
             Expanded(
-              child: _NavItem(
-                label: items[i].$1,
-                icon: items[i].$2,
-                selected: i == selected,
-                onTap: () => onSelect(i),
+              child: Spotlight(
+                on: i == highlight && i != selected,
+                pad: 0,
+                child: _NavItem(
+                  label: items[i].$1,
+                  icon: items[i].$2,
+                  selected: i == selected,
+                  onTap: () => onSelect(i),
+                ),
               ),
             ),
         ],
@@ -177,7 +216,10 @@ class _NavItem extends StatelessWidget {
 
 /// แถบบน: เงิน วัน เสบียง คุณภาพน้ำ เตือนภัย ปุ่มเมนู และปุ่ม "จบวัน"
 class TopBar extends ConsumerWidget {
-  const TopBar({super.key});
+  const TopBar({super.key, this.onReplayTutorial});
+
+  /// หลังกด "เล่นบทเรียนซ้ำ" (ให้หน้าเกมกลับไปหน้าฟาร์ม)
+  final VoidCallback? onReplayTutorial;
 
   Future<void> _endDay(BuildContext context, WidgetRef ref) async {
     final r = await ref.read(gameProvider.notifier).endDay();
@@ -226,6 +268,14 @@ class TopBar extends ConsumerWidget {
                 ),
                 const SizedBox(height: Gap.s),
                 PixelButton(
+                  label: 'เล่นบทเรียนซ้ำ',
+                  icon: const PixelIcon('scroll', size: 24),
+                  style: PixelButtonStyle.green,
+                  expand: true,
+                  onPressed: () => Navigator.pop(c, 'tutorial'),
+                ),
+                const SizedBox(height: Gap.s),
+                PixelButton(
                   label: 'กลับเมนูหลัก',
                   icon: const PixelIcon('house', size: 24),
                   style: PixelButtonStyle.wood,
@@ -242,6 +292,9 @@ class TopBar extends ConsumerWidget {
     if (choice == 'save') {
       await ctl.save();
       if (context.mounted) toast(context, 'บันทึกเกมแล้ว');
+    } else if (choice == 'tutorial') {
+      ctl.update((e) => e.tutorialRestart());
+      onReplayTutorial?.call();
     } else if (choice == 'exit') {
       if (await confirmDialog(
         context,

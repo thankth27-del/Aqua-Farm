@@ -1,3 +1,4 @@
+import 'package:aqua_farm/data/equipment_data.dart';
 import 'package:aqua_farm/game/game_engine.dart';
 import 'package:aqua_farm/save/save_repository.dart';
 import 'package:aqua_farm/ui/app.dart';
@@ -36,7 +37,11 @@ Future<void> pumpApp(WidgetTester tester) async {
 }
 
 /// เมนูหลัก → เกมใหม่ → ช่อง 1 → ตั้งชื่อ → ตกลง
-Future<void> startNewGame(WidgetTester tester) async {
+/// (ข้ามบทเรียนเป็นค่าเริ่มต้น เพื่อทดสอบส่วนอื่นได้เต็มจอ)
+Future<void> startNewGame(
+  WidgetTester tester, {
+  bool skipTutorial = true,
+}) async {
   await tester.tap(find.text('เกมใหม่'));
   await tester.pumpAndSettle();
   await tester.tap(find.widgetWithText(PixelButton, 'เกมใหม่').first);
@@ -44,6 +49,10 @@ Future<void> startNewGame(WidgetTester tester) async {
   expect(find.text('ตั้งชื่อ Save'), findsOneWidget);
   await tester.tap(find.text('ตกลง'));
   await tester.pumpAndSettle();
+  if (skipTutorial) {
+    await tester.tap(find.widgetWithText(PixelButton, 'ข้าม'));
+    await tester.pumpAndSettle();
+  }
 }
 
 Future<void> openFishShopCard(WidgetTester tester, String id) async {
@@ -80,7 +89,13 @@ void main() {
     tester,
   ) async {
     await pumpApp(tester);
-    await startNewGame(tester);
+    await startNewGame(tester, skipTutorial: false);
+    // เกมใหม่เริ่มบทเรียน และซ่อนคำแนะนำจนกว่าจะจบบทเรียน (ตามต้นแบบ)
+    expect(find.text('บทเรียน 1/9'), findsOneWidget);
+    expect(find.text('ซื้อปลาที่ร้านปลา แล้วปล่อยลงบ่อ'), findsNothing);
+    await tester.tap(find.widgetWithText(PixelButton, 'ข้าม'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('tutorial')), findsNothing);
     expect(repo.listSlots()[1]!.name, 'ฟาร์มของฉัน');
     expect(find.text('500฿'), findsOneWidget);
     expect(find.text('วันที่ 1'), findsOneWidget);
@@ -855,6 +870,160 @@ void main() {
         expect(size.width, greaterThanOrEqualTo(kMinTap));
       }
     });
+  });
+
+  group('บทเรียน', () {
+    Finder next() => find.widgetWithText(PixelButton, 'ถัดไป');
+    bool nextEnabled(WidgetTester t) =>
+        t.widget<PixelButton>(next()).onPressed != null;
+    Finder navTab(String t) => find.descendant(
+      of: find.byType(GameNavBar),
+      matching: find.text(t),
+    );
+
+    testWidgets('กดถัดไปได้เมื่อทำขั้นนั้นสำเร็จ และชี้เมนูที่ต้องไป', (
+      tester,
+    ) async {
+      await pumpApp(tester);
+      await startNewGame(tester, skipTutorial: false);
+      expect(find.text('บทเรียน 1/9'), findsOneWidget);
+      expect(
+        tester.widget<PixelButton>(
+          find.widgetWithText(PixelButton, 'ย้อนกลับ'),
+        ).onPressed,
+        isNull,
+      );
+      await tester.tap(next());
+      await tester.pumpAndSettle();
+      await tester.tap(next());
+      await tester.pumpAndSettle();
+      expect(find.text('บทเรียน 3/9'), findsOneWidget);
+      expect(find.text('ไปที่เมนู "ปลา" เพื่อเข้าไปดูแลบ่อปลา'), findsOneWidget);
+      expect(nextEnabled(tester), isFalse);
+
+      // เมนู "ปลา" กะพริบชี้ให้ไป
+      final lit = tester
+          .widgetList<Spotlight>(
+            find.descendant(
+              of: find.byType(GameNavBar),
+              matching: find.byType(Spotlight),
+            ),
+          )
+          .toList();
+      expect(lit.where((s) => s.on), hasLength(1));
+      expect(lit[1].on, isTrue);
+
+      await tester.tap(navTab('ปลา'));
+      await tester.pumpAndSettle();
+      expect(nextEnabled(tester), isTrue);
+      await tester.tap(next());
+      await tester.pumpAndSettle();
+      expect(find.text('บทเรียน 4/9'), findsOneWidget);
+      expect(nextEnabled(tester), isFalse);
+
+      await tester.tap(find.widgetWithText(PixelButton, 'ย้อนกลับ'));
+      await tester.pumpAndSettle();
+      expect(find.text('บทเรียน 3/9'), findsOneWidget);
+    });
+
+    testWidgets('ขั้นทำอาหาร: แจกปลาและเครื่องปรุง ผ่านเมื่อทำปลาทอดในครัว', (
+      tester,
+    ) async {
+      await pumpApp(tester);
+      await startNewGame(tester, skipTutorial: false);
+      final ctl = container.read(gameProvider.notifier);
+      final s = container.read(gameProvider)!.state;
+      ctl.update((e) => s.tut = 5);
+      await tester.pumpAndSettle();
+      expect(find.text('บทเรียน 6/9'), findsOneWidget);
+      await tester.tap(navTab('ปลา'));
+      await tester.pumpAndSettle();
+      await tester.tap(next());
+      await tester.pumpAndSettle();
+      expect(find.text('บทเรียน 7/9'), findsOneWidget);
+      expect(s.fishStock['nila'], 1);
+      expect(s.inventory['spice'], 1);
+      expect(nextEnabled(tester), isFalse);
+
+      await tester.tap(navTab('ครัว'));
+      await tester.pumpAndSettle();
+      final fry = find.descendant(
+        of: find.byKey(const ValueKey('recipe-fry')),
+        matching: find.byType(PixelButton),
+      );
+      await tester.scrollUntilVisible(
+        fry,
+        200,
+        scrollable: find
+            .descendant(
+              of: find.byType(KitchenTab),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      await tester.ensureVisible(fry);
+      await tester.pumpAndSettle();
+      await tester.tap(fry);
+      await tester.pump(const Duration(seconds: 3));
+      await tester.pumpAndSettle();
+      expect(nextEnabled(tester), isTrue);
+    });
+
+    testWidgets('ข้ามบทเรียนแล้วเล่นซ้ำได้จากเมนู', (tester) async {
+      await pumpApp(tester);
+      await startNewGame(tester);
+      expect(find.byKey(const ValueKey('tutorial')), findsNothing);
+      expect(find.text('ซื้อปลาที่ร้านปลา แล้วปล่อยลงบ่อ'), findsOneWidget);
+
+      await tester.tap(navTab('คลัง'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('เมนู / พัก'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('เล่นบทเรียนซ้ำ'));
+      await tester.pumpAndSettle();
+      expect(find.text('บทเรียน 1/9'), findsOneWidget);
+      // กลับมาหน้าฟาร์ม และซ่อนคำแนะนำระหว่างบทเรียน
+      expect(find.text('ซื้อปลาที่ร้านปลา แล้วปล่อยลงบ่อ'), findsNothing);
+      expect(container.read(gameProvider)!.state.tut, 0);
+    });
+  });
+
+  testWidgets('เตรียมภัย: ซื้ออุปกรณ์ป้องกันต้องยืนยันก่อน', (tester) async {
+    await pumpApp(tester);
+    await startNewGame(tester);
+    final s = container.read(gameProvider)!.state;
+    final sand = kEquipment['sand']!;
+    final buy = find.descendant(
+      of: find.byKey(const ValueKey('eq-sand')),
+      matching: find.byType(PixelButton),
+    );
+    await tester.scrollUntilVisible(
+      buy,
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.ensureVisible(buy);
+    await tester.pumpAndSettle();
+    for (final id in kDefenseEquipmentOrder) {
+      expect(find.byKey(ValueKey('eq-$id')), findsOneWidget);
+    }
+
+    await tester.tap(buy);
+    await tester.pumpAndSettle();
+    expect(
+      find.text('ยืนยันซื้อ${sand.name} ราคา ${sand.price} บาท?'),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('ยกเลิก').last);
+    await tester.pumpAndSettle();
+    expect(s.equipmentCount('sand'), 0);
+
+    await tester.tap(buy);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('ตกลง'));
+    await tester.pumpAndSettle();
+    expect(s.equipmentCount('sand'), 1);
+    expect(s.money, 500 - sand.price);
   });
 
   testWidgets('ใช้ฟอนต์ไทยที่ฝังในแอป (Mali) กับข้อความทั้งเกม', (

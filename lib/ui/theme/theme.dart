@@ -9,6 +9,7 @@ export 'coins.dart';
 export 'colors.dart';
 export 'dialog_frame.dart';
 export 'frames.dart';
+export 'highlight.dart';
 export 'motion.dart';
 export 'pixel_icon.dart';
 export 'texts.dart';

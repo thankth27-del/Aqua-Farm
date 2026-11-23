@@ -4,11 +4,13 @@ import 'package:material_ui/material_ui.dart';
 import '../../data/disaster_data.dart';
 import '../../data/equipment_data.dart';
 import '../../game/hints.dart';
+import '../../game/tutorial.dart';
 import '../dialogs.dart';
 import '../providers.dart';
 import '../scenes/pixel_scene.dart';
 import '../theme/theme.dart';
 import '../widgets/disaster_icon.dart';
+import '../widgets/equipment_row.dart';
 
 /// หน้า "ฟาร์ม": ฉากฟาร์ม คำแนะนำ สถานะตัวละคร (พักผ่อน) และข่าวเตือนภัย
 class FarmTab extends ConsumerWidget {
@@ -23,6 +25,8 @@ class FarmTab extends ConsumerWidget {
     final s = session.state;
     final ctl = ref.read(gameProvider.notifier);
     final scene = FarmSceneData.fromState(s, e.warnDays);
+    final hint = farmHint(e);
+    final target = e.tutorialStep?.target;
 
     return ListView(
       padding: const EdgeInsets.all(Gap.m),
@@ -32,14 +36,24 @@ class FarmTab extends ConsumerWidget {
           title: 'ฟาร์ม',
           icon: const PixelIcon('house', size: 30),
         ),
-        _HintBubble(farmHint(e)),
-        const SizedBox(height: Gap.m),
-        _CharacterCard(
-          onRest: () => showResult(context, ctl.run((e) => e.rest())),
-          onPond: () => onOpenTab(1),
+        if (hint != null) ...[
+          _HintBubble(hint),
+          const SizedBox(height: Gap.m),
+        ],
+        Spotlight(
+          on: target == TutorialTarget.status,
+          child: _CharacterCard(
+            restSpotlight: target == TutorialTarget.home,
+            onRest: () => showResult(context, ctl.run((e) => e.rest())),
+            onPond: () => onOpenTab(1),
+          ),
         ),
         _DisasterCard(
           onRepair: () => showResult(context, ctl.run((e) => e.repair())),
+        ),
+        Spotlight(
+          on: target == TutorialTarget.prepare,
+          child: const _PreparePanel(),
         ),
       ],
     );
@@ -110,9 +124,14 @@ class _TailPainter extends CustomPainter {
 }
 
 class _CharacterCard extends ConsumerWidget {
-  const _CharacterCard({required this.onRest, required this.onPond});
+  const _CharacterCard({
+    required this.onRest,
+    required this.onPond,
+    this.restSpotlight = false,
+  });
   final VoidCallback onRest;
   final VoidCallback onPond;
+  final bool restSpotlight;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -177,17 +196,20 @@ class _CharacterCard extends ConsumerWidget {
             suffix: '%',
           ),
           const SizedBox(height: Gap.m),
-          PixelButton(
-            label: 'พักผ่อน',
-            icon: const PixelIcon('house', size: 26),
-            trailing: const Tag(
-              '+40',
-              color: AquaColors.paper,
-              icon: PixelGlyph(Glyph.bolt, size: 14, color: AquaColors.gold),
+          Spotlight(
+            on: restSpotlight,
+            child: PixelButton(
+              label: 'พักผ่อน',
+              icon: const PixelIcon('house', size: 26),
+              trailing: const Tag(
+                '+40',
+                color: AquaColors.paper,
+                icon: PixelGlyph(Glyph.bolt, size: 14, color: AquaColors.gold),
+              ),
+              tooltip: 'พักผ่อน +40 พลังงาน',
+              expand: true,
+              onPressed: onRest,
             ),
-            tooltip: 'พักผ่อน +40 พลังงาน',
-            expand: true,
-            onPressed: onRest,
           ),
           const SizedBox(height: Gap.s),
           PixelButton(
@@ -383,6 +405,65 @@ class _DisasterCard extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: children,
+      ),
+    );
+  }
+}
+
+/// เตรียมภัย: ซื้ออุปกรณ์ป้องกัน 7 ชนิด (eqRow ในหน้า alert ของต้นแบบ)
+class _PreparePanel extends ConsumerWidget {
+  const _PreparePanel();
+
+  /// "น้ำท่วม (ต้อง 2), ภัยแล้ง (ต้อง 1)"
+  static String _usedWith(String id) => [
+    for (final d in kDisasters.values)
+      if (d.equipment.containsKey(id)) '${d.name} (ต้อง ${d.equipment[id]})',
+  ].join(', ');
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = ref.watch(gameProvider)!.state;
+    final ctl = ref.read(gameProvider.notifier);
+    return WoodPanel(
+      key: const ValueKey('prepare'),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const SectionTitle(
+            'เตรียมภัย: อุปกรณ์ป้องกัน',
+            icon: PixelIcon('shield', size: 28),
+          ),
+          for (final id in kDefenseEquipmentOrder)
+            Padding(
+              padding: const EdgeInsets.only(bottom: Gap.s),
+              child: EquipmentRow(
+                key: ValueKey('eq-$id'),
+                spec: kEquipment[id]!,
+                owned: s.equipmentCount(id),
+                closed: s.marketClosed,
+                usage: [
+                  'ประโยชน์: ${kEquipment[id]!.use}',
+                  if (_usedWith(id).isNotEmpty) 'ใช้กับ: ${_usedWith(id)}',
+                ].join(' · '),
+                onBuy: () async {
+                  final q = kEquipment[id]!;
+                  // ตลาดปิดหรือเงินไม่พอ → ให้ engine บอกเหตุผล ไม่ต้องถาม
+                  if (s.marketClosed || s.money < q.price) {
+                    showResult(context, ctl.run((e) => e.buyEquipment(id)));
+                    return;
+                  }
+                  final ok = await confirmDialog(
+                    context,
+                    'ยืนยันซื้อ${q.name} ราคา ${q.price} บาท?',
+                    icon: PixelIcon(q.icon, size: 56),
+                  );
+                  if (ok && context.mounted) {
+                    showResult(context, ctl.run((e) => e.buyEquipment(id)));
+                  }
+                },
+              ),
+            ),
+        ],
       ),
     );
   }

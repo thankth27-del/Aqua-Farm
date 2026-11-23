@@ -69,6 +69,13 @@ class GameController extends Notifier<GameSession?> {
     return r;
   }
 
+  /// เปลี่ยนสถานะที่ไม่มีข้อความแจ้ง (เช่น บทเรียน) แล้วแจ้ง UI
+  void update(void Function(GameEngine e) change) {
+    if (state == null) return;
+    change(engine);
+    _bump();
+  }
+
   /// จบวัน แล้วบันทึกอัตโนมัติ (ยกเว้น Game Over)
   Future<DayReport> endDay() async {
     final r = engine.endDay();
