@@ -1,0 +1,67 @@
+# Build Flutter Web แล้ว deploy ขึ้น GitHub Pages ทุกครั้งที่ push เข้า main
+# ต้องตั้งค่าครั้งเดียว: Settings → Pages → Build and deployment → Source: GitHub Actions
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.50.1
+          cache: true
+
+      - name: Install packages
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Test
+        run: flutter test
+
+      # base-href ต้องตรงกับชื่อ repo: https://<user>.github.io/<repo>/ → /<repo>/
+      # ยกเว้น repo ชื่อ <user>.github.io ซึ่งอยู่ที่รากโดเมน → /
+      - name: Compute base-href
+        id: base
+        run: |
+          REPO="${{ github.event.repository.name }}"
+          if [[ "$REPO" == *.github.io ]]; then BASE="/"; else BASE="/$REPO/"; fi
+          echo "href=$BASE" >> "$GITHUB_OUTPUT"
+          echo "base-href = $BASE"
+
+      - name: Build web
+        run: flutter build web --release --no-web-resources-cdn --base-href "${{ steps.base.outputs.href }}"
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/web
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

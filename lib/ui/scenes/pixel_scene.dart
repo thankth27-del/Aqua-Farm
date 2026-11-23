@@ -1,0 +1,640 @@
+/// ฉากพิกเซล 320x180 — พอร์ตจากฟังก์ชัน farm(), pond(), fx(), spr() ของ reference/index.html
+/// วาดด้วยสี่เหลี่ยมล้วน ไม่ใช้ anti-alias (ภาพไม่เบลอ)
+library;
+
+import 'dart:async';
+import 'dart:math' as math;
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:material_ui/material_ui.dart';
+
+import '../../data/disaster_data.dart';
+import '../../data/fish_data.dart';
+import '../../game/game_state.dart';
+import '../providers.dart';
+
+const double kSceneW = 320;
+const double kSceneH = 180;
+
+int _r(num x) => (x + .5).floor(); // Math.round ของ JS
+
+Color _rgba(int r, int g, int b, double a) =>
+    Color.fromRGBO(r, g, b, a.clamp(0, 1).toDouble());
+
+abstract class PixelPainter extends CustomPainter {
+  PixelPainter(this.tick) : super(repaint: tick);
+
+  final ValueListenable<int> tick;
+  late Canvas _c;
+  final Paint _p = Paint()..isAntiAlias = false;
+
+  /// R(x,y,w,h,c)
+  void rect(num x, num y, num w, num h, Color c) {
+    _p.color = c;
+    _c.drawRect(
+      Rect.fromLTWH(
+        _r(x).toDouble(),
+        _r(y).toDouble(),
+        w.toDouble(),
+        h.toDouble(),
+      ),
+      _p,
+    );
+  }
+
+  /// E(x,y,rx,ry,c) วงรีแบบพิกเซล
+  void ellipse(num x, num y, int rx, int ry, Color c) {
+    _p.color = c;
+    for (var j = -ry; j <= ry; j++) {
+      final d = _r(rx * math.sqrt(1 - (j / ry) * (j / ry)));
+      _c.drawRect(
+        Rect.fromLTWH((x - d).toDouble(), (y + j).toDouble(), 2.0 * d, 1),
+        _p,
+      );
+    }
+  }
+
+  /// spr(x,t,px,py,s) ปลา 1 ตัว
+  void fish(String type, num px, num py, int s) {
+    final f = kFish[type]!;
+    final fin = Color(f.finColor), body = Color(f.bodyColor);
+    rect(px + 8 * s, py + s, s, 3 * s, fin);
+    rect(px + 9 * s, py, s, 5 * s, fin);
+    rect(px + s, py, 6 * s, 5 * s, body);
+    rect(px, py + s, 8 * s, 3 * s, body);
+    if (f.stripe) rect(px + s, py + 2 * s, 7 * s, s, const Color(0xFF2F3A18));
+    if (f.hump) rect(px + 3 * s, py - s, 3 * s, s, body);
+    if (f.whiskers) {
+      rect(px - s, py + 2 * s, s, s, const Color(0xFF0A2229));
+      rect(px - s, py + 4 * s, s, s, const Color(0xFF0A2229));
+    }
+    rect(px + s, py + s, s, s, Colors.black);
+  }
+
+  void draw(int t);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    _c = canvas;
+    canvas.save();
+    canvas.clipRect(Offset.zero & size);
+    canvas.scale(size.width / kSceneW, size.height / kSceneH);
+    draw(tick.value);
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
+}
+
+/// ข้อมูลที่ฉากฟาร์มต้องใช้
+class FarmSceneData {
+  const FarmSceneData({
+    this.pond = const [],
+    this.equipment = const {},
+    this.damaged = false,
+    this.fxType,
+    this.fxLevel = 0,
+  });
+
+  factory FarmSceneData.fromState(GameState s, int warnDays) {
+    DisasterType? type;
+    double lvl = 0;
+    final a = s.active;
+    if (a != null && a.dayIndex >= 0) {
+      type = a.type;
+      lvl = kDisasters[a.type]!.visualLevel[a.dayIndex] * .85;
+    } else if (warnDays > 0 && s.upcoming != null) {
+      final d = kDisasters[s.upcoming!.type]!;
+      type = d.type;
+      lvl = (d.leadDays + 1 - warnDays) / (d.leadDays + 1) * .5;
+    }
+    return FarmSceneData(
+      pond: [for (final f in s.pond) f.type],
+      equipment: Map.of(s.equipment),
+      damaged: s.damaged,
+      fxType: type,
+      fxLevel: lvl,
+    );
+  }
+
+  final List<String> pond;
+  final Map<String, int> equipment;
+  final bool damaged;
+  final DisasterType? fxType;
+  final double fxLevel;
+}
+
+class FarmPainter extends PixelPainter {
+  FarmPainter(super.tick, this.data);
+  final FarmSceneData data;
+
+  int q(String k) => data.equipment[k] ?? 0;
+
+  void sky(int t, double h) {
+    const bands = [
+      0xFF38BDF8,
+      0xFF5CCBF7,
+      0xFF86D6F6,
+      0xFFAEE2F3,
+      0xFFCFEAEA,
+      0xFFE8DCC4,
+      0xFFF1E3C0,
+      0xFFF6E8C6,
+    ];
+    for (var i = 0; i < 8; i++) {
+      rect(0, i * h / 8, 320, h / 8 + 1, Color(bands[i]));
+    }
+    ellipse(272, 26, 10, 10, const Color(0xFFFFE08A));
+    ellipse(272, 26, 7, 7, const Color(0xFFFFF3B0));
+    for (var i = 0; i < 4; i++) {
+      final x = _r(((t * .15 + i * 95) % 400) - 60), y = 22 + i * 10;
+      ellipse(x, y, 20, 5, const Color(0xFFF4FBFF));
+      ellipse(x + 12, y - 3, 13, 5, Colors.white);
+      ellipse(x - 10, y + 1, 10, 3, const Color(0xFFDFF3FB));
+    }
+  }
+
+  void tree(int t, int x, int y) {
+    final w = _r(math.sin(t / 14 + x) * 1.5);
+    rect(x - 3, y - 12, 6, 12, const Color(0xFF5E3B26));
+    ellipse(x + w, y - 24, 14, 12, const Color(0xFF1F5A35));
+    ellipse(x - 7 + w, y - 17, 9, 8, const Color(0xFF2F7D3A));
+    ellipse(x + 8 + w, y - 17, 9, 8, const Color(0xFF2F7D3A));
+    ellipse(x - 2 + w, y - 30, 8, 5, const Color(0xFF5DB857));
+  }
+
+  void fx(int t, DisasterType? ty, double l) {
+    if (ty == null || l <= 0) return;
+    switch (ty) {
+      case DisasterType.flood:
+        final lv = _r(52 * l), y0 = 180 - lv;
+        rect(0, y0, 320, lv, _rgba(62, 124, 184, .72));
+        for (var x = 0; x < 320; x += 4) {
+          rect(
+            x,
+            y0 + _r(2 * math.sin((x + t) / 6)),
+            4,
+            3,
+            const Color(0xFFA5DDF5),
+          );
+        }
+        rect(0, 0, 320, 180, _rgba(20, 16, 40, .3 * l));
+        for (var i = 0; i < _r(46 * l); i++) {
+          rect(
+            (i * 29 + t * 3) % 320,
+            (i * 17 + t * 5) % 180,
+            1,
+            5,
+            const Color(0xFFA5DDF5),
+          );
+        }
+      case DisasterType.drought:
+        rect(0, 0, 320, 180, _rgba(240, 150, 60, .25 * l));
+        ellipse(70, 26, 14, 14, const Color(0xFFFFE08A));
+        for (var a = 0; a < 12; a++) {
+          final r = a * math.pi / 6 + t / 40;
+          rect(
+            70 + math.cos(r) * 20,
+            26 + math.sin(r) * 20,
+            3,
+            3,
+            const Color(0xFFE9B949),
+          );
+        }
+        for (var i = 0; i < _r(30 * l); i++) {
+          final x = (i * 47) % 320, y = 100 + (i * 29) % 80;
+          rect(x, y, 6, 1, const Color(0xFF5E3B26));
+          rect(x + 5, y + 1, 1, 4, const Color(0xFF5E3B26));
+        }
+      case DisasterType.poll:
+        ellipse(240, 141, 58, 22, _rgba(90, 120, 30, .55 * l));
+        rect(0, 0, 320, 180, _rgba(40, 60, 20, .18 * l));
+        for (var i = 0; i < 8; i++) {
+          rect(
+            205 + (i * 17) % 70,
+            128 + (i * 11) % 25 - ((t / 2 + i * 5) % 12),
+            3,
+            3,
+            _rgba(160, 200, 60, .6),
+          );
+        }
+      case DisasterType.heat:
+        rect(0, 0, 320, 180, _rgba(255, 140, 50, .28 * l));
+        for (var i = 0; i < _r(24 * l); i++) {
+          rect(
+            (i * 43 + t * 2) % 320,
+            86 + (i * 19) % 90 + _r(math.sin((t + i) / 4) * 2),
+            8,
+            1,
+            _rgba(255, 230, 180, .3),
+          );
+        }
+    }
+  }
+
+  @override
+  void draw(int t) {
+    sky(t, 90);
+    rect(0, 76, 320, 16, const Color(0xFF4F7D2E));
+    for (var x = 0; x < 320; x += 4) {
+      rect(
+        x,
+        70 + _r(7 * math.sin(x / 21) + 3 * math.sin(x / 7)),
+        4,
+        22,
+        const Color(0xFF6A9A3A),
+      );
+    }
+    rect(0, 84, 320, 12, const Color(0xFF0E7490));
+    for (var x = 0; x < 320; x += 6) {
+      rect(
+        (x + t * .6) % 320,
+        86 + ((x ~/ 6) % 3) * 3,
+        5,
+        1,
+        const Color(0xFF38BDF8),
+      );
+    }
+    rect(0, 94, 320, 2, const Color(0xFF8B6546));
+    rect(0, 96, 320, 84, const Color(0xFF65A30D));
+    for (var i = 0; i < 220; i++) {
+      rect(
+        (i * 37) % 320,
+        98 + (i * 13) % 80,
+        2,
+        1,
+        i.isOdd ? const Color(0xFF7CBD1E) : const Color(0xFF4D7C0F),
+      );
+    }
+    const path = Color(0xFFB08A5A);
+    rect(108, 128, 22, 52, path);
+    rect(104, 150, 26, 30, path);
+    rect(104, 148, 96, 12, path);
+    for (var i = 0; i < 40; i++) {
+      rect(
+        106 + (i * 17) % 90,
+        130 + (i * 7) % 48,
+        2,
+        1,
+        const Color(0xFF8A6A3E),
+      );
+    }
+    tree(t, 36, 120);
+    tree(t, 312, 100);
+    tree(t, 24, 156);
+    tree(t, 268, 92);
+    // บ้าน
+    rect(86, 98, 64, 30, const Color(0xFFC9985E));
+    for (var i = 0; i < 6; i++) {
+      rect(86, 102 + i * 5, 64, 1, const Color(0xFFB5702A));
+    }
+    rect(86, 98, 64, 2, const Color(0xFF6B4226));
+    for (var i = 0; i < 22; i++) {
+      final w = 76 - i * 3;
+      rect(
+        118 - w / 2,
+        96 - i,
+        w,
+        1,
+        i % 6 != 0 ? const Color(0xFF8B4A2B) : const Color(0xFFE8DCC4),
+      );
+    }
+    rect(134, 72, 9, 20, const Color(0xFF8A5A3A));
+    rect(133, 70, 11, 3, const Color(0xFF5E3B26));
+    rect(112, 108, 13, 20, const Color(0xFF5E3B26));
+    rect(122, 118, 2, 2, const Color(0xFFE9B949));
+    final fl = (t % 37 < 2) ? const Color(0xFFC9A030) : const Color(0xFFE9B949);
+    for (final p in const [(92, 104), (132, 104)]) {
+      rect(p.$1 - 1, p.$2 - 1, 14, 14, const Color(0xFF5E3B26));
+      rect(p.$1, p.$2, 12, 12, fl);
+      rect(p.$1 + 5, p.$2, 2, 12, const Color(0xFFB98A25));
+      rect(p.$1, p.$2 + 5, 12, 2, const Color(0xFFB98A25));
+    }
+    // คลังสินค้า (ลังไม้)
+    rect(56, 120, 12, 10, const Color(0xFFC9985E));
+    rect(56, 124, 12, 1, const Color(0xFF6B4226));
+    rect(68, 124, 12, 8, const Color(0xFFC9985E));
+    rect(68, 127, 12, 1, const Color(0xFF6B4226));
+    rect(60, 113, 10, 8, const Color(0xFFC9985E));
+    // ร้านค้า
+    rect(166, 104, 2, 24, const Color(0xFF5E3B26));
+    rect(194, 104, 2, 24, const Color(0xFF5E3B26));
+    for (var i = 0; i < 8; i++) {
+      rect(
+        166 + i * 4,
+        104,
+        4,
+        8,
+        i.isOdd ? Colors.white : const Color(0xFF0E7490),
+      );
+    }
+    rect(166, 112, 30, 2, const Color(0xFF2D7F8F));
+    rect(168, 118, 28, 10, const Color(0xFFC9985E));
+    for (final g in const [
+      (0xFFD8453A, 170),
+      (0xFF9BD64B, 176),
+      (0xFFE9B949, 182),
+      (0xFFFFFFFF, 188),
+    ]) {
+      rect(g.$2, 114, 4, 4, Color(g.$1));
+    }
+    // ครัว (เตา)
+    rect(150, 118, 14, 10, const Color(0xFF4B4A5C));
+    rect(148, 116, 18, 3, const Color(0xFF8F86A8));
+    rect(152, 111, 10, 6, const Color(0xFF0E7490));
+    rect(151, 111, 12, 1, const Color(0xFFE8DCC4));
+    rect(
+      156 + math.sin(t / 5) * 3,
+      108 - ((t * .7) % 14),
+      2,
+      2,
+      _rgba(240, 235, 255, .6),
+    );
+    // รั้ว
+    for (var x = 56; x <= 100; x += 8) {
+      rect(x, 160, 3, 12, const Color(0xFFC9985E));
+    }
+    rect(56, 163, 47, 2, const Color(0xFFC9985E));
+    rect(56, 168, 47, 2, const Color(0xFFC9985E));
+    for (var x = 140; x <= 184; x += 8) {
+      rect(x, 166, 3, 12, const Color(0xFFC9985E));
+    }
+    rect(140, 169, 47, 2, const Color(0xFFC9985E));
+    rect(140, 174, 47, 2, const Color(0xFFC9985E));
+    // บ่อ
+    ellipse(240, 141, 62, 25, const Color(0xFF6B4226));
+    ellipse(240, 141, 58, 22, const Color(0xFF3E7CB8));
+    ellipse(240, 140, 52, 18, const Color(0xFF4C93CC));
+    for (var i = 0; i < 5; i++) {
+      rect(
+        200 + ((t * .5 + i * 27) % 76),
+        128 + i * 5,
+        7,
+        1,
+        const Color(0xFFA5DDF5),
+      );
+    }
+    rect(186, 136, 18, 10, const Color(0xFF8A5A3A));
+    for (var i = 0; i < 4; i++) {
+      rect(187 + i * 4, 136, 1, 10, const Color(0xFF5E3B26));
+    }
+    final pond = data.pond.take(8).toList();
+    for (var i = 0; i < pond.length; i++) {
+      fish(
+        pond[i],
+        200 + ((i * 31 + t * .3 * (1 + i % 3)) % 62),
+        131 + (i % 3) * 7,
+        1,
+      );
+    }
+    const flowers = [
+      (70, 140),
+      (88, 150),
+      (160, 134),
+      (60, 172),
+      (196, 172),
+      (150, 150),
+      (34, 130),
+      (290, 168),
+    ];
+    const fc = [Color(0xFFE9B949), Colors.white, Color(0xFFF2B8A8)];
+    for (var i = 0; i < flowers.length; i++) {
+      rect(flowers[i].$1, flowers[i].$2, 2, 2, fc[i % 3]);
+      rect(flowers[i].$1, flowers[i].$2 + 2, 1, 3, const Color(0xFF2F7D3A));
+    }
+    // อุปกรณ์ที่ซื้อแล้ว
+    for (var i = 0; i < math.min(q('sand'), 8); i++) {
+      rect(86 + i * 8, 132 + (i % 2) * 3, 8, 5, const Color(0xFFC9985E));
+      rect(86 + i * 8, 136 + (i % 2) * 3, 8, 1, const Color(0xFF6B4226));
+    }
+    if (q('pump') > 0) {
+      rect(136, 134, 12, 9, const Color(0xFF8F86A8));
+      rect(140, 130, 4, 5, const Color(0xFF4B4A5C));
+      rect(133, 138, 4, 2, const Color(0xFF3E7CB8));
+    }
+    if (q('tank') > 0) {
+      rect(200, 150, 12, 16, const Color(0xFF3E7CB8));
+      rect(200, 150, 12, 3, const Color(0xFFA5DDF5));
+      rect(200, 164, 12, 2, const Color(0xFF23467A));
+    }
+    if (q('filter') > 0) {
+      rect(186, 150, 10, 10, const Color(0xFF8B4A2B));
+      rect(188, 152, 6, 3, const Color(0xFFA5DDF5));
+    }
+    if (q('net') > 0) {
+      for (var x = 184; x < 298; x += 4) {
+        rect(x, 118 + _r(math.sin(x / 9).abs() * 2), 2, 1, Colors.white);
+      }
+    }
+    if (q('shade') > 0) {
+      rect(206, 98, 40, 3, const Color(0xFF0E7490));
+      rect(208, 101, 2, 12, const Color(0xFF5E3B26));
+      rect(242, 101, 2, 12, const Color(0xFF5E3B26));
+    }
+    if (q('air') > 0) {
+      for (var i = 0; i < 4; i++) {
+        rect(
+          232 + i * 3,
+          150 - ((t * 1.1 + i * 9) % 22),
+          2,
+          2,
+          const Color(0xFFA5DDF5),
+        );
+      }
+    }
+    if (q('rack') > 0) {
+      rect(44, 134, 20, 2, const Color(0xFF8B6546));
+      rect(46, 134, 2, 10, const Color(0xFF8B6546));
+      rect(60, 134, 2, 10, const Color(0xFF8B6546));
+      for (var i = 0; i < 3; i++) {
+        rect(49 + i * 5, 136, 3, 6, const Color(0xFFE8DCC4));
+      }
+    }
+    if (q('jar') > 0) {
+      rect(74, 121, 5, 7, const Color(0xFFA5DDF5));
+      rect(74, 119, 5, 2, const Color(0xFFC9985E));
+      rect(80, 123, 5, 5, const Color(0xFFA5DDF5));
+    }
+    // ควันปล่องไฟ
+    for (var i = 0; i < 4; i++) {
+      final y = 66 - ((t * .5 + i * 9) % 32);
+      rect(
+        138 + math.sin((t + i * 11) / 8) * 4,
+        y,
+        3 + i,
+        3 + i,
+        _rgba(220, 210, 240, .55 - ((66 - y) / 60)),
+      );
+    }
+    if (data.damaged) rect(0, 96, 320, 84, _rgba(94, 59, 38, .35));
+    fx(t, data.fxType, data.fxLevel);
+  }
+}
+
+/// ข้อมูลที่ฉากบ่อต้องใช้
+class PondSceneData {
+  const PondSceneData({
+    required this.fish,
+    required this.water,
+    required this.o2,
+    required this.fed,
+  });
+
+  factory PondSceneData.fromState(GameState s) => PondSceneData(
+    fish: [for (final f in s.pond) (f.type, f.mature)],
+    water: s.water,
+    o2: s.o2,
+    fed: s.fed > 0,
+  );
+
+  final List<(String, bool)> fish;
+  final int water;
+  final double o2;
+  final bool fed;
+}
+
+class PondPainter extends PixelPainter {
+  PondPainter(super.tick, this.data);
+  final PondSceneData data;
+
+  @override
+  void draw(int t) {
+    rect(0, 0, 320, 30, const Color(0xFF38BDF8));
+    ellipse(280, 14, 12, 12, const Color(0xFFF4EBC8));
+    rect(0, 26, 320, 10, const Color(0xFF2F6B45));
+    for (var x = 0; x < 320; x += 6) {
+      rect(x, 22, 2, 5, const Color(0xFF3D8A55));
+    }
+    rect(0, 36, 320, 144, const Color(0xFF0E7490));
+    for (var y = 44; y < 180; y += 10) {
+      for (var i = 0; i < 320; i += 26) {
+        rect(
+          i + (y % 20) + _r(2 * math.sin((t + i) / 9)),
+          y,
+          8,
+          1,
+          const Color(0xFF4C93CC),
+        );
+      }
+    }
+    for (var k = 0; k < 5; k++) {
+      rect(
+        40 + k * 60 + _r(4 * math.sin(t / 20 + k)),
+        36,
+        16,
+        144,
+        _rgba(165, 221, 245, .07),
+      );
+    }
+    for (var x = 0; x < 320; x += 4) {
+      rect(
+        x,
+        36 + _r(2 * math.sin((x + t * 1.5) / 7)),
+        4,
+        3,
+        const Color(0xFFA5DDF5),
+      );
+    }
+    rect(0, 156, 320, 24, const Color(0xFF23467A));
+    for (var i = 0; i < 60; i++) {
+      rect((i * 53) % 320, 158 + (i * 7) % 20, 3, 1, const Color(0xFF2A5C94));
+    }
+    for (var i = 0; i < 8; i++) {
+      final x = 10 + i * 36;
+      for (var j = 0; j < 5; j++) {
+        rect(
+          x + _r(2 * math.sin((t + i * 5 + j * 4) / 10)),
+          156 - j * 6,
+          2,
+          6,
+          const Color(0xFF2F7D3A),
+        );
+      }
+    }
+    // น้ำขุ่นตามคุณภาพน้ำ
+    rect(0, 36, 320, 144, _rgba(94, 70, 30, (100 - data.water) / 230));
+    // ฟองอากาศตามออกซิเจน
+    for (var i = 0; i < _r(data.o2 / 10); i++) {
+      final bx = (i * 31 + 9) % 300, by = 156 - ((t * 1.3 + i * 19) % 118);
+      rect(bx, by, 4, 4, const Color(0xFFA5DDF5));
+      rect(bx + 1, by + 1, 1, 1, Colors.white);
+    }
+    if (data.fed) {
+      for (var i = 0; i < 10; i++) {
+        rect(
+          20 + i * 14,
+          38 + (t * .8 + i * 11) % 70,
+          2,
+          2,
+          const Color(0xFFC9985E),
+        );
+      }
+    }
+    for (var i = 0; i < data.fish.length; i++) {
+      final (type, mature) = data.fish[i];
+      fish(
+        type,
+        10 + ((i * 37 + t * (.5 + (i % 3) * .3)) % 140),
+        50 + (i * 17) % 80 + _r(4 * math.sin((t + i * 8) / 9)),
+        mature ? 3 : 2,
+      );
+    }
+  }
+}
+
+/// วิดเจ็ตฉาก — เดินเฟรมทุก 100ms เหมือนต้นแบบ (ปิดได้ผ่าน sceneAnimationProvider)
+class PixelScene extends ConsumerStatefulWidget {
+  const PixelScene({super.key, required this.painterBuilder, this.overlay});
+
+  final PixelPainter Function(ValueListenable<int> tick) painterBuilder;
+  final Widget? overlay;
+
+  @override
+  ConsumerState<PixelScene> createState() => _PixelSceneState();
+}
+
+class _PixelSceneState extends ConsumerState<PixelScene> {
+  final _tick = ValueNotifier<int>(0);
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    if (ref.read(sceneAnimationProvider)) {
+      _timer = Timer.periodic(
+        const Duration(milliseconds: 100),
+        (_) => _tick.value++,
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _tick.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AspectRatio(
+      aspectRatio: kSceneW / kSceneH,
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border.all(color: const Color(0xFF0A2229), width: 3),
+        ),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            RepaintBoundary(
+              child: CustomPaint(painter: widget.painterBuilder(_tick)),
+            ),
+            ?widget.overlay,
+          ],
+        ),
+      ),
+    );
+  }
+}

@@ -1,0 +1,121 @@
+/// Riverpod: ครอบ GameEngine และ SaveRepository
+library;
+
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../game/game_engine.dart';
+import '../game/game_state.dart';
+import '../save/save_repository.dart';
+
+/// ต้อง override ใน ProviderScope ด้วย SaveRepository ที่เปิดแล้ว
+final saveRepositoryProvider = Provider<SaveRepository>(
+  (ref) => throw UnimplementedError(
+    'override saveRepositoryProvider ใน ProviderScope',
+  ),
+);
+
+/// เปิด/ปิดแอนิเมชันฉากพิกเซล (ปิดในเทสต์)
+final sceneAnimationProvider = Provider<bool>((ref) => true);
+
+/// เกมที่กำลังเล่น — engine แก้สถานะภายใน จึงเพิ่ม revision ทุกครั้งเพื่อให้ UI วาดใหม่
+class GameSession {
+  const GameSession(this.engine, this.slot, this.revision);
+  final GameEngine engine;
+  final int slot;
+  final int revision;
+  GameState get state => engine.state;
+}
+
+class GameController extends Notifier<GameSession?> {
+  @override
+  GameSession? build() => null;
+
+  SaveRepository get _repo => ref.read(saveRepositoryProvider);
+
+  GameEngine get engine => state!.engine;
+
+  void _bump() {
+    final s = state;
+    if (s != null) state = GameSession(s.engine, s.slot, s.revision + 1);
+  }
+
+  /// สร้างเกมใหม่ในช่องที่เลือก แล้วบันทึกทันที (newSlot)
+  Future<void> newGame(int slot, String name) async {
+    final e = GameEngine.newGame(name);
+    await _repo.save(slot, e.state);
+    state = GameSession(e, slot, 0);
+    ref.invalidate(slotsProvider);
+  }
+
+  /// โหลดเกม — โยน SaveException ถ้าโหลดไม่ได้
+  void load(int slot) {
+    final s = _repo.load(slot);
+    final e = GameEngine(s)..calcWater();
+    state = GameSession(e, slot, 0);
+  }
+
+  /// โหลดช่องที่เซฟล่าสุด (Continue) คืน false ถ้ายังไม่มีเซฟ
+  bool continueLatest() {
+    final slot = _repo.latestSlot();
+    if (slot == null) return false;
+    load(slot);
+    return true;
+  }
+
+  /// ทำการกระทำกับ engine แล้วแจ้ง UI
+  ActionResult run(ActionResult Function(GameEngine e) action) {
+    final r = action(engine);
+    _bump();
+    return r;
+  }
+
+  /// จบวัน แล้วบันทึกอัตโนมัติ (ยกเว้น Game Over)
+  Future<DayReport> endDay() async {
+    final r = engine.endDay();
+    if (!r.gameOver) await _repo.save(state!.slot, engine.state);
+    _bump();
+    ref.invalidate(slotsProvider);
+    return r;
+  }
+
+  Future<bool> save() async {
+    final s = state;
+    if (s == null) return false;
+    final ok = await _repo.save(s.slot, s.state);
+    ref.invalidate(slotsProvider);
+    return ok;
+  }
+
+  /// กลับเมนูหลัก (บันทึกให้อัตโนมัติ)
+  Future<void> exitToMenu() async {
+    await save();
+    state = null;
+  }
+
+  /// ออกจากเกมโดยไม่บันทึก (ใช้หลัง Game Over)
+  void close() => state = null;
+}
+
+final gameProvider = NotifierProvider<GameController, GameSession?>(
+  GameController.new,
+);
+
+/// รายการช่องเซฟ 1-3
+class SlotsController extends Notifier<Map<int, SlotInfo?>> {
+  @override
+  Map<int, SlotInfo?> build() => ref.read(saveRepositoryProvider).listSlots();
+
+  Future<void> rename(int slot, String name) async {
+    await ref.read(saveRepositoryProvider).rename(slot, name);
+    ref.invalidateSelf();
+  }
+
+  Future<void> delete(int slot) async {
+    await ref.read(saveRepositoryProvider).delete(slot);
+    ref.invalidateSelf();
+  }
+}
+
+final slotsProvider = NotifierProvider<SlotsController, Map<int, SlotInfo?>>(
+  SlotsController.new,
+);

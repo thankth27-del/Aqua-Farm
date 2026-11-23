@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <!-- แทนที่ด้วยค่า --base-href ตอน build (GitHub Actions ใส่ /<ชื่อ repo>/ ให้อัตโนมัติ) -->
+  <base href="$FLUTTER_BASE_HREF">
+
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="AQUA FARM — From Farm to Food เกมจำลองฟาร์มปลา เตรียมเสบียงรับมือภัยพิบัติ">
+
+  <!-- เต็มจอถึงขอบ (รอยบาก / home indicator) — แอปใช้ SafeArea กันเนื้อหาไม่ให้โดนบัง -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#0F3A49">
+
+  <!-- iPhone: Add to Home Screen แล้วเปิดเต็มจอแบบแอป (ไม่มีแถบ Safari) -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="AQUA FARM">
+  <meta name="format-detection" content="telephone=no">
+  <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png">
+
+  <link rel="icon" type="image/png" href="favicon.png"/>
+  <title>AQUA FARM</title>
+  <link rel="manifest" href="manifest.json">
+
+  <style>
+    html, body { margin: 0; height: 100%; background: #04161C; overscroll-behavior: none; }
+    /* iPhone ล็อกแนวตั้งด้วยโค้ดไม่ได้ จึงแสดงข้อความให้หมุนกลับเมื่อโทรศัพท์อยู่แนวนอน */
+    #rotate { display: none; }
+    @media (orientation: landscape) and (max-height: 500px) and (hover: none) {
+      #rotate {
+        display: flex; position: fixed; inset: 0; z-index: 2147483647;
+        align-items: center; justify-content: center; flex-direction: column; gap: 12px;
+        background: #04161C; color: #E9B949; font: bold 20px Tahoma, sans-serif; text-align: center;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="rotate"><div style="font-size:48px">📱↻</div>กรุณาหมุนโทรศัพท์เป็นแนวตั้ง</div>
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>

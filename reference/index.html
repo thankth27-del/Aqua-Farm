@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AQUA FARM — From Farm to Food (Prototype)</title>
+<style>
+:root{--k:#0a2229;--bg:#04161c;--pn:#0f3a49;--pu:#0E7490;--pl:#E8DCC4;--go:#e9b949;--mu:#E8DCC4;--rd:#e0584d}
+*{box-sizing:border-box;user-select:none}
+html,body{margin:0;height:100%;background:radial-gradient(#0b3a45,#04161c);color:#fff;font-family:Tahoma,'Noto Sans Thai',sans-serif;font-size:15px;overflow:hidden}
+body{display:flex;align-items:center;justify-content:center}
+#game{position:relative;width:min(100vw - 24px,(100vh - 24px)*16/9);aspect-ratio:16/9;background:#000;box-shadow:0 0 0 4px var(--k),0 0 0 8px var(--pu),0 0 0 12px var(--k);overflow:hidden}
+#cv{position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated}
+img.i{image-rendering:pixelated;vertical-align:middle}
+#side{position:absolute;left:0;top:0;bottom:0;width:15%;min-width:128px;background:linear-gradient(#0f3a49f2,#0b2f3af2);border-right:4px solid var(--k);box-shadow:inset -4px 0 0 var(--pu);padding:10px 8px;display:flex;flex-direction:column;gap:4px;z-index:5}
+#side.off{display:none}
+.logo{text-align:center;color:var(--go);font-weight:bold;font-size:17px;line-height:1.1;text-shadow:2px 2px 0 #000;margin-bottom:6px}.logo small{display:block;color:var(--mu);font-size:11px}
+.mi{display:flex;align-items:center;gap:8px;padding:5px 8px;background:transparent;border:3px solid transparent;color:#fff;font:inherit;font-weight:bold;cursor:pointer;text-align:left;transition:transform .12s,background .12s}
+.mi:hover{transform:translateX(5px);background:#2d7f8f;border-color:var(--pl)}
+.mi.on{background:var(--go);color:var(--k);border-color:#fff3c4;transform:translateX(5px)}
+#hud{position:absolute;top:2.2%;left:calc(15% + 14px);right:14px;display:flex;gap:10px;align-items:center;z-index:4;flex-wrap:wrap}
+#hud.hs{left:14px}
+.plq{background:var(--pn);box-shadow:0 0 0 3px var(--k),0 0 0 5px var(--pu);padding:4px 10px;display:flex;align-items:center;gap:7px;font-weight:bold;margin:3px}
+.seg{width:92px;height:14px;background:var(--k);border:2px solid var(--k)}
+.seg i{display:block;height:100%;background:repeating-linear-gradient(90deg,#69b4e6 0 8px,#3e7cb8 8px 10px);transition:width .4s}
+.blink{animation:bl 1s steps(2) infinite}@keyframes bl{50%{opacity:.35}}
+#ui{position:absolute;inset:0;z-index:3;pointer-events:none}
+#ui>*{pointer-events:auto}
+.win{position:absolute;background:#0f3a49f5;box-shadow:0 0 0 4px var(--k),0 0 0 8px var(--pu),0 0 0 12px var(--k),inset 0 4px 0 #ffffff14;padding:14px 16px;overflow:auto;max-height:78%}
+.win.c{left:calc(15% + 4%);right:4%;top:15%}
+.win.n{left:50%;top:50%;transform:translate(-50%,-50%);width:min(440px,70%);max-height:90%;text-align:center}
+.win.r{right:3.5%;top:14%}
+.win.in{animation:pop .3s steps(6)}@keyframes pop{from{opacity:0;margin-top:16px}to{opacity:1;margin-top:0}}
+.win::-webkit-scrollbar{width:10px}.win::-webkit-scrollbar-thumb{background:var(--pu)}
+h2{margin:0 0 8px;color:var(--go);text-shadow:2px 2px 0 #000;font-size:21px}
+h3{margin:0;font-size:15px}p{margin:3px 0;color:var(--mu);font-size:13px}
+.big{font-size:44px;color:var(--go);font-weight:bold;text-shadow:3px 3px 0 #000;margin:4px 0}
+.btn{background:var(--pu);color:#fff;border:3px solid var(--pl);padding:7px 12px;font:inherit;font-weight:bold;cursor:pointer;box-shadow:0 4px 0 var(--k);transition:transform .1s,filter .1s;margin:3px;display:inline-flex;align-items:center;gap:6px;justify-content:center}
+.btn:hover:not(:disabled){filter:brightness(1.2);transform:translateY(-2px)}.btn:active:not(:disabled){transform:translateY(3px);box-shadow:0 1px 0 var(--k)}
+.btn:disabled{opacity:.4;cursor:not-allowed}.btn.go{background:var(--go);border-color:#fff3c4;color:var(--k)}.btn.dk{background:#164E63}
+.btn.w{width:100%;padding:11px;font-size:17px;margin:5px 0}
+.gr{display:flex;flex-wrap:wrap;gap:12px}
+.slot{width:112px;background:#14505f;border:3px solid var(--k);box-shadow:inset 0 0 0 3px #2d7f8f;padding:8px 4px;text-align:center;cursor:pointer;transition:transform .12s,box-shadow .12s;position:relative}
+.slot:hover{transform:translateY(-4px);box-shadow:inset 0 0 0 3px var(--go)}
+.slot.dis{opacity:.45;cursor:not-allowed}
+.slot b{display:block;font-size:13px;margin-top:3px}.slot span{font-size:12px;color:var(--go);font-weight:bold}
+.cnt{position:absolute;right:3px;top:3px;background:var(--k);color:#fff;font-size:11px;font-weight:bold;padding:1px 5px}
+.rc{display:flex;gap:10px;align-items:center;background:#14505f;border:3px solid var(--k);box-shadow:inset 0 0 0 3px #2d7f8f;padding:8px 10px;margin-bottom:10px;flex-wrap:wrap}
+.mini{display:inline-flex;align-items:center;gap:3px;background:var(--k);padding:2px 6px;font-size:12px;margin-right:5px;font-weight:bold}
+.mini.no{color:#ff8f86}
+.bar{height:16px;background:var(--k);border:3px solid var(--k);margin:3px 0 7px;box-shadow:0 0 0 2px #2d7f8f}.bar i{display:block;height:100%;transition:width .4s;background-image:repeating-linear-gradient(90deg,transparent 0 8px,#00000055 8px 10px)}
+.gd{font-size:84px;font-weight:bold;line-height:1;text-shadow:4px 4px 0 #000}
+table{width:100%;border-collapse:collapse}td{padding:4px 6px;border-bottom:2px solid #164E63;font-size:14px}
+.bub{position:absolute;left:calc(15% + 5%);right:5%;bottom:4%;background:#fff;color:var(--k);padding:9px 14px;font-weight:bold;box-shadow:0 0 0 3px var(--k),0 0 0 6px var(--go);text-align:center}
+.warnb{position:absolute;left:calc(15% + 5%);bottom:16%;background:#3a1620;box-shadow:0 0 0 3px var(--k),0 0 0 6px var(--rd);padding:7px 14px;font-weight:bold;display:flex;gap:8px;align-items:center}
+input{font:inherit;padding:8px;background:var(--k);color:#fff;border:3px solid var(--pl);width:70%;text-align:center;user-select:text}
+#toast{position:absolute;left:50%;top:12%;transform:translateX(-50%);z-index:9;display:flex;flex-direction:column;gap:6px;align-items:center;pointer-events:none}
+#toast div{background:var(--go);color:var(--k);padding:7px 16px;font-weight:bold;box-shadow:0 0 0 3px var(--k),0 0 0 6px #fff;animation:pop .25s steps(4)}
+#toast div.bad{background:var(--rd);color:#fff}
+.pips{display:flex;gap:6px}.pips i{width:22px;height:22px;background:var(--k);box-shadow:inset 0 0 0 3px #2d7f8f}.pips i.l{background:var(--rd);box-shadow:inset 0 0 0 3px #ffb3ac}
+.mask{position:absolute;inset:0;background:#000a;z-index:8;pointer-events:auto}
+.mrow{display:flex;align-items:center;gap:5px;font-size:10px;line-height:1}.mrow span{width:36px;color:var(--mu)}
+.mb{height:6px;background:var(--k);width:110px;margin:2px 0}.mb i{display:block;height:100%;transition:width .3s}
+.pf{cursor:pointer;gap:10px}.pf:hover{filter:brightness(1.2)}
+.hl{animation:hlp .8s steps(2) infinite}@keyframes hlp{50%{box-shadow:0 0 0 3px var(--k),0 0 0 7px var(--go)}}
+.mi.hl{background:#2d7f8f;border-color:var(--go)}
+.tut{position:absolute;left:calc(15% + 3%);bottom:3%;width:min(620px,60%);background:#fff;color:var(--k);padding:8px 14px;box-shadow:0 0 0 3px var(--k),0 0 0 6px var(--go);z-index:6;pointer-events:auto}
+.tut .btn{font-size:12px;padding:3px 10px}.tut .dots{color:#0E7490;letter-spacing:2px}
+#ui.tutOn .win{max-height:60%}
+.stat{display:grid;grid-template-columns:1fr 1fr;gap:3px 14px;font-size:13px}
+.ok{color:#7be07a}.no{color:#ff8f86}
+.win.r{width:44%}
+.rc h3{margin:0}
+.tagc{display:inline-block;color:#0a2229;font-size:11px;font-weight:bold;padding:1px 6px;margin-left:6px}
+select{font:inherit;background:var(--k);color:#fff;border:3px solid var(--pl);padding:4px}
+.rc{margin-bottom:8px}
+@media (max-width:760px){#side{width:50px;min-width:50px;padding:6px 3px}.mi span,.logo{display:none}.mi{padding:4px}#hud{left:58px;gap:4px}.win.c{left:58px;right:2%}.bub,.warnb,.tut{left:58px}.win.r{width:72%}.tut{width:84%}.plq{padding:2px 6px;font-size:12px}}
+</style></head><body>
+<div id="game"><canvas id="cv" width="320" height="180"></canvas><aside id="side"></aside><div id="hud"></div><div id="ui"></div><div id="toast"></div></div>
+<script>
+const PAL={K:'#0a2229',W:'#ffffff',G:'#e9b949',g:'#b98a25',R:'#d8453a',r:'#ff8a7a',O:'#f08a3c',L:'#9bd64b',N:'#2f7d3a',B:'#3e7cb8',b:'#a5ddf5',V:'#23467a',T:'#c9985e',D:'#6b4226',P:'#0E7490',p:'#E8DCC4',Y:'#8f86a8',S:'#b8c0d4',C:'#f2e2c2'};
+const MAPS={
+dry:'............|............|..KKKKKKKK..|.KTTTTTTTTK.|KTWKTTTTTOOK|KTTTTTTTTTOK|.KTTTTTTTTK.|..KKKKKKKK..|............|............|............|............',
+can:'............|...KKKKKK...|..KSSSSSSK..|..KKKKKKKK..|..KRRRRRRK..|..KRWWWWRK..|..KRWRRWRK..|..KRWWWWRK..|..KRRRRRRK..|..KKKKKKKK..|..KSSSSSSK..|...KKKKKK...',
+jar:'............|...KTTTTK...|...KKKKKK...|..KbbbbbbK..|.KbWbbbbbbK.|.KbWbbbbbbK.|.KbbbbbbbbK.|.KbbbbbbbbK.|.KbbbbbbbbK.|.KbbbbbbbbK.|..KKKKKKKK..|............',
+pick:'............|...KTTTTK...|...KKKKKK...|..KbbbbbbK..|.KbbbbbbbbK.|.KbSSSSbbbK.|.KbSKSSSObK.|.KbbSSSSbbK.|.KbbbbbbbbK.|.KbbbbbbbbK.|..KKKKKKKK..|............',
+salt:'............|...KTTTTK...|...KKKKKK...|..KbbbbbbK..|.KbWWWWWWbK.|.KbWWWWWWbK.|.KbWWWWWWbK.|.KbWWWWWWbK.|.KbWWWWWWbK.|.KbbbbbbbbK.|..KKKKKKKK..|............',
+vin:'....KTTK....|....KKKK....|....KbbK....|...KbbbbK...|..KbbbbbbK..|..KbWWWWbK..|..KbWKKWbK..|..KbWWWWbK..|..KbbbbbbK..|..KbbbbbbK..|...KKKKKK...|............',
+herb:'............|....N..N....|...NLNNLN...|..NLLNNLLN..|.NLLNLLNLLN.|..NLLNNLLN..|...NNLLNN...|....NLLN....|.....DD.....|.....DD.....|.....KK.....|............',
+bake:'............|..KKKKKKKK..|.KOOOOOOOOK.|KOGGGGGGGOOK|KOGGgGGgGGOK|KOGWKGGGGGOK|.KOOOOOOOOK.|..KKKKKKKK..|KSSSSSSSSSSK|.KKKKKKKKKK.|............|............',
+hsoup:'....S..S....|...S..S.....|............|..KKNNNNKK..|.KNLNNLNNNK.|.KNNLNNWNNK.|KKKKKKKKKKKK|KWWWWWWWWWWK|.KWWSSWWWWK.|..KWWWWWWK..|...KKKKKK...|............',
+fridge:'..KKKKKKKK..|..KSSSSSSK..|..KSSSSSSK..|..KSYSSSSK..|..KSSSSSSK..|..KKKKKKKK..|..KSSSSSSK..|..KSYSSSSK..|..KSSSSSSK..|..KSSSSSSK..|..KKKKKKKK..|...K....K...',
+rack:'............|.KKKKKKKKKK.|.KDDDDDDDDK.|.KD.SS.SS.K.|.KD.SS.SS.K.|.KD.SS.SS.K.|.KD......DK.|.KD......DK.|.KD......DK.|.KD......DK.|.KK......KK.|............',
+canner:'....KKKK....|...KSSSSK...|..KKKKKKKK..|.KSSSSSSSSK.|KSSWSSSSSSSK|KSSWSSSSSSSK|KSSSSSSGGSSK|KSSSSSSGGSSK|KSSSSSSSSSSK|.KKKKKKKKKK.|..KK....KK..|............',
+pump:'............|......KK....|.....KSSK...|..KKKKSSKKK.|.KSSSSSSSSSK|.KSSYYSSSSSK|.KSSYYSSSBBK|.KSSSSSSSBbK|.KKKKKKKKKK.|..KK....KK..|............|............',
+tank:'....KKKK....|..KKbbbbKK..|.KbbbbbbbbK.|.KbWbbbbbbK.|.KbWbbbbbbK.|.KBBBBBBBBK.|.KBBBBBBBBK.|.KBBBBBBBBK.|.KBBBBBBBVK.|..KKVVVVKK..|....KKKK....|............',
+shade:'............|....KKKK....|..KKGGWWKK..|.KGGWWGGWWK.|KGGWWGGWWGGK|KKKKKKKKKKKK|.....DD.....|.....DD.....|.....DD.....|.....DD.....|....KDDK....|............',
+net:'............|KSKSKSKSKSKS|SKSKSKSKSKSK|KSKSKSKSKSKS|SKSKSKSKSKSK|KSKSKSKSKSKS|SKSKSKSKSKSK|KSKSKSKSKSKS|SKSKSKSKSKSK|............|............|............',
+filt:'............|..KKKKKKKK..|.KPPPPPPPPK.|.KPbbbbbbPK.|.KPbWbbWbPK.|.KPbbbbbbPK.|.KPbWbbWbPK.|.KPbbbbbbPK.|.KPPPPPPPPK.|..KKKKKKKK..|.KBBK..KBBK.|............',
+face:'...KKKKKK...|..KDDDDDDK..|.KDDDDDDDDK.|.KDTTTTTTDK.|.KTTKTTKTTK.|.KTTTTTTTTK.|.KTTTRRTTTK.|..KTTTTTTK..|...KKKKKK...|..KPPPPPPK..|.KPPPPPPPPK.|.KKKKKKKKKK.',
+garlic:'.....KK.....|....KWWK....|...KWWWWK...|..KWWWWWWK..|.KWWSWWSWWK.|.KWWSWWSWWK.|.KWWSWWSWWK.|.KWWSWWSWWK.|..KWWSWSWK..|...KKWWKK...|....KKKK....|............',
+chili:'........NN..|.......KNNK.|......KRRRK.|.....KRRrRK.|....KRRRRK..|...KRRRRK...|..KRRRRK....|.KRRRRK.....|.KRRRK......|KRRKK.......|KKK.........|............',
+lime:'....KKKK....|..KKNNNNKK..|.KNLLLLLLNK.|.KNLWLLWLNK.|KNLLLWWLLLNK|KNLWWLLWWLNK|KNLLLWWLLLNK|.KNLWLLWLNK.|.KNLLLLLLNK.|..KKNNNNKK..|....KKKK....|............',
+veg:'...KNNKNNK..|..KNLLNLLNK.|.KNLLNNLLNK.|KNLLNNLLLNK.|.KNLNNNNLLNK|.KNLLNNLLLNK|..KNLNNLLNK.|...KWWWWK...|...KWCCWK...|...KWCCWK...|....KKKK....|............',
+spice:'....KRRK....|....KRRK....|....KYYK....|...KKYYKK...|..KDDDDDDK..|..KDWWWWDK..|..KDWKKWDK..|..KDWWWWDK..|..KDDDDDDK..|..KDDDDDDK..|...KKKKKK...|............',
+fry:'............|..KKKKKKKK..|.KGGGGGGGOK.|KGGgGGgGGOOK|KGGGGGGGGGOK|KGWKGGgGGOK.|.KGGGGGGOK..|..KKKKKKK...|KWWWWWWWWWWK|.KSSSSSSSSK.|..KKKKKKKK..|............',
+tomyum:'....S..S....|...S..S.....|............|..KKRRRRKK..|.KRORRORRRK.|.KRRLRRWRRK.|KKKKKKKKKKKK|KPPPPPPPPPPK|.KPPppPPPPK.|..KPPPPPPK..|...KKKKKK...|............',
+garl:'............|..KKKKKKK...|.KCCGCCCCK..|KCCCCCGCCCK.|KCGCCCCCGCK.|.KCCCCCCCK..|..KKKKKKK...|KWWWWWWWWWWK|.KSSSSSSSSK.|..KKKKKKKK..|............|............',
+coin:'....KKKK....|..KKGGGGKK..|.KGGGggGGGK.|.KGGGgGGGGK.|KGGGGgGGGGGK|KGGGGgGGGGgK|KGGGGgGGGGgK|.KGGGgGGGgK.|.KGGGggGGgK.|..KKGGggKK..|....KKKK....|............',
+drop:'.....KK.....|....KbbK....|....KbBK....|...KbbBBK...|..KbbBBBBK..|.KbWBBBBBBK.|.KbWBBBBBBK.|.KBBBBBBBVK.|..KBBBBBVK..|...KKVVKK...|....KKKK....|............',
+bub:'............|...KKKK.....|..KbWbbK....|..KbbbbK.KK.|...KKKK.KbbK|.....KKKKbWK|....KbbK.KK.|...KbWbbK...|...KbbbbK...|....KKKK....|............|............',
+cal:'..K......K..|KKKKKKKKKKKK|KPPPPPPPPPPK|KWWWWWWWWWWK|KWPPWPPWPPWK|KWWWWWWWWWWK|KWPPWPPWPPWK|KWWWWWWWWWWK|KWPPWPPWGGWK|KWWWWWWWWWWK|KKKKKKKKKKKK|............',
+sand:'............|............|...KKKKKK...|..KTTTTTTK..|.KTTDTTDTTK.|KKKKKKKKKKKK|KTTTDTTDTTTK|KTDTTTTTTDTK|KKKKKKKKKKKK|.KTTDTTDTTK.|..KKKKKKKK..|............',
+shield:'.KKKKKKKKKK.|KPPPPPPPPPPK|KPPGGGGGGPPK|KPPGggggGPPK|KPPGgPPgGPPK|KPPGgPPgGPPK|.KPGgggGPPK.|.KPPGGGPPPK.|..KPPPPPPK..|...KPPPPK...|....KPPK....|.....KK.....',
+wrench:'.....KKK....|....KSSSK...|...KSSKSSK..|...KSK.KSK..|....KKKSSK..|.....KSSK...|....KSSK....|...KSSK.....|..KSSK......|.KYYK.......|.KKK........|............',
+house:'.....KK.....|....KPPK....|...KPPPPK...|..KPPpPPPK..|.KPPPPPPPPK.|KKKKKKKKKKKK|.KTTTTTTTTK.|.KTGGTTDDTK.|.KTGGTTDDTK.|.KTTTTTDDTK.|.KKKKKKKKKK.|............',
+crate:'............|KKKKKKKKKKKK|KTTTTTTTTTTK|KDDDDDDDDDDK|KTTTTGGTTTTK|KTTTTGGTTTTK|KDDDDDDDDDDK|KTTTTTTTTTTK|KTTTTTTTTTTK|KDDDDDDDDDDK|KKKKKKKKKKKK|............',
+warn:'.....KK.....|....KGGK....|....KGGK....|...KGGGGK...|...KGKKGK...|..KGGKKGGK..|..KGGKKGGK..|.KGGGGGGGGK.|.KGGGKKGGGK.|KGGGGKKGGGGK|KKKKKKKKKKKK|............',
+scroll:'.KKKKKKKKK..|KWWWWWWWWKK.|KWYYYYYYWWK.|KWWWWWWWWWK.|KWYYYYYWWWK.|KWWWWWWWWWK.|KWYYYYYYWWK.|KWWWWWWWWWK.|KWYYYGGWWWK.|KWWWWGGWWWK.|.KKKKKKKKK..|............',
+gear:'....KKKK....|.KK.KYYK.KK.|KYYKKYYKKYYK|.KYYYYYYYYK.|..KYYKKYYK..|KKYYKppKYYKK|KYYYKppKYYYK|..KYYKKYYK..|.KYYYYYYYYK.|KYYKKYYKKYYK|.KK.KYYK.KK.|....KKKK....'};
+const FISH={
+nila:{n:'ปลานิล',b:40,s:90,gm:1,tough:4,o2:35,feed:1,yield:2,c:'#8e9bb0',f:'#7c5a6b',pro:'ทนทาน เลี้ยงง่าย โตเร็วปานกลาง',con:'ราคาขายปานกลาง',who:'ผู้เล่นมือใหม่'},
+dook:{n:'ปลาดุก',b:30,s:80,gm:.75,tough:5,o2:20,feed:1,yield:2,c:'#4b4a5c',f:'#34303f',wh:1,pro:'ทนที่สุด ออกซิเจนต่ำก็รอด',con:'โตช้า',who:'ผู้เล่นที่กลัวน้ำเสีย'},
+tap:{n:'ปลาตะเพียน',b:25,s:65,gm:1.25,tough:3,o2:40,feed:1,yield:1,c:'#d9dee8',f:'#e0584d',pro:'ราคาถูก โตเร็ว',con:'ให้เนื้อน้อย ราคาขายต่ำ',who:'ผู้เล่นทุนน้อย'},
+carp:{n:'ปลาคาร์พ',b:60,s:140,gm:.6,tough:4,o2:45,feed:2,yield:3,c:'#e08a3c',f:'#f2c36b',pro:'ราคาขายสูง ให้เนื้อมาก',con:'โตช้า กินอาหารมาก',who:'ผู้เล่นที่วางแผนระยะยาว'},
+rad:{n:'ปลาแรด',b:55,s:120,gm:.7,tough:3,o2:40,feed:2,yield:3,c:'#6b6a58',f:'#4a493c',hu:1,pro:'ตัวใหญ่ ให้เนื้อมาก',con:'โตช้า ไวต่อน้ำเสียปานกลาง',who:'ผู้เล่นที่เน้นผลผลิตอาหาร'},
+chon:{n:'ปลาช่อน',b:70,s:170,gm:.5,tough:3,o2:50,feed:3,yield:3,c:'#6b7a3a',f:'#4a5a2a',st:1,pro:'ราคาขายสูงที่สุด',con:'โตช้ามาก กินอาหารเยอะ ต้องการออกซิเจนสูง',who:'ผู้เล่นที่ดูแลน้ำเก่ง'},
+swai:{n:'ปลาสวาย',b:45,s:100,gm:.9,tough:4,o2:30,feed:2,yield:3,c:'#a9b4c2',f:'#7f8aa0',wh:1,pro:'ทนทาน ให้เนื้อมาก',con:'กินอาหารปานกลาง',who:'ผู้เล่นที่ต้องการสมดุล'},
+nuan:{n:'ปลานวลจันทร์',b:35,s:75,gm:1.1,tough:2,o2:55,feed:1,yield:1,c:'#eef2f7',f:'#c9d3e0',pro:'โตเร็ว กินอาหารน้อย',con:'บอบบาง ต้องการออกซิเจนสูง',who:'ผู้เล่นที่ดูแลบ่อละเอียด'}};
+const ING={garlic:['กระเทียม',8,'garlic'],chili:['พริก',6,'chili'],lime:['มะนาว',5,'lime'],veg:['ผัก',7,'veg'],spice:['เครื่องปรุง',10,'spice'],salt:['เกลือ',4,'salt'],vin:['น้ำส้มสายชู',6,'vin'],herb:['สมุนไพร',9,'herb'],cans:['กระป๋อง',8,'can']};
+const IT={
+fry:{n:'ปลาทอด',ic:'fry',v:110,hun:25,en:10,kcal:320,pro:24,shelf:3,cool:1,t:'meal'},
+garlic:{n:'ปลาผัดกระเทียม',ic:'garl',v:130,hun:28,en:12,kcal:280,pro:23,shelf:3,cool:1,t:'meal'},
+tomyum:{n:'ต้มยำปลา',ic:'tomyum',v:160,hun:32,en:15,kcal:210,pro:22,shelf:3,cool:1,t:'meal'},
+bake:{n:'ปลาอบ',ic:'bake',v:140,hun:30,en:12,kcal:260,pro:28,shelf:3,cool:1,t:'meal'},
+herb:{n:'ปลาต้มสมุนไพร',ic:'hsoup',v:150,hun:30,en:14,kcal:190,pro:24,shelf:3,cool:1,t:'meal'},
+dried:{n:'ปลาแห้ง',ic:'dry',v:70,hun:20,en:8,kcal:250,pro:45,shelf:14,t:'pres'},
+salted:{n:'ปลาเค็ม (หมักเกลือ)',ic:'salt',v:90,hun:22,en:8,kcal:230,pro:40,shelf:30,t:'pres'},
+pickled:{n:'ปลาดอง',ic:'pick',v:80,hun:20,en:8,kcal:180,pro:30,shelf:21,t:'pres'},
+canned:{n:'ปลากระป๋อง',ic:'can',v:120,hun:25,en:10,kcal:240,pro:32,shelf:90,t:'pres'}};
+const RC={fry:{need:{spice:1},time:20},garlic:{need:{garlic:1,spice:1},time:25},tomyum:{need:{chili:1,lime:1,veg:1},time:35},bake:{need:{spice:1,lime:1},time:45},herb:{need:{herb:1,veg:1},time:40}};
+const PR={dried:{name:'ตากแห้ง (Drying)',need:{},req:'rack',days:2,d:'ใช้แผงตาก ไม่ใช้ไฟฟ้า เก็บได้ ~14 วัน'},salted:{name:'หมักเกลือ (Salting)',need:{salt:2},req:'jar',days:3,d:'ใช้เกลือ 2 + โหลหมัก เก็บได้ ~30 วัน'},pickled:{name:'ดอง (Pickling)',need:{vin:1},req:'jar',days:2,d:'ใช้น้ำส้มสายชู + โหลดอง เก็บได้ ~21 วัน'},canned:{name:'บรรจุกระป๋อง (Canning)',need:{cans:1},req:'canner',days:2,d:'ใช้กระป๋อง + เครื่องบรรจุ เก็บได้ ~90 วัน'}};
+const EQ={
+sand:{n:'กระสอบทราย',p:30,ic:'sand',d:'กั้นน้ำเข้าฟาร์ม ใช้หมด 1 ใบต่อวันที่น้ำท่วม',u:'ลดความเสียหายจากน้ำท่วม'},
+pump:{n:'เครื่องสูบน้ำ',p:200,ic:'pump',d:'สูบน้ำที่ท่วมออกจากพื้นที่ฟาร์ม ใช้ซ้ำได้',u:'ลดระดับน้ำท่วม'},
+net:{n:'ตาข่ายกันปลาหลุด',p:80,ic:'net',d:'คลุมบ่อกันปลาหลุดตอนน้ำล้น',u:'ลดจำนวนปลาที่หลุดออกจากบ่อ'},
+tank:{n:'ถังเก็บน้ำ',p:150,ic:'tank',d:'สำรองน้ำไว้เติมบ่อ',u:'รับมือภัยแล้งและอากาศร้อน'},
+shade:{n:'หลังคาบังแดด',p:120,ic:'shade',d:'ลดแสงแดดที่ส่องผิวน้ำ',u:'ลดอุณหภูมิน้ำ'},
+filter:{n:'ระบบกรองสำรอง',p:160,ic:'filt',d:'กรองน้ำเสียที่ไหลเข้าบ่อ',u:'รับมือน้ำเสีย'},
+air:{n:'เครื่องเติมอากาศ',p:130,ic:'bub',d:'เพิ่มออกซิเจนละลายน้ำ',u:'รับมือน้ำเสียและอากาศร้อน'},
+rack:{n:'แผงตากปลา',p:60,ic:'rack',d:'พื้นที่ตากปลาแห้ง 1 ชุด/ 1 แผง',u:'ถนอมอาหารแบบตากแห้ง',k:1},
+jar:{n:'โหลหมัก/ดอง',p:40,ic:'jar',d:'ภาชนะหมักเกลือและดอง 1 ชุด/ 1 โหล',u:'ถนอมอาหารแบบหมักและดอง',k:1},
+fridge:{n:'ตู้เย็น',p:400,ic:'fridge',d:'ชะลอการเน่าเสียของอาหารสุกครึ่งหนึ่ง ต้องใช้ไฟฟ้า',u:'ไฟดับแล้วอาหารเสียเร็วขึ้น',k:1},
+canner:{n:'เครื่องบรรจุกระป๋อง',p:300,ic:'canner',d:'ปลดล็อกการทำปลากระป๋อง 1 ชุด/ 1 เครื่อง',u:'เสบียงเก็บได้นานที่สุด',k:1}};
+const DZ={
+flood:{n:'น้ำท่วม',lead:5,dur:4,eq:{sand:4,pump:1,net:1},lv:[.35,.65,1,.45],out:[0,1,1,0],mk:[0,1,1,0],m:'ฝนตกหนักต่อเนื่อง ระดับน้ำสูงขึ้น บ่อเสียหาย ปลาอาจหลุด ไฟอาจดับและเส้นทางตลาดถูกตัด',days:['วันที่ 1 — ฝนตกหนัก ระดับน้ำเริ่มสูง ตรวจบ่อปลาและอุปกรณ์','วันที่ 2 — น้ำท่วมพื้นที่ฟาร์ม ไฟดับ ตลาดปิด ตรวจกระสอบทรายและเครื่องสูบน้ำ','วันที่ 3 — น้ำท่วมรุนแรง บ่อเสี่ยงเสียหาย ปลาอาจหลุด ต้องใช้เสบียง','วันที่ 4 — น้ำเริ่มลด ตรวจความเสียหายและเริ่มฟื้นฟู']},
+drought:{n:'ภัยแล้ง',lead:3,dur:5,eq:{tank:1,shade:1},lv:[.3,.5,.8,1,.4],out:[0,0,0,0,0],mk:[0,0,0,0,0],m:'ฝนทิ้งช่วงนาน น้ำในบ่อลดลง อุณหภูมิน้ำสูง ปลาเครียด ผลผลิตลดลง',days:['วันที่ 1 — ฝนทิ้งช่วง น้ำในบ่อเริ่มลด','วันที่ 2 — อากาศแห้ง อุณหภูมิน้ำเพิ่มขึ้น','วันที่ 3 — น้ำน้อยมาก ปลาเริ่มเครียด','วันที่ 4 — แล้งหนักที่สุด ผลผลิตลดลง','วันที่ 5 — ฝนเริ่มกลับมา ประเมินความเสียหาย']},
+poll:{n:'น้ำเสีย',lead:4,dur:3,eq:{filter:1,air:1},lv:[.5,1,.4],out:[0,0,0],mk:[0,0,0],m:'มีน้ำเสียไหลเข้าแหล่งน้ำ คุณภาพน้ำและออกซิเจนลดลง ปลาเจ็บป่วย',days:['วันที่ 1 — พบน้ำเสียไหลเข้า คุณภาพน้ำเริ่มลด','วันที่ 2 — น้ำเสียหนัก ออกซิเจนต่ำ ปลาเจ็บป่วย','วันที่ 3 — น้ำเริ่มดีขึ้น ตรวจปลาที่เหลือ']},
+heat:{n:'อากาศร้อนจัด',lead:3,dur:3,eq:{shade:1,air:1,tank:1},lv:[.5,1,.4],out:[0,1,0],mk:[0,0,0],m:'อุณหภูมิสูงผิดปกติ ออกซิเจนละลายน้ำลดลง ไฟฟ้าอาจขัดข้อง ตู้เย็นหยุดทำงาน',days:['วันที่ 1 — อากาศร้อนจัด อุณหภูมิน้ำสูง','วันที่ 2 — ร้อนที่สุด ไฟฟ้าขัดข้อง ตู้เย็นหยุดทำงาน','วันที่ 3 — อากาศเริ่มเย็นลง ตรวจปลาและอาหาร']}};
+const ORDER=['drought','poll','heat','flood'];
+const SCR=[['farm','ฟาร์ม','house'],['home','บ้าน','cal'],['pond','บ่อปลา','drop'],['shop','ร้านปลา','f_nila'],['market','ตลาด','garlic'],['cook','ครัว','tomyum'],['store','คลังสินค้า','crate'],['alert','เตรียมภัย','warn'],['report','รายงาน','scroll']];
+const CAP=8,SK='aquafarm_slots_v3',SAVE_V=4,NEED=20;
+let S=null,cur='menu',tick=0,AC=null,nav=true,inGame=false,slotId=null,DLG=null,evT=0,recT=0,cookT=0,catchT=0,buyT=0,presT=0,SND=true,selFish=null,shopQ=1,cookTab='cook';
+try{SND=localStorage.getItem('aq_snd')!=='0'}catch(e){}
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function spr(x,t,px,py,s){const F=FISH[t];x.fillStyle=F.f;x.fillRect(px+8*s,py+s,s,3*s);x.fillRect(px+9*s,py,s,5*s);x.fillStyle=F.c;x.fillRect(px+s,py,6*s,5*s);x.fillRect(px,py+s,8*s,3*s);
+ if(F.st){x.fillStyle='#2f3a18';x.fillRect(px+s,py+2*s,7*s,s)}if(F.hu){x.fillStyle=F.c;x.fillRect(px+3*s,py-s,3*s,s)}if(F.wh){x.fillStyle='#0a2229';x.fillRect(px-s,py+2*s,s,s);x.fillRect(px-s,py+4*s,s,s)}
+ x.fillStyle='#fff';x.fillRect(px+s,py+s,s,s);x.fillStyle='#000';x.fillRect(px+s,py+s,s,s)}
+const IC={};
+function ico(n,w=34){if(!IC[n]){const c=document.createElement('canvas');const x=c.getContext('2d');
+ if(n[0]==='f'&&n[1]==='_'){c.width=12;c.height=7;spr(x,n.slice(2),1,1,1)}else{c.width=12;c.height=12;MAPS[n].split('|').forEach((r,y)=>{[...r].forEach((ch,i)=>{if(ch!=='.'){x.fillStyle=PAL[ch];x.fillRect(i,y,1,1)}})})}
+ IC[n]=[c.toDataURL(),c.width,c.height,c]}
+ const d=IC[n];return `<img class="i" src="${d[0]}" style="width:${w}px;height:${Math.round(w*d[2]/d[1])}px">`}
+const icc=n=>{ico(n);return IC[n][3]};
+// ----- state -----
+const def=()=>({v:4,slotName:'',char:'น้ำใส',money:500,day:1,hun:80,en:100,hp:100,joy:70,pond:[],am:.2,ni:0,na:0,bio:10,temp:28,water:96,o2:90,fed:0,
+ fi:Object.fromEntries(Object.keys(FISH).map(k=>[k,0])),inv:Object.fromEntries(Object.keys(ING).map(k=>[k,0])),stock:[{k:'dried',q:2,a:0}],proc:[],eq:{},pr:{},pp:{},
+ dz:{type:'flood',start:7,sev:.5},act:null,power:true,mkClosed:false,dmg:false,repair:0,earned:0,rep:null,tut:0,tutOk:-1,goal:5,over:false,cookFish:''});
+function migrate(o,v){const b=def();const s=Object.assign(b,o);s.fi=Object.assign(def().fi,o.fi||{});s.inv=Object.assign(def().inv,o.inv||{});
+ if(v<4){s.stock=[];const f=o.food||{};for(const k in f)if(f[k]>0&&IT[k])s.stock.push({k,q:f[k],a:0});delete s.food;
+  s.pond=(o.pond||[]).map(p=>({t:FISH[p.t]?p.t:'nila',g:p.g,h:p.h==null?100:p.h}));
+  s.dz=o.dz&&o.dz.day?{type:o.dz.type,start:Math.max(o.dz.day,(o.day||1)+DZ[o.dz.type].lead),sev:o.dz.sev}:b.dz;
+  s.eq=Object.assign({},o.eq||{});s.proc=[];s.act=null;s.goal=5}
+ return s}
+const calcWater=()=>{S.water=Math.max(0,Math.min(100,Math.round(100-S.am*22-S.ni*18-S.na*1.5-Math.max(0,S.temp-31)*3)))};
+const wstat=()=>S.water>=80?['Excellent','#65A30D']:S.water>=60?['Good','#a3c94a']:S.water>=40?['Warning','#e9b949']:['Critical','#e0584d'];
+function roll(){S.pp={...S.pr};for(const k in ING)S.pr[k]=Math.max(2,Math.round(ING[k][1]*(0.6+Math.random()*0.9)))}
+function beep(f=520){if(!SND)return;try{AC=AC||new AudioContext();const o=AC.createOscillator(),g=AC.createGain();o.frequency.value=f;o.type='square';g.gain.value=.04;o.connect(g);g.connect(AC.destination);o.start();o.stop(AC.currentTime+.08)}catch(e){}}
+function toast(m,bad){const d=document.createElement('div');d.textContent=m;if(bad)d.className='bad';$('toast').appendChild(d);beep(bad?180:620);setTimeout(()=>d.remove(),2600)}
+function pay(c,e){if(S.money<c){toast('เงินไม่พอ ต้องใช้ '+c+' บาท',1);return false}if(S.en<e){toast('พลังงานไม่พอ ไปพักผ่อนที่บ้านก่อน',1);return false}S.money-=c;S.en-=e;return true}
+const closed=()=>{if(S.mkClosed){toast('ตลาดปิดชั่วคราว เส้นทางถูกตัดขาดจากภัยพิบัติ',1);return true}return false};
+const fishTotal=()=>Object.values(S.fi).reduce((a,b)=>a+b,0);
+const mature=()=>S.pond.filter(f=>f.g>=100).length;
+const ageOf=b=>IT[b.k].shelf-b.a;
+const expired=b=>ageOf(b)<=0;
+const near=b=>!expired(b)&&ageOf(b)<=Math.max(1,IT[b.k].shelf*.3);
+const stCls=b=>expired(b)?['หมดอายุ','#e0584d']:near(b)?['ใกล้หมดอายุ','#e9b949']:['สด','#65A30D'];
+const edible=()=>S.stock.filter(b=>!expired(b));
+const servings=()=>edible().reduce((s,b)=>s+b.q,0);
+const supplyHun=()=>edible().reduce((s,b)=>s+IT[b.k].hun*b.q,0);
+const supplyDays=()=>Math.round(supplyHun()/NEED*10)/10;
+const feedUnit=()=>S.pond.reduce((s,f)=>s+FISH[f.t].feed,0);
+const feedCost=k=>[0,1,2,4][k]*feedUnit();
+const warnDays=()=>S.dz&&S.dz.start-S.day>=1&&S.dz.start-S.day<=DZ[S.dz.type].lead?S.dz.start-S.day:0;
+function protOf(type){const e=DZ[type].eq,ks=Object.keys(e);return ks.reduce((s,k)=>s+Math.min(1,(S.eq[k]||0)/e[k]),0)/ks.length}
+function ready(){const D=DZ[S.dz.type],e=protOf(S.dz.type);return{e,pct:Math.round((e*.5+Math.min(1,supplyDays()/D.dur)*.3+(S.water>=60?.1:0)+(S.money>=100?.1:0))*100)}}
+function addStock(k,q){const b=S.stock.find(x=>x.k===k&&x.a===0);if(b)b.q+=q;else S.stock.push({k,q,a:0})}
+function go(s){cur=s;nav=true;render()}
+// ----- save slots -----
+const getSlots=()=>{try{return JSON.parse(localStorage.getItem(SK))||{}}catch(e){return{}}};
+function putSlots(o){try{localStorage.setItem(SK,JSON.stringify(o));return true}catch(e){toast('บันทึกไม่ได้',1);return false}}
+function saveGame(q){if(!S||!slotId||S.over)return;const o=getSlots();o[slotId]={v:SAVE_V,name:S.slotName,ts:Date.now(),S};if(putSlots(o)&&!q)toast('บันทึกเกมแล้ว')}
+function loadSlot(i){const d=getSlots()[i];if(!d){toast('ช่องนี้ว่าง',1);return}if(d.v>SAVE_V||d.v<3){toast('เวอร์ชันเซฟไม่รองรับ',1);return}S=migrate(d.S,d.v);S.slotName=d.name;slotId=i;calcWater();selFish=null;toast('โหลดเกมแล้ว: '+d.name+(d.v<SAVE_V?' (แปลงเซฟเก่าเป็นเวอร์ชันใหม่)':''));enter()}
+function newSlot(i,name){S=def();S.slotName=name;slotId=i;roll();S.pp={...S.pr};calcWater();selFish=null;saveGame(1);toast('สร้างเกมใหม่: '+name);enter()}
+function renameSlot(i,name){const o=getSlots();if(!o[i])return;o[i].name=name;putSlots(o);if(S&&slotId===i)S.slotName=name;toast('เปลี่ยนชื่อแล้ว');render()}
+function delSlot(i){const o=getSlots();delete o[i];putSlots(o);if(slotId===i)slotId=null;toast('ลบเซฟแล้ว');render()}
+function cont(){const o=getSlots();let b=0;for(const i in o)if(!b||o[i].ts>o[b].ts)b=i;if(!b){toast('ยังไม่มีเซฟ',1);return}loadSlot(+b)}
+function enter(){inGame=true;go(S.over?'over':'farm')}
+function toTitle(){saveGame(1);inGame=false;S=null;slotId=null;go('menu')}
+function dlg(m,fn,o){DLG={m,fn,inp:o&&o.inp,only:o&&o.only};render()}
+function dlgOk(){const d=DLG,v=$('dlgin')?$('dlgin').value.trim():'';if(d.inp!==undefined&&!v){toast('กรุณาใส่ชื่อ',1);return}DLG=null;render();d.fn(v)}
+function dlgNo(){DLG=null;render()}
+// ----- actions -----
+function pickFish(){if(S.cookFish&&S.fi[S.cookFish]>0)return S.cookFish;return Object.keys(S.fi).find(k=>S.fi[k]>0)||''}
+function openFish(t){selFish=t;shopQ=1;render()}
+function setQ(d){shopQ=Math.max(1,Math.min(CAP-S.pond.length||1,shopQ+d));render()}
+function askBuy(t){const q=shopQ,tot=FISH[t].b*q;if(closed())return;if(S.pond.length+q>CAP){toast('พื้นที่ในบ่อไม่พอ (ว่าง '+(CAP-S.pond.length)+' ตัว)',1);return}if(S.money<tot){toast('เงินไม่พอ ต้องใช้ '+tot+' บาท',1);return}dlg('ยืนยันซื้อ'+FISH[t].n+' '+q+' ตัว รวม '+tot+' บาท? (เงินคงเหลือ '+(S.money-tot)+' บาท)',()=>buyFish(t,q))}
+function buyFish(t,q){if(S.pond.length+q>CAP||S.money<FISH[t].b*q){toast('ซื้อไม่ได้ ตรวจเงินและพื้นที่บ่อ',1);return}S.money-=FISH[t].b*q;for(let i=0;i<q;i++)S.pond.push({t,g:0,h:100});buyT=30;toast('ซื้อ'+FISH[t].n+' '+q+' ตัว ปล่อยลงบ่อแล้ว');shopQ=1;render()}
+function feed(k){if(!S.pond.length){toast('ยังไม่มีปลาในบ่อ',1);return}if(S.fed){toast('วันนี้ให้อาหารแล้ว',1);return}if(!pay(feedCost(k),3))return;S.fed=k;toast(['','ให้อาหารน้อย ปลาโตช้า','ให้อาหารพอดี ปลาโตดี','ให้อาหารมากเกินไป ของเสียจะสะสม'][k],k===3);render()}
+function chWater(){if(!pay(20,8))return;S.am*=.3;S.ni*=.3;S.na*=.3;S.o2=Math.min(100,S.o2+15);calcWater();toast('เปลี่ยนน้ำแล้ว ของเสียลดลง');render()}
+function air(){if(!pay(15,5))return;S.o2=100;toast('เติมอากาศแล้ว ออกซิเจนเต็ม');render()}
+function catchFish(){const m=S.pond.filter(f=>f.g>=100);if(!m.length){toast('ยังไม่มีปลาที่โตพอจับ',1);return}if(!pay(0,10))return;m.forEach(f=>S.fi[f.t]++);S.pond=S.pond.filter(f=>f.g<100);catchT=30;toast('จับปลาได้ '+m.length+' ตัว');render()}
+function sellFish(t){if(closed()||!S.fi[t])return;S.fi[t]--;S.money+=FISH[t].s;S.earned+=FISH[t].s;toast('ขาย'+FISH[t].n+' +'+FISH[t].s+' บาท');render()}
+function buyIng(k){if(closed())return;if(!pay(S.pr[k],0))return;S.inv[k]++;toast('ซื้อ'+ING[k][0]);render()}
+function askEq(k){if(closed())return;if(EQ[k].k&&0){}if(S.money<EQ[k].p){toast('เงินไม่พอ ต้องใช้ '+EQ[k].p+' บาท',1);return}dlg('ยืนยันซื้อ'+EQ[k].n+' ราคา '+EQ[k].p+' บาท?',()=>buyEq(k))}
+function buyEq(k){if(!pay(EQ[k].p,3))return;S.eq[k]=(S.eq[k]||0)+1;buyT=30;toast('ซื้อ'+EQ[k].n+'แล้ว');render()}
+function canCook(r){const t=pickFish();return !!t&&Object.keys(RC[r].need).every(k=>S.inv[k]>=RC[r].need[k])}
+function cook(r){if(!canCook(r)){toast('วัตถุดิบไม่พอ',1);return}if(!pay(0,8))return;const t=pickFish(),n=RC[r].need;S.fi[t]--;for(const k in n)S.inv[k]-=n[k];const q=FISH[t].yield;addStock(r,q);cookT=30;toast('ทำ'+IT[r].n+'ได้ '+q+' จาน (ใช้'+FISH[t].n+')');render()}
+const usedCap=req=>S.proc.filter(p=>PR[p.k].req===req).length;
+function canProc(k){const t=pickFish(),P=PR[k];return !!t&&(S.eq[P.req]||0)>usedCap(P.req)&&Object.keys(P.need).every(x=>S.inv[x]>=P.need[x])}
+function startProc(k){const P=PR[k];if(!pickFish()){toast('ไม่มีปลาในคลัง',1);return}if((S.eq[P.req]||0)<=usedCap(P.req)){toast('ต้องมี'+EQ[P.req].n+'ว่างอยู่ (ซื้อที่ตลาด)',1);return}if(!Object.keys(P.need).every(x=>S.inv[x]>=P.need[x])){toast('วัตถุดิบไม่พอ',1);return}if(!pay(0,8))return;const t=pickFish();S.fi[t]--;for(const x in P.need)S.inv[x]-=P.need[x];S.proc.push({k,q:FISH[t].yield,left:P.days});presT=30;toast('เริ่ม'+P.name+' ใช้เวลา '+P.days+' วัน');render()}
+function sellBatch(i){const b=S.stock[i];if(!b||expired(b)||closed())return;S.stock[i].q--;S.money+=IT[b.k].v;S.earned+=IT[b.k].v;if(b.q<=0)S.stock.splice(i,1);toast('ขาย'+IT[b.k].n+' +'+IT[b.k].v+' บาท');render()}
+function askEat(i){const b=S.stock[i];if(!b)return;if(expired(b)){toast('อาหารหมดอายุ กินไม่ได้',1);return}const it=IT[b.k];if(S.hun>=100){toast('อิ่มแล้ว',1);return}const h2=Math.min(100,S.hun+it.hun),e2=Math.min(100,S.en+it.en);dlg('กิน'+it.n+'? ความอิ่ม '+S.hun+' → '+h2+' · พลังงาน '+S.en+' → '+e2+' ('+it.kcal+' kcal, โปรตีน '+it.pro+' g)',()=>eatBatch(i))}
+function eatBatch(i){const b=S.stock[i];if(!b||expired(b))return;const it=IT[b.k];S.hun=Math.min(100,S.hun+it.hun);S.en=Math.min(100,S.en+it.en);S.joy=Math.min(100,S.joy+4);b.q--;if(b.q<=0)S.stock.splice(i,1);toast('กิน'+it.n+' อิ่ม +'+it.hun+' พลังงาน +'+it.en);render()}
+function askDiscard(i){const b=S.stock[i];if(b)dlg('ทิ้ง'+IT[b.k].n+' '+b.q+' จาน?',()=>{S.stock.splice(i,1);render()})}
+function rest(){if(S.en>=100){toast('พลังงานเต็มแล้ว',1);return}S.en=Math.min(100,S.en+40);S.hun=Math.max(0,S.hun-5);S.joy=Math.min(100,S.joy+3);toast('พักผ่อนแล้ว พลังงาน +40 (หิวขึ้นเล็กน้อย)');render()}
+function repair(){if(!S.dmg)return;if(!pay(S.repair,15))return;S.dmg=false;S.repair=0;S.am*=.5;S.joy=Math.min(100,S.joy+10);recT=40;toast('ซ่อมแซมและฟื้นฟูฟาร์มเรียบร้อย');render()}
+// ----- tutorial -----
+const TUT=[{t:'นี่คือแถบสถานะของคุณ: รูปโปรไฟล์ ความอิ่ม พลังงาน สุขภาพ ความสุข คลิกรูปโปรไฟล์เพื่อดูรายละเอียด',hl:'hud'},
+{t:'เงินใช้ซื้อปลา วัตถุดิบ และอุปกรณ์ พลังงานลดลงเมื่อทำกิจกรรม พักที่ "บ้าน" เพื่อฟื้นพลังงาน ความอิ่มลดลงทุกวัน ต้องเลือกกินเอง',hl:'home'},
+{t:'คลิกที่บ่อปลา (หรือเมนู "บ่อปลา") เพื่อเข้าไปดูแลปลา',hl:'pond',c:()=>cur==='pond'},
+{t:'ไปที่ "ร้านปลา" เลือกปลาดูรายละเอียด เลือกจำนวน แล้วกด "ซื้อปลา" และยืนยัน',hl:'shop',c:()=>S.pond.length>0},
+{t:'กลับไปที่ "บ่อปลา" แล้วกดให้อาหารปลา (แนะนำ "พอดี")',hl:'pond',c:()=>S.fed>0},
+{t:'ดูค่า Ammonia, Nitrite, Nitrate และออกซิเจนของบ่อ ถ้าค่าแย่ให้เปลี่ยนน้ำหรือเติมอากาศ',hl:'pond',c:()=>cur==='pond'},
+{t:'ลองทำอาหาร: ระบบแจกปลา 1 ตัวและเครื่องปรุงให้แล้ว ไปที่ "ครัว" แล้วกดทำปลาทอด',hl:'cook',c:()=>S.stock.some(b=>IT[b.k].t==='meal'),on:()=>{S.fi.nila++;S.inv.spice+=1}},
+{t:'อาหารที่ทำไว้อยู่ใน "คลังสินค้า" มีวันหมดอายุ ถนอมอาหารเพื่อเก็บให้นานขึ้น และดูว่าเสบียงอยู่ได้กี่วัน',hl:'store',c:()=>cur==='store'},
+{t:'ข่าวเตือนภัยจะแจ้งล่วงหน้า ภัยพิบัติเกิดต่อเนื่องหลายวัน ตรวจความพร้อมและซื้ออุปกรณ์ที่ "เตรียมภัย"',hl:'alert',c:()=>cur==='alert'}];
+function tutGo(d){const T=TUT[S.tut];if(d>0){if(T&&T.c&&S.tutOk!==S.tut)return;S.tut=Math.min(9,S.tut+1);const n=TUT[S.tut];if(n&&n.on)n.on()}else S.tut=Math.max(0,S.tut-1);render()}
+// ----- day cycle & multi-day disaster -----
+function grade(r){let p=r.earned>=200?2:r.earned>=50?1:0;if(S.water>=60)p++;if(supplyDays()>=2)p++;if(r.ev){if(r.ev.prot>=66)p++;if(r.ev.lost>0)p--}else if(warnDays()&&ready().pct>=60)p++;if(S.dmg)p--;return p>=4?'S':p>=2?'A':'B'}
+function actDay(){const a=S.act,D=DZ[a.type],i=a.i,prot=protOf(a.type);
+ const W=[.15,.25,.35,.15,.1].slice(0,D.dur),w=W[i]/W.reduce((x,y)=>x+y,0),n=S.pond.length;
+ const lost=Math.min(n,Math.round(a.before*a.sev*w*(1-.75*prot)*(S.water<50?1.25:1)));S.pond=S.pond.slice(0,n-lost);a.lost+=lost;
+ if(a.type==='flood'){S.am+=.4*(1-.7*prot);S.o2=Math.max(15,S.o2-8)}
+ if(a.type==='drought')S.temp+=1.2*(1-.6*prot);
+ if(a.type==='poll')S.am+=.7*(1-.7*prot);
+ if(a.type==='heat'){S.temp+=1.6*(1-.6*prot);S.o2=Math.max(15,S.o2-10*(1-.7*prot))}
+ const cost=Math.round(40*a.sev*(1-.6*prot));if(cost>0){S.repair+=cost;S.dmg=true;a.cost+=cost}
+ if(a.type==='flood'&&S.eq.sand>0){S.eq.sand--;a.used++}
+ let fl=0;if(a.type==='flood'&&D.mk[i]){S.stock.forEach(b=>{if(IT[b.k].t==='meal'||b.k==='dried'){const l=Math.round(b.q*.3*(1-prot));b.q-=l;fl+=l}});S.stock=S.stock.filter(b=>b.q>0);a.food+=fl}
+ calcWater();S.power=!D.out[i];S.mkClosed=!!D.mk[i];
+ return{type:a.type,i,dur:D.dur,text:D.days[i],lost,cum:a.lost,before:a.before,after:S.pond.length,prot:Math.round(prot*100),cost,cumCost:a.cost,food:fl,cumFood:a.food,used:a.used,last:i===D.dur-1,outage:!!D.out[i],closed:!!D.mk[i]}}
+function endDay(){
+ const r={day:S.day,earned:S.earned,died:0,ev:null,done:[],spoil:0},n0=S.pond.length;
+ S.am+=[0,.1,.25,.8][S.fed]*(feedUnit()>14?1.3:1)*Math.max(1,feedUnit()/4)+feedUnit()*.05;
+ const c=S.bio/100;let t=S.am*.6*c;S.am-=t;S.ni+=t;t=S.ni*.6*c;S.ni-=t;S.na+=t;
+ if(n0)S.bio=Math.min(100,S.bio+8);
+ S.am=+S.am.toFixed(2);S.ni=+S.ni.toFixed(2);S.na=+S.na.toFixed(2);
+ S.temp+=(28-S.temp)*.5;S.o2=Math.max(0,S.o2-10-n0*1.5);calcWater();
+ S.pond.forEach(f=>{const F=FISH[f.t];let st=S.water<40?-25:S.water<60?-10:5;if(st<0)st*=1.4-F.tough*.15;if(S.o2<F.o2)st-=12;f.h=Math.max(0,Math.min(100,(f.h==null?100:f.h)+st));f.g=Math.min(100,Math.round(f.g+[8,30,50,50][S.fed]*F.gm*Math.max(.5,f.h/100)*(S.water>=60?1:.6)))});
+ S.pond=S.pond.filter(f=>f.h>0);r.died=n0-S.pond.length;
+ S.proc.forEach(p=>p.left--);S.proc.filter(p=>p.left<=0).forEach(p=>{addStock(p.k,p.q);r.done.push(IT[p.k].n+' x'+p.q)});S.proc=S.proc.filter(p=>p.left>0);
+ S.stock.forEach(b=>{const it=IT[b.k],was=expired(b);b.a+=it.cool?((S.eq.fridge>0&&S.power)?.5:(S.power?1:1.5)):1;if(!was&&expired(b))r.spoil+=b.q});
+ S.hun=Math.max(0,S.hun-NEED);S.en=Math.min(100,S.en+60);
+ if(S.hun<=0)S.hp=Math.max(0,S.hp-20);else if(S.hun<20)S.hp=Math.max(0,S.hp-5);else if(S.hun>50)S.hp=Math.min(100,S.hp+5);
+ S.joy=Math.max(0,S.joy-2);S.fed=0;S.day++;S.power=true;S.mkClosed=false;
+ if(S.dz&&S.day===S.dz.start){S.act={type:S.dz.type,i:-1,dur:DZ[S.dz.type].dur,sev:S.dz.sev,before:S.pond.length,lost:0,cost:0,used:0,food:0};S.dz=null}
+ if(S.act){S.act.i++;r.ev=actDay();r.died+=r.ev.lost;
+  if(r.ev.last){r.ev.sup=supplyDays();S.joy=Math.max(0,S.joy-(r.ev.prot>=100?5:15));const ty=ORDER[(ORDER.indexOf(S.act.type)+1)%4];S.dz={type:ty,start:S.day+DZ[ty].lead+3,sev:+(.4+Math.random()*.3).toFixed(2)};S.act=null}}
+ r.water=S.water;r.o2=S.o2;r.sup=servings();r.days=supplyDays();r.fish=S.pond.length;r.money=S.money;r.g=grade(r);
+ if(r.g==='S')S.joy=Math.min(100,S.joy+10);
+ S.rep=r;S.earned=0;roll();
+ if(S.hp<=0){S.over=true;go('over');return}
+ saveGame(1);
+ if(r.ev){evT=0;go('event')}else go('report')}
+// ----- scenes (320x180 canvas) -----
+const cx=$('cv').getContext('2d');
+const R=(x,y,w,h,c)=>{cx.fillStyle=c;cx.fillRect(Math.round(x),Math.round(y),w,h)};
+function E(x,y,rx,ry,c){cx.fillStyle=c;for(let j=-ry;j<=ry;j++){const d=Math.round(rx*Math.sqrt(1-(j/ry)*(j/ry)));cx.fillRect(x-d,y+j,2*d,1)}}
+function tree(x,y){const w=Math.round(Math.sin(tick/14+x)*1.5);R(x-3,y-12,6,12,'#5e3b26');E(x+w,y-24,14,12,'#1f5a35');E(x-7+w,y-17,9,8,'#2f7d3a');E(x+8+w,y-17,9,8,'#2f7d3a');E(x-2+w,y-30,8,5,'#5db857')}
+function sky(t,h){['#38BDF8','#5ccbf7','#86d6f6','#aee2f3','#cfeaea','#e8dcc4','#f1e3c0','#f6e8c6'].forEach((k,i)=>R(0,i*h/8,320,h/8+1,k));
+ E(272,26,10,10,'#ffe08a');E(272,26,7,7,'#fff3b0');
+ for(let i=0;i<4;i++){const x=((t*.15+i*95)%400)-60,y=22+i*10;E(x,y,20,5,'#f4fbff');E(x+12,y-3,13,5,'#ffffff');E(x-10,y+1,10,3,'#dff3fb')}}
+function fx(t,ty,l){if(!ty||l<=0)return;
+ if(ty==='flood'){const lv=Math.round(52*l),y0=180-lv;R(0,y0,320,lv,'rgba(62,124,184,.72)');for(let x=0;x<320;x+=4)R(x,y0+Math.round(2*Math.sin((x+t)/6)),4,3,'#a5ddf5');R(0,0,320,180,'rgba(20,16,40,'+.3*l+')');for(let i=0;i<Math.round(46*l);i++)R((i*29+t*3)%320,(i*17+t*5)%180,1,5,'#a5ddf5')}
+ else if(ty==='drought'){R(0,0,320,180,'rgba(240,150,60,'+.25*l+')');E(70,26,14,14,'#ffe08a');for(let a=0;a<12;a++){const r=a*Math.PI/6+t/40;R(70+Math.cos(r)*20,26+Math.sin(r)*20,3,3,'#e9b949')}for(let i=0;i<Math.round(30*l);i++){const x=(i*47)%320,y=100+(i*29)%80;R(x,y,6,1,'#5e3b26');R(x+5,y+1,1,4,'#5e3b26')}}
+ else if(ty==='poll'){E(240,141,58,22,'rgba(90,120,30,'+.55*l+')');R(0,0,320,180,'rgba(40,60,20,'+.18*l+')');for(let i=0;i<8;i++)R(205+(i*17)%70,128+(i*11)%25-((t/2+i*5)%12),3,3,'rgba(160,200,60,.6)')}
+ else{R(0,0,320,180,'rgba(255,140,50,'+.28*l+')');for(let i=0;i<Math.round(24*l);i++)R((i*43+t*2)%320,86+(i*19)%90+Math.round(Math.sin((t+i)/4)*2),8,1,'rgba(255,230,180,.3)')}}
+const SIGNS=[[240,96,'drop','pond','บ่อปลา'],[118,56,'house','home','บ้าน (พักผ่อน)'],[158,100,'tomyum','cook','ห้องครัว'],[181,100,'garlic','market','ร้านค้า'],[62,108,'crate','store','คลังสินค้า'],[112,122,'shield','alert','พื้นที่เตรียมรับมือภัย']];
+function hit(x,y){for(const s of SIGNS)if(Math.hypot(x-s[0],y-s[1])<11)return s;
+ for(const h of [['home',118,100,36],['cook',158,120,16],['market',181,118,18],['store',64,124,16],['alert',112,138,18]])if(Math.hypot(x-h[1],y-h[2])<h[3])return SIGNS.find(s=>s[3]===h[0]);
+ if(((x-240)/64)**2+((y-141)/27)**2<1)return SIGNS[0];return null}
+function farm(t,o){o=o||{};const q=k=>(S&&S.eq&&S.eq[k])||0;
+ sky(t,90);R(0,76,320,16,'#4f7d2e');for(let x=0;x<320;x+=4)R(x,70+Math.round(7*Math.sin(x/21)+3*Math.sin(x/7)),4,22,'#6a9a3a');R(0,84,320,12,'#0E7490');for(let x=0;x<320;x+=6)R((x+t*.6)%320,86+((x/6)%3)*3,5,1,'#38BDF8');R(0,94,320,2,'#8B6546');
+ R(0,96,320,84,'#65A30D');for(let i=0;i<220;i++)R((i*37)%320,98+(i*13)%80,2,1,i%2?'#7cbd1e':'#4d7c0f');
+ R(108,128,22,52,'#b08a5a');R(104,150,26,30,'#b08a5a');R(104,148,96,12,'#b08a5a');for(let i=0;i<40;i++)R(106+(i*17)%90,130+(i*7)%48,2,1,'#8a6a3e');
+ tree(36,120);tree(312,100);tree(24,156);tree(268,92);
+ R(86,98,64,30,'#c9985e');for(let i=0;i<6;i++)R(86,102+i*5,64,1,'#b5702a');R(86,98,64,2,'#6b4226');
+ for(let i=0;i<22;i++){const w=76-i*3;R(118-w/2,96-i,w,1,i%6?'#8b4a2b':'#E8DCC4')}
+ R(134,72,9,20,'#8a5a3a');R(133,70,11,3,'#5e3b26');R(112,108,13,20,'#5e3b26');R(122,118,2,2,'#e9b949');
+ const fl=(t%37<2)?'#c9a030':'#e9b949';[[92,104],[132,104]].forEach(p=>{R(p[0]-1,p[1]-1,14,14,'#5e3b26');R(p[0],p[1],12,12,fl);R(p[0]+5,p[1],2,12,'#b98a25');R(p[0],p[1]+5,12,2,'#b98a25')});
+ R(56,120,12,10,'#c9985e');R(56,124,12,1,'#6b4226');R(68,124,12,8,'#c9985e');R(68,127,12,1,'#6b4226');R(60,113,10,8,'#c9985e');
+ R(166,104,2,24,'#5e3b26');R(194,104,2,24,'#5e3b26');for(let i=0;i<8;i++)R(166+i*4,104,4,8,i%2?'#ffffff':'#0E7490');R(166,112,30,2,'#2d7f8f');R(168,118,28,10,'#c9985e');[['#d8453a',170],['#9bd64b',176],['#e9b949',182],['#fff',188]].forEach(g=>R(g[1],114,4,4,g[0]));
+ R(150,118,14,10,'#4b4a5c');R(148,116,18,3,'#8f86a8');R(152,111,10,6,'#0E7490');R(151,111,12,1,'#E8DCC4');
+ const sm=cookT>0?4:1,bg=cookT>0?2:0;for(let i=0;i<sm;i++)R(156+Math.sin((t+i*7)/5)*3,108-((t*.7+i*6)%14),2+bg,2+bg,'rgba(240,235,255,.6)');
+ if(cookT>0)for(let i=0;i<6;i++)R(150+(i*13+t*2)%24,104-((t*1.5+i*5)%18),2,2,'#e9b949');
+ for(let x=56;x<=100;x+=8)R(x,160,3,12,'#c9985e');R(56,163,47,2,'#c9985e');R(56,168,47,2,'#c9985e');
+ for(let x=140;x<=184;x+=8)R(x,166,3,12,'#c9985e');R(140,169,47,2,'#c9985e');R(140,174,47,2,'#c9985e');
+ E(240,141,62,25,'#6b4226');E(240,141,58,22,'#3e7cb8');E(240,140,52,18,'#4c93cc');
+ for(let i=0;i<5;i++)R(200+((t*.5+i*27)%76),128+i*5,7,1,'#a5ddf5');
+ R(186,136,18,10,'#8a5a3a');for(let i=0;i<4;i++)R(187+i*4,136,1,10,'#5e3b26');
+ if(S&&S.pond)S.pond.slice(0,8).forEach((f,i)=>spr(cx,f.t,200+((i*31+t*.3*(1+i%3))%62),131+(i%3)*7,1));
+ [[70,140],[88,150],[160,134],[60,172],[196,172],[150,150],[34,130],[290,168]].forEach((p,i)=>{R(p[0],p[1],2,2,['#e9b949','#fff','#f2b8a8'][i%3]);R(p[0],p[1]+2,1,3,'#2f7d3a')});
+ for(let i=0;i<Math.min(q('sand'),8);i++){R(86+i*8,132+(i%2)*3,8,5,'#c9985e');R(86+i*8,136+(i%2)*3,8,1,'#6b4226')}
+ if(q('pump')){R(136,134,12,9,'#8f86a8');R(140,130,4,5,'#4b4a5c');R(133,138,4,2,'#3e7cb8')}
+ if(q('tank')){R(200,150,12,16,'#3e7cb8');R(200,150,12,3,'#a5ddf5');R(200,164,12,2,'#23467a')}
+ if(q('filter')){R(186,150,10,10,'#8b4a2b');R(188,152,6,3,'#a5ddf5')}
+ if(q('net'))for(let x=184;x<298;x+=4)R(x,118+Math.round(Math.abs(Math.sin(x/9))*2),2,1,'#fff');
+ if(q('shade')){R(206,98,40,3,'#0E7490');R(208,101,2,12,'#5e3b26');R(242,101,2,12,'#5e3b26')}
+ if(q('air'))for(let i=0;i<4;i++)R(232+i*3,150-((t*1.1+i*9)%22),2,2,'#a5ddf5');if(q('rack')){R(44,134,20,2,'#8B6546');R(46,134,2,10,'#8B6546');R(60,134,2,10,'#8B6546');for(let i=0;i<3;i++)R(49+i*5,136,3,6,'#e8dcc4')}if(q('jar')){R(74,121,5,7,'#a5ddf5');R(74,119,5,2,'#c9985e');R(80,123,5,5,'#a5ddf5')}
+ for(let i=0;i<4;i++){const y=66-((t*.5+i*9)%32);R(138+Math.sin((t+i*11)/8)*4,y,3+i,3+i,'rgba(220,210,240,'+(.55-((66-y)/60))+')')}
+ if(S&&S.dmg)R(0,96,320,84,'rgba(94,59,38,.35)');
+ fx(t,o.type,o.lvl||0);
+ if(recT>0)for(let i=0;i<16;i++)R(60+(i*37+t*3)%200,110+(i*23)%60-(t%20),2,2,i%2?'#e9b949':'#fff');
+ if(cur==='farm'&&S&&inGame)SIGNS.forEach((s,i)=>{const b=Math.round(Math.sin(t/5+i)*1.5),x=s[0],y=s[1]+b;R(x-9,y-9,18,18,'#e9b949');R(x-8,y-8,16,16,'#0f3a49');cx.drawImage(icc(s[2]),x-6,y-6,12,12);R(x-1,y+9,2,3,'#e9b949')});
+ if(cur==='event'){R(60,164,200,8,'#0a2229');R(61,165,Math.round(198*Math.min(1,evT/70)),6,'#e9b949')}}
+function pond(t){
+ R(0,0,320,30,'#38BDF8');E(280,14,12,12,'#f4ebc8');R(0,26,320,10,'#2f6b45');for(let x=0;x<320;x+=6)R(x,22,2,5,'#3d8a55');
+ R(0,36,320,144,'#0E7490');for(let y=44;y<180;y+=10)for(let i=0;i<320;i+=26)R(i+(y%20)+Math.round(2*Math.sin((t+i)/9)),y,8,1,'#4c93cc');
+ for(let k=0;k<5;k++)R(40+k*60+Math.round(4*Math.sin(t/20+k)),36,16,144,'rgba(165,221,245,.07)');
+ for(let x=0;x<320;x+=4)R(x,36+Math.round(2*Math.sin((x+t*1.5)/7)),4,3,'#a5ddf5');
+ R(0,156,320,24,'#23467a');for(let i=0;i<60;i++)R((i*53)%320,158+(i*7)%20,3,1,'#2a5c94');
+ for(let i=0;i<8;i++){const x=10+i*36;for(let j=0;j<5;j++)R(x+Math.round(2*Math.sin((t+i*5+j*4)/10)),156-j*6,2,6,'#2f7d3a')}
+ R(0,36,320,144,'rgba(94,70,30,'+((100-S.water)/230)+')');
+ for(let i=0;i<Math.round(S.o2/10);i++){const bx=(i*31+9)%300,by=156-((t*1.3+i*19)%118);R(bx,by,4,4,'#a5ddf5');R(bx+1,by+1,1,1,'#fff')}
+ if(S.fed)for(let i=0;i<10;i++)R(20+i*14,38+(t*.8+i*11)%70,2,2,'#c9985e');
+ S.pond.forEach((f,i)=>spr(cx,f.t,10+((i*37+t*(.5+(i%3)*.3))%140),50+(i*17)%80+Math.round(4*Math.sin((t+i*8)/9)),f.g>=100?3:2));if(catchT>0){const p=catchT/30;spr(cx,'nila',120+Math.round((1-p)*60),Math.round(44-Math.sin(p*Math.PI)*34),3)}}
+function room(t){
+ R(0,0,320,180,'#8B6546');for(let x=0;x<320;x+=16){R(x,0,2,130,'#9b7552');R(x+8,0,1,130,'#7a5638')}
+ R(0,128,320,52,'#5e3b26');for(let y=128;y<180;y+=10)R(0,y,320,1,'#3d2616');for(let x=0;x<320;x+=40)R(x+(x%80?0:20),128,1,52,'#3d2616');
+ R(0,126,320,4,'#8a5a3a');
+ R(212,28,70,56,'#8a5a3a');R(216,32,62,48,'#38BDF8');for(let i=0;i<9;i++)R(220+(i*17)%54,36+(i*11)%40,1,1,'#fff');E(262,48,5,5,'#f4ebc8');R(246,32,2,48,'#8a5a3a');R(216,56,62,2,'#8a5a3a');
+ R(30,60,100,5,'#8a5a3a');R(30,100,100,5,'#8a5a3a');
+ [['#d8453a',34],['#e9b949',52],['#5db857',70],['#f2e2c2',88],['#9bd64b',106]].forEach(j=>{R(j[1],42,13,18,'#c9d8ee');R(j[1]+1,46,11,13,j[0]);R(j[1],40,13,3,'#c9985e')});
+ R(36,82,28,18,'#c9985e');R(70,82,28,18,'#c9985e');R(104,86,20,14,'#c9985e');
+ R(160,0,2,34,'#161022');const f=(t%23<2);E(161,42,12,12,f?'rgba(233,185,73,.2)':'rgba(233,185,73,.32)');R(155,34,12,16,'#e9b949');R(158,37,6,10,'#fff3c4');if(presT>0||buyT>0)for(let i=0;i<14;i++)R(80+(i*29+tick*3)%160,110-((tick*2+i*7)%60),2,2,i%2?'#e9b949':'#fff')}
+function draw(){tick++;cx.imageSmoothingEnabled=false;
+ if(cur==='event'){evT++;if(evT>70){go('report');return}}
+ if(recT>0)recT--;if(cookT>0)cookT--;if(catchT>0)catchT--;if(buyT>0)buyT--;if(presT>0)presT--;
+ const ROOMS=['shop','market','cook','store','report','prof','home','set'];
+ if(S&&inGame&&cur==='pond')pond(tick);
+ else if(S&&inGame&&ROOMS.includes(cur))room(tick);
+ else{let o={};if(S&&inGame){if(cur==='event'&&S.rep&&S.rep.ev)o={type:S.rep.ev.type,lvl:DZ[S.rep.ev.type].lv[S.rep.ev.i]};else if(S.act)o={type:S.act.type,lvl:DZ[S.act.type].lv[S.act.i]*.85};else{const w=warnDays();if(w)o={type:S.dz.type,lvl:(DZ[S.dz.type].lead+1-w)/(DZ[S.dz.type].lead+1)*.5}}}farm(tick,o)}}
+setInterval(draw,100);
+function cpos(e){const r=e.target.getBoundingClientRect();return[(e.clientX-r.left)/r.width*320,(e.clientY-r.top)/r.height*180]}
+$('cv').addEventListener('click',e=>{if(!S||!inGame||cur!=='farm')return;const p=cpos(e),h=hit(p[0],p[1]);if(h)go(h[3])});
+$('cv').addEventListener('mousemove',e=>{const c=e.target;if(!S||!inGame||cur!=='farm'){c.style.cursor='default';c.title='';return}const p=cpos(e),h=hit(p[0],p[1]);c.style.cursor=h?'pointer':'default';c.title=h?h[4]:''});
+// ----- UI -----
+const bar=(v,c)=>`<div class="bar"><i style="width:${v}%;background-color:${c}"></i></div>`;
+const coin=n=>`${ico('coin',14)} ${n}`;
+const slot=(ic,name,sub,fn,o={})=>`<div class="slot ${o.dis?'dis':''}" onclick="${o.dis?'':fn}">${o.cnt!==undefined?`<div class="cnt">x${o.cnt}</div>`:''}${ico(ic,o.w||52)}<b>${name}</b><span>${sub}</span></div>`;
+const mb=(l,v,c)=>`<div class="mrow"><span>${l}</span><div class="mb"><i style="width:${v}%;background:${c}"></i></div></div>`;
+const hint=()=>{if(S.tut<9)return null;if(S.act)return`${DZ[S.act.type].n}กำลังเกิด (วันที่ ${S.act.i+1}/${S.act.dur}) — ตรวจฟาร์มและเสบียง แล้วกด "จบวัน"`;const w=warnDays();if(w)return`ข่าวเตือน${DZ[S.dz.type].n} อีก ${w} วัน — ตรวจความพร้อมที่ "เตรียมภัย"`;if(S.dmg)return'ฟาร์มเสียหาย ซ่อมแซมได้ที่ "เตรียมภัย"';if(S.hun<40)return'หิวแล้ว! เลือกกินอาหารที่ "บ้าน" หรือ "คลังสินค้า"';if(!S.pond.length)return'ซื้อปลาที่ร้านปลา แล้วปล่อยลงบ่อ';if(!S.fed)return'ให้อาหารปลาที่บ่อ แล้วกด "จบวัน"';if(mature())return'มีปลาโตพอจับแล้ว! ไปที่บ่อแล้วกด "จับปลา"';if(fishTotal())return'มีปลาในคลัง: ขาย ทำอาหาร หรือถนอมอาหารที่ครัว';return'ดูแลบ่อ ทำอาหาร เก็บเสบียง แล้วกด "จบวัน"'};
+const chip=b=>{const s=stCls(b);return`<span class="tagc" style="background:${s[1]}">${s[0]}${expired(b)?'':' · เหลือ '+Math.ceil(ageOf(b))+' วัน'}</span>`};
+const stars=n=>'★'.repeat(n)+'☆'.repeat(5-n);
+const batchRow=(b,i)=>{const it=IT[b.k];return`<div class="rc">${ico(it.ic,44)}<div style="flex:1;min-width:170px"><h3>${it.n} x${b.q} ${chip(b)}</h3><p>อิ่ม +${it.hun} · พลังงาน +${it.en} · ${it.kcal} kcal · โปรตีน ${it.pro} g${it.cool?' · แช่เย็นได้':''}</p></div><button class="btn go" onclick="askEat(${i})" ${expired(b)?'disabled':''}>กิน</button><button class="btn" onclick="sellBatch(${i})" ${expired(b)||S.mkClosed?'disabled':''}>ขาย ${coin(it.v)}</button><button class="btn dk" onclick="askDiscard(${i})">ทิ้ง</button></div>`};
+const eqRow=k=>{const e=EQ[k],use=Object.keys(DZ).filter(t=>DZ[t].eq[k]).map(t=>DZ[t].n+(DZ[t].eq[k]>1?' (ต้อง '+DZ[t].eq[k]+')':' (ต้อง 1)')).join(', ');return`<div class="rc">${ico(e.ic,44)}<div style="flex:1;min-width:180px"><h3>${e.n} · ${coin(e.p)}</h3><p>${e.d}</p><p>ประโยชน์: ${e.u}${use?' · ใช้กับ: '+use:''}</p></div><b>มี ${S.eq[k]||0}</b><button class="btn go" onclick="askEq(${"'"+k+"'"})" ${S.mkClosed?'disabled':''}>ซื้อ</button></div>`};
+const V={
+menu:()=>['n',`<div class="big">AQUA FARM</div><p>From Farm to Food · Prototype</p><br>${inGame?`<button class="btn go w" onclick="go('farm')">เล่นต่อ (Resume)</button><button class="btn w" onclick="saveGame()">บันทึกเกม</button><button class="btn w" onclick="go('slots')">โหลดเกม</button><button class="btn w" onclick="go('set')">ตั้งค่า</button><button class="btn dk w" onclick="dlg('กลับสู่เมนูหลัก? (ระบบจะบันทึกให้อัตโนมัติ)',toTitle)">กลับเมนูหลัก</button>`:`<button class="btn go w" onclick="go('slots')">New Game</button><button class="btn w" onclick="cont()">Continue</button><button class="btn w" onclick="go('slots')">Load Game</button><button class="btn w" onclick="go('set')">Settings</button><button class="btn w" onclick="go('credits')">Credits</button><button class="btn dk w" onclick="dlg('ปิดแท็บเบราว์เซอร์นี้เพื่อออกจากเกม (เบราว์เซอร์ไม่อนุญาตให้เกมปิดหน้าต่างเอง)',()=>{},{only:1})">Exit</button>`}`],
+slots:()=>{const o=getSlots();return['n',`<h2>เลือกช่องบันทึก</h2><p>เมนูหลัก → ช่องบันทึก → บทเรียน → ฟาร์ม</p>${[1,2,3].map(i=>{const d=o[i];return`<div class="rc" style="text-align:left">${ico(d?'house':'crate',40)}<div style="flex:1;min-width:150px"><h3>ช่อง ${i}: ${d?esc(d.name):'ว่าง'}</h3><p>${d?`วันที่ ${d.S.day} · ${d.S.money}฿ · ปลา ${d.S.pond.length} · เซฟ v${d.v}`:'ยังไม่มีข้อมูล'}</p></div>${d?`<button class="btn go" onclick="loadSlot(${i})">โหลด</button><button class="btn" onclick="dlg('ตั้งชื่อใหม่',v=>renameSlot(${i},v),{inp:'${esc(d.name).replace(/'/g,'')}'})">ชื่อ</button><button class="btn dk" onclick="dlg('ลบเซฟ ${esc(d.name)}? ย้อนกลับไม่ได้',()=>delSlot(${i}))">ลบ</button>`:`<button class="btn go" onclick="dlg('ตั้งชื่อ Save',v=>newSlot(${i},v),{inp:'ฟาร์มของฉัน'})">เกมใหม่</button>`}</div>`}).join('')}<button class="btn dk w" onclick="go('menu')">กลับ</button>`]},
+credits:()=>['n',`<h2>Credits</h2><p>AQUA FARM: From Farm to Food</p><p>โปรเจกต์ต้นแบบเกมจำลองฟาร์มปลา</p><p>HTML5 · CSS3 · JavaScript · Canvas Pixel Art</p><p>ค่าน้ำ ปลา และโภชนาการเป็นแบบจำลองเพื่อการเรียนรู้</p><br><button class="btn go w" onclick="go('menu')">กลับ</button>`],
+over:()=>['n',`<h2 style="color:#ff8f86">Game Over</h2><p>สุขภาพหมดเพราะขาดอาหารเป็นเวลานาน</p><p>บทเรียน: เตรียมเสบียงถนอมอาหารไว้ก่อนภัยพิบัติ</p><br><button class="btn go w" onclick="cont()">โหลดเซฟล่าสุด</button><button class="btn dk w" onclick="inGame=false;S=null;slotId=null;go('menu')">กลับเมนูหลัก</button>`],
+farm:()=>{const h=hint(),w=warnDays();return[null,(h?`<div class="bub">${h}</div>`:'')+(S.act?`<div class="warnb blink">${ico('warn',24)}${DZ[S.act.type].n} วันที่ ${S.act.i+1}/${S.act.dur}</div>`:w?`<div class="warnb blink">${ico('warn',24)}${DZ[S.dz.type].n}ในอีก ${w} วัน</div>`:'')]},
+home:()=>['c',`<h2>บ้านพัก</h2><p>พักผ่อนเพื่อฟื้นพลังงาน และเลือกกินอาหารเพื่อฟื้นความอิ่ม (ความอิ่มลดลง ${NEED}/วัน)</p><div class="stat" style="margin:8px 0"><span>อิ่ม ${S.hun}%</span><span>พลังงาน ${S.en}%</span><span>สุขภาพ ${S.hp}%</span><span>ความสุข ${S.joy}%</span></div><button class="btn go" onclick="rest()">พักผ่อน (+40 พลังงาน)</button><h3 style="margin-top:10px">อาหารที่มี</h3>${S.stock.length?S.stock.map((b,i)=>batchRow(b,i)).join(''):'<p>ยังไม่มีอาหาร ไปทำที่ครัว</p>'}`],
+prof:()=>['c',`<h2>ข้อมูลตัวละคร</h2><div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">${ico('face',96)}<div style="flex:1;min-width:240px"><h3>${S.char} — เจ้าของฟาร์ม</h3><p>เงิน ${S.money}฿ · วันที่ ${S.day} · เสบียงอยู่ได้ ${supplyDays()} วัน</p><p>อิ่ม</p>${bar(S.hun,'#e9b949')}<p>พลังงาน</p>${bar(S.en,'#65A30D')}<p>สุขภาพ</p>${bar(S.hp,'#e0584d')}<p>ความสุข</p>${bar(S.joy,'#38BDF8')}</div></div><p>ความอิ่มหมด → สุขภาพลด · สุขภาพ 0 = Game Over · กินอาหารฟื้นอิ่ม/พลังงาน</p>`],
+pond:()=>{const[ws,wc]=wstat();const fu=feedUnit();return['r',`<h2>บ่อปลา</h2><div style="font-weight:bold;color:${wc}">คุณภาพน้ำ: ${ws} (${S.water}%)</div>${bar(S.water,wc)}<div class="stat"><span>Ammonia ${S.am.toFixed(2)} ppm</span><span>Nitrite ${S.ni.toFixed(2)} ppm</span><span>Nitrate ${S.na.toFixed(1)} ppm</span><span>ออกซิเจน ${S.o2}%</span><span>อุณหภูมิ ${S.temp.toFixed(1)}°C</span><span>กรองชีวภาพ ${S.bio}%</span></div><p>ค่าน้ำเป็นแบบจำลองเพื่อการเรียนรู้ ไม่ใช่คำแนะนำการเลี้ยงจริง</p>
+<h3 style="margin-top:6px">ให้อาหาร (${fu} หน่วย/วัน) ${S.fed?'— วันนี้ให้แล้ว':''}</h3><button class="btn" onclick="feed(1)" ${S.fed?'disabled':''}>น้อย ${coin(feedCost(1))}</button><button class="btn" onclick="feed(2)" ${S.fed?'disabled':''}>พอดี ${coin(feedCost(2))}</button><button class="btn" onclick="feed(3)" ${S.fed?'disabled':''}>มาก ${coin(feedCost(3))}</button><br><button class="btn" onclick="chWater()">เปลี่ยนน้ำ ${coin(20)}</button><button class="btn" onclick="air()">เติมอากาศ ${coin(15)}</button><button class="btn go" onclick="catchFish()">จับปลา (${mature()})</button>
+<h3 style="margin-top:6px">ปลาในบ่อ ${S.pond.length}/${CAP}</h3>${S.pond.length?S.pond.map(f=>`<div style="display:flex;gap:8px;align-items:center">${ico('f_'+f.t,26)}<span style="width:76px;font-size:12px">${FISH[f.t].n}</span><div style="flex:1">${bar(f.g,f.g>=100?'#e9b949':'#0E7490')}</div><span style="font-size:12px;width:92px">${f.g>=100?'พร้อมจับ':f.g+'%'} · ♥${Math.round(f.h)}</span></div>`).join(''):'<p>ยังไม่มีปลา ไปซื้อที่ร้านปลา</p>'}`]},
+shop:()=>{if(!selFish)return['c',`<h2>ร้านปลา</h2><p>คลิกการ์ดเพื่อดูรายละเอียดก่อนซื้อ · บ่อ ${S.pond.length}/${CAP} ตัว</p>${S.mkClosed?'<p class="no">ตลาดปิดชั่วคราว ซื้อไม่ได้</p>':''}<br><div class="gr">${Object.keys(FISH).map(t=>slot('f_'+t,FISH[t].n,coin(FISH[t].b),`openFish('${t}')`,{w:70})).join('')}</div>`];
+ const t=selFish,F=FISH[t],days=Math.ceil(100/(50*F.gm)),free=CAP-S.pond.length,tot=F.b*shopQ,gl=F.gm>=1.1?'เร็ว':F.gm>=.9?'ปานกลาง':F.gm>=.7?'ช้า':'ช้ามาก';
+ return['c',`<button class="btn dk" onclick="selFish=null;render()">← กลับร้านปลา</button><div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:8px"><div class="rc" style="flex-direction:column;width:170px;align-self:flex-start">${ico('f_'+t,130)}<h3>${F.n}</h3><p>${F.who}</p></div><div style="flex:1;min-width:260px"><table><tr><td>ราคาซื้อ</td><td>${coin(F.b)} / ตัว</td></tr><tr><td>ราคาขายเมื่อโตเต็มวัย</td><td>${coin(F.s)}</td></tr><tr><td>ระยะเวลาเติบโต</td><td>~${days} วัน (เมื่อให้อาหารพอดี)</td></tr><tr><td>ความเร็วเติบโต</td><td>${gl}</td></tr><tr><td>ความทนทาน / ทนสภาพน้ำ</td><td>${stars(F.tough)}</td></tr><tr><td>ต้องการออกซิเจน</td><td>≥ ${F.o2}%</td></tr><tr><td>อาหารที่ต้องใช้</td><td>${F.feed} หน่วย/วัน</td></tr><tr><td>ผลผลิตอาหาร</td><td>${F.yield} จาน/ตัว</td></tr><tr><td>ข้อดี</td><td>${F.pro}</td></tr><tr><td>ข้อเสีย</td><td>${F.con}</td></tr></table><p>ค่าตัวเลขเป็นค่าจำลองในเกมเพื่อความสมดุล</p>
+<div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap"><button class="btn" onclick="setQ(-1)">−</button><b style="font-size:20px;width:30px;text-align:center">${shopQ}</b><button class="btn" onclick="setQ(1)">+</button><span>รวม ${coin(tot)} · เงิน ${S.money}฿ · บ่อว่าง ${free} ตัว</span></div>
+<div style="margin-top:6px"><button class="btn go" onclick="askBuy('${t}')" ${shopQ>free||S.money<tot||S.mkClosed?'disabled':''}>ซื้อปลา</button><button class="btn dk" onclick="selFish=null;render()">ยกเลิก</button></div>${shopQ>free?'<p class="no">พื้นที่ในบ่อไม่พอ</p>':S.money<tot?'<p class="no">เงินไม่พอ</p>':''}</div></div>`]},
+market:()=>['c',`<h2>ตลาด</h2>${S.mkClosed?'<div class="rc" style="border-color:#e0584d"><b class="no">ตลาดปิดชั่วคราว — เส้นทางถูกตัดขาด ใช้เสบียงที่เตรียมไว้</b></div>':''}<h3>วัตถุดิบ (ราคาสุ่มเปลี่ยนทุกวัน)</h3><div class="gr">${Object.keys(ING).map(k=>{const d=S.pr[k]-S.pp[k];return slot(ING[k][2],ING[k][0],coin(S.pr[k])+` <b style="color:${d>0?'#ff8f86':d<0?'#9be07a':'#E8DCC4'};display:inline">${d>0?'▲':d<0?'▼':'▬'}</b>`,`buyIng('${k}')`,{cnt:S.inv[k],dis:S.mkClosed,w:44})}).join('')}</div>
+<h3 style="margin-top:10px">ขายปลาในคลัง</h3><div class="gr">${Object.keys(FISH).map(t=>slot('f_'+t,FISH[t].n,'ขาย '+coin(FISH[t].s),`sellFish('${t}')`,{cnt:S.fi[t],dis:!S.fi[t]||S.mkClosed,w:50})).join('')}</div>
+<h3 style="margin-top:10px">อุปกรณ์ครัว</h3>${['rack','jar','fridge','canner'].map(eqRow).join('')}`],
+cook:()=>{const tf=pickFish();const sel=`<div class="rc"><b>ปลาที่ใช้:</b> <select onchange="S.cookFish=this.value;render()">${Object.keys(FISH).filter(t=>S.fi[t]>0).map(t=>`<option value="${t}" ${t===tf?'selected':''}>${FISH[t].n} (${S.fi[t]}) → ${FISH[t].yield} จาน</option>`).join('')||'<option>ไม่มีปลา</option>'}</select></div>`;
+ const tabs=`<button class="btn ${cookTab==='cook'?'go':''}" onclick="cookTab='cook';render()">ทำอาหาร</button><button class="btn ${cookTab==='pres'?'go':''}" onclick="cookTab='pres';render()">ถนอมอาหาร</button>`;
+ const ingChips=n=>Object.keys(n).map(k=>`<span class="mini ${S.inv[k]>=n[k]?'':'no'}">${ico(ING[k][2],18)} ${ING[k][0]} ${S.inv[k]}/${n[k]}</span>`).join('');
+ if(cookTab==='cook')return['c',`<h2>ครัวและสูตรอาหาร</h2>${tabs}${sel}${Object.keys(RC).map(r=>{const it=IT[r];return`<div class="rc">${ico(it.ic,56)}<div style="flex:1;min-width:200px"><h3>${it.n}</h3><p>ขาย ${coin(it.v)} · อิ่ม +${it.hun} · พลังงาน +${it.en} · ${it.kcal} kcal · โปรตีน ${it.pro} g · ปรุง ${RC[r].time} นาที · เก็บได้ ${it.shelf} วัน</p><div style="margin-top:5px"><span class="mini ${tf?'':'no'}">${ico('f_nila',20)} ปลา 1</span>${ingChips(RC[r].need)}</div></div><button class="btn go" onclick="cook('${r}')" ${canCook(r)?'':'disabled'}>ทำอาหาร</button></div>`}).join('')}`];
+ return['c',`<h2>ถนอมอาหาร</h2>${tabs}${sel}${Object.keys(PR).map(k=>{const P=PR[k],it=IT[k],e=EQ[P.req],cap=S.eq[P.req]||0,use=usedCap(P.req);return`<div class="rc">${ico(it.ic,56)}<div style="flex:1;min-width:200px"><h3>${P.name} → ${it.n}</h3><p>${P.d} · ใช้เวลา ${P.days} วัน · ขาย ${coin(it.v)}</p><div style="margin-top:5px"><span class="mini ${tf?'':'no'}">${ico('f_nila',20)} ปลา 1</span>${ingChips(P.need)}<span class="mini ${cap>use?'':'no'}">${ico(e.ic,18)} ${e.n} ว่าง ${cap-use}/${cap}</span></div></div><button class="btn go" onclick="startProc('${k}')" ${canProc(k)?'':'disabled'}>เริ่มถนอม</button></div>`}).join('')}
+<div class="rc"><div><b>ตู้เย็น (Refrigeration):</b> ${S.eq.fridge>0?(S.power?'<span class="ok">ทำงาน — อาหารสุกเสื่อมช้าลงครึ่งหนึ่ง</span>':'<span class="no">ไฟดับ ตู้เย็นหยุดทำงาน!</span>'):'ยังไม่มี (ซื้อที่ตลาด)'}</div></div>
+<h3>กำลังถนอม</h3>${S.proc.length?S.proc.map(p=>`<div class="rc">${ico(IT[p.k].ic,32)} ${PR[p.k].name} x${p.q} <b>เหลือ ${p.left} วัน</b></div>`).join(''):'<p>ไม่มี</p>'}`]},
+store:()=>{const need=S.dz&&!S.act?DZ[S.dz.type].dur:S.act?S.act.dur-S.act.i-1:0,d=supplyDays(),diff=Math.round((d-need)*10)/10;
+ const meals=S.stock.map((b,i)=>[b,i]).filter(x=>IT[x[0].k].t==='meal'),pres=S.stock.map((b,i)=>[b,i]).filter(x=>IT[x[0].k].t==='pres');
+ return['c',`<h2>คลังสินค้า</h2><div class="rc" style="display:block;border-color:#e9b949"><h3>เสบียงฉุกเฉิน (คำนวณจากความอิ่ม ไม่ใช่นับจาน)</h3><div class="stat" style="margin:6px 0"><span>อาหารกินได้ ${servings()} จาน</span><span>ความอิ่มรวม ${supplyHun()} หน่วย</span><span>อยู่ได้ <b>${d}</b> วัน (ต้องการ ${NEED}/วัน)</span><span>ภัยครั้งถัดไป ${need?'~'+need+' วัน':'—'}</span></div>${need?`<p class="${diff>=0?'ok':'no'}"><b>${diff>=0?'หลังภัยพิบัติเหลือ '+diff+' วัน':'ขาดเสบียงอีก '+(-diff)+' วัน'}</b></p>`:''}<p>เป้าหมายเสบียง: ${[3,5,7,10].map(g=>`<button class="btn ${S.goal===g?'go':'dk'}" onclick="S.goal=${g};render()">${g} วัน</button>`).join('')}</p>${bar(Math.min(100,Math.round(d/S.goal*100)),d>=S.goal?'#65A30D':'#e9b949')}<p>${d>=S.goal?'ถึงเป้าหมาย '+S.goal+' วันแล้ว':'ขาดอีก '+Math.round((S.goal-d)*10)/10+' วันจึงถึงเป้า'}</p><p>ประโยชน์: กันขาดอาหารช่วงภัย รักษาสุขภาพ ลดการพึ่งตลาดที่อาจปิด ใช้ช่วงฟื้นฟู</p></div>
+<h3>อาหารพร้อมรับประทาน</h3>${meals.length?meals.map(x=>batchRow(x[0],x[1])).join(''):'<p>ไม่มี</p>'}<h3>อาหารถนอมแล้ว</h3>${pres.length?pres.map(x=>batchRow(x[0],x[1])).join(''):'<p>ไม่มี</p>'}${S.proc.length?`<p>กำลังถนอม ${S.proc.length} ชุด (ดูที่ครัว)</p>`:''}
+<h3 style="margin-top:8px">วัตถุดิบสด</h3><div class="gr">${Object.keys(FISH).filter(t=>S.fi[t]).map(t=>slot('f_'+t,FISH[t].n,'ปลา',"",{cnt:S.fi[t],w:44})).join('')}${Object.keys(ING).filter(k=>S.inv[k]).map(k=>slot(ING[k][2],ING[k][0],'วัตถุดิบ',"",{cnt:S.inv[k],w:36})).join('')||(fishTotal()?'':'<p>ไม่มี</p>')}</div><p>หมายเหตุ: วัตถุดิบและปลาสดในคลังไม่หมดอายุ (ข้อจำกัดของ Prototype)</p>
+<h3 style="margin-top:8px">อุปกรณ์</h3><div class="gr">${Object.keys(EQ).filter(k=>S.eq[k]).map(k=>slot(EQ[k].ic,EQ[k].n,'อุปกรณ์',"",{cnt:S.eq[k],w:36})).join('')||'<p>ยังไม่มี</p>'}</div>`]},
+alert:()=>{const A=S.act,d=S.dz,type=A?A.type:d.type,D=DZ[type],w=warnDays(),rd=ready(),sev=(A?A.sev:d.sev),sv=sev>=.6?'รุนแรง':sev>=.45?'ปานกลาง':'เบา';
+ const showE=A||w;
+ return['r',`<h2>${ico('warn',24)} ข่าวเตือนภัยและการเตรียมพร้อม</h2>${A?`<h3 class="blink" style="color:#ff8f86">${D.n}กำลังเกิด วันที่ ${A.i+1}/${A.dur}</h3><p>${D.days[A.i]}</p>`:w?`<h3 class="blink" style="color:#ff8f86">แจ้งเตือน${D.n} — เริ่มในอีก ${w} วัน (วันที่ ${d.start}) นาน ${D.dur} วัน</h3><p>${D.m}</p><p>ความรุนแรง: <b>${sv}</b></p>`:'<h3>ยังไม่มีประกาศภัยพิบัติ</h3><p>ภัยมี 4 แบบ: น้ำท่วม (แจ้ง 5 วัน) ภัยแล้ง (3) น้ำเสีย (4) อากาศร้อนจัด (3) และเกิดต่อเนื่องหลายวัน</p>'}
+${showE?`<h3 style="margin-top:6px">ลำดับเหตุการณ์</h3>${D.days.map((t,i)=>`<p style="${A&&A.i===i?'color:#e9b949;font-weight:bold':''}">${t}</p>`).join('')}`:''}
+${w?`<h3 style="margin-top:8px">Readiness Check: ${rd.pct}%</h3>${bar(rd.pct,rd.pct>=70?'#65A30D':rd.pct>=40?'#e9b949':'#e0584d')}${Object.keys(D.eq).map(k=>`<div>${ico(EQ[k].ic,18)} ${EQ[k].n}: มี ${S.eq[k]||0} / ต้อง ${D.eq[k]} <b class="${(S.eq[k]||0)>=D.eq[k]?'ok':'no'}">${(S.eq[k]||0)>=D.eq[k]?'พร้อม ✓':'ยังไม่พอ ✗'}</b></div>`).join('')}<p>เสบียง ${supplyDays()} วัน / ภัย ${D.dur} วัน · น้ำ ${wstat()[0]} · เงิน ${S.money}฿</p>`:''}
+${S.dmg?`<div style="margin:8px 0"><button class="btn go" onclick="repair()">ซ่อมแซมและฟื้นฟูฟาร์ม ${coin(S.repair)}</button></div>`:''}
+<h3 style="margin-top:8px">ร้านอุปกรณ์ป้องกันภัย</h3>${['sand','pump','net','tank','shade','filter','air'].map(eqRow).join('')}`]},
+event:()=>{const e=S.rep&&S.rep.ev;return[null,`<div class="bub"><b>${e?DZ[e.type].n+' วันที่ '+(e.i+1)+'/'+e.dur:''}</b><br>${e?e.text:''}<br><button class="btn go" onclick="go('report')">ดูรายงานทันที</button></div>`]},
+report:()=>{const r=S.rep;if(!r)return['n','<h2>รายงานประจำวัน</h2><p>ยังไม่มีรายงาน กด "จบวัน" ก่อน</p>'];const z=r.ev;
+ return['c',`<h2>รายงานประจำวัน — วันที่ ${r.day}</h2><div style="display:flex;gap:24px;align-items:center;flex-wrap:wrap"><div class="gd" style="color:${r.g==='S'?'#e9b949':r.g==='A'?'#38BDF8':'#fff'}">${r.g}</div><table style="flex:1;min-width:240px"><tr><td>${ico('coin',16)} รายได้วันนี้</td><td>${r.earned}฿</td></tr><tr><td>${ico('coin',16)} เงินคงเหลือ</td><td>${r.money}฿</td></tr><tr><td>${ico('drop',16)} น้ำ / ออกซิเจน</td><td>${r.water}% / ${r.o2}%</td></tr><tr><td>${ico('f_nila',18)} ปลาในบ่อ</td><td>${r.fish} ตัว${r.died?` (สูญเสีย ${r.died})`:''}</td></tr><tr><td>${ico('fry',16)} เสบียง</td><td>${r.sup} จาน · อยู่ได้ ${r.days} วัน</td></tr></table></div>
+${r.done.length?`<p class="ok">ถนอมอาหารเสร็จ: ${r.done.join(', ')}</p>`:''}${r.spoil?`<p class="no">อาหารหมดอายุ ${r.spoil} จาน (ไปทิ้งที่คลังสินค้า)</p>`:''}
+${z?`<div class="rc" style="margin-top:10px;display:block"><h3 style="color:#ff8f86">${DZ[z.type].n} — วันที่ ${z.i+1}/${z.dur}</h3><p>${z.text}</p><table><tr><td>ความพร้อมของอุปกรณ์วันนี้</td><td>${z.prot}%</td></tr><tr><td>ปลาที่สูญเสียวันนี้ / สะสม</td><td>${z.lost} / ${z.cum} (เหลือ ${z.after} จาก ${z.before})</td></tr><tr><td>ค่าเสียหายวันนี้ / สะสม</td><td>${z.cost}฿ / ${z.cumCost}฿</td></tr>${z.food||z.cumFood?`<tr><td>อาหารเสียหายจากน้ำ</td><td>${z.food} จาน (สะสม ${z.cumFood})</td></tr>`:''}${z.used?`<tr><td>กระสอบทรายที่ใช้สะสม</td><td>${z.used}</td></tr>`:''}${z.outage?'<tr><td colspan=2 class="no">ไฟดับ — ตู้เย็นหยุดทำงาน อาหารเสียเร็วขึ้น</td></tr>':''}${z.closed?'<tr><td colspan=2 class="no">ตลาดปิด — ซื้อขายไม่ได้ ต้องใช้เสบียง</td></tr>':''}</table>${z.last?`<p><b>สรุปภัยพิบัติ:</b> ปลาก่อนเกิดภัย ${z.before} → เหลือ ${z.after} · ค่าฟื้นฟู ${S.repair}฿ · เสบียงเหลืออยู่ได้ ${z.sup} วัน</p><p>${S.repair?'ไปที่ "เตรียมภัย" เพื่อซ่อมแซมและฟื้นฟู · ซื้อปลาใหม่ที่ร้านปลา':'<span class="ok">ฟาร์มไม่เสียหาย</span>'}</p>`:'<p>ภัยยังไม่จบ กด "เริ่มวันใหม่" แล้วตรวจฟาร์ม/เสบียง ก่อนกด "จบวัน"</p>'}</div>`:''}
+<button class="btn go" onclick="go('farm')">เริ่มวันใหม่</button>`]},
+set:()=>['n',`<h2>ตั้งค่า</h2><button class="btn w ${SND?'go':''}" onclick="SND=!SND;try{localStorage.setItem('aq_snd',SND?'1':'0')}catch(e){}render()">เสียง: ${SND?'เปิด':'ปิด'}</button>${inGame?`<button class="btn w" onclick="S.tut=0;go('farm')">เล่นบทเรียนซ้ำ</button><button class="btn w" onclick="saveGame()">บันทึกเกม</button>`:''}<button class="btn dk w" onclick="go('menu')">กลับ</button>`]
+};
+function render(){
+ const menus=['menu','slots','credits','over'];const g=inGame&&!!S&&!menus.includes(cur);
+ const T=g&&S.tut<9?TUT[S.tut]:null;const hl=T?T.hl:'';
+ if(T&&T.c&&T.c())S.tutOk=S.tut;
+ $('side').className=g?'':'off';
+ $('side').innerHTML=g?`<div class="logo">AQUA FARM<small>From Farm to Food</small></div>${SCR.map(m=>`<button class="mi ${cur===m[0]?'on':''} ${hl===m[0]?'hl':''}" onclick="go('${m[0]}')" title="${m[1]}">${ico(m[2],26)}<span>${m[1]}</span></button>`).join('')}<div style="flex:1"></div><button class="mi" onclick="go('menu')" title="เมนู / พัก">${ico('gear',26)}<span>เมนู / พัก</span></button>`:'';
+ $('hud').className=g?'':'hs';
+ $('hud').innerHTML=g?`<div class="plq pf ${hl==='hud'?'hl':''}" onclick="go('prof')" title="คลิกเพื่อดูข้อมูลตัวละคร">${ico('face',46)}<div><b>${S.char}</b>${mb('อิ่ม',S.hun,'#e9b949')}${mb('แรง',S.en,'#65A30D')}${mb('สุขภาพ',S.hp,'#e0584d')}${mb('สุข',S.joy,'#38BDF8')}</div></div><div class="plq" title="เงิน">${ico('coin',24)}<b>${S.money}฿</b></div><div class="plq" title="วันในเกม">${ico('cal',24)}<b>วันที่ ${S.day}</b></div><div class="plq" title="ปลาในบ่อ + ในคลัง">${ico('f_nila',28)}<b>${S.pond.length+fishTotal()}</b></div><div class="plq" title="เสบียงอยู่ได้กี่วัน">${ico('crate',24)}<b>${supplyDays()} วัน</b></div><div class="plq" title="คุณภาพน้ำ">${ico('drop',22)}<div class="seg"><i style="width:${S.water}%"></i></div><b style="color:${wstat()[1]}">${wstat()[0]}</b></div>${S.act?`<div class="plq blink" style="color:#ff8f86">${ico('warn',22)} ${DZ[S.act.type].n} ${S.act.i+1}/${S.act.dur}</div>`:warnDays()?`<div class="plq blink" style="color:#ff8f86">${ico('warn',22)} ${DZ[S.dz.type].n} ${warnDays()} วัน</div>`:''}${S.power?'':`<div class="plq no">ไฟดับ</div>`}<span style="flex:1"></span><button class="btn go" onclick="endDay()" title="จบวันและดูรายงาน">จบวัน ▶</button>`:'';
+ const v=V[cur]();
+ let h=v[0]?`<div class="win ${v[0]} ${nav?'in':''}">${v[1]}</div>`:v[1];
+ if(T)h+=`<div class="tut"><b>บทเรียน ${S.tut+1}/9</b> <span class="dots">${TUT.map((x,i)=>i<S.tut?'■':i===S.tut?'◆':'□').join('')}</span><p style="color:#0a2229;font-size:14px;margin:4px 0">${T.t}</p><button class="btn dk" onclick="tutGo(-1)" ${S.tut?'':'disabled'}>Back</button><button class="btn go" onclick="tutGo(1)" ${T.c&&S.tutOk!==S.tut?'disabled':''}>Next</button><button class="btn" onclick="S.tut=9;render()">Skip</button></div>`;
+ if(DLG)h+=`<div class="mask"><div class="win n in"><h3 style="margin-bottom:10px">${esc(DLG.m)}</h3>${DLG.inp!==undefined?`<input id="dlgin" maxlength="16" value="${esc(DLG.inp)}"><br><br>`:''}<button class="btn go" onclick="dlgOk()">ตกลง</button>${DLG.only?'':'<button class="btn dk" onclick="dlgNo()">ยกเลิก</button>'}</div></div>`;
+ $('ui').className=T?'tutOn':'';$('ui').innerHTML=h;nav=false}
+render();draw();
+</script></body></html>
