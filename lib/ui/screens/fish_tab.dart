@@ -6,6 +6,7 @@ import '../../data/fish_data.dart';
 import '../../game/tutorial.dart';
 import '../dialogs.dart';
 import '../providers.dart';
+import '../../game/game_engine.dart';
 import '../../game/game_state.dart';
 import '../scenes/fish_swim.dart';
 import '../scenes/pixel_scene.dart';
@@ -70,14 +71,21 @@ class _FishTabState extends ConsumerState<FishTab> {
             ],
           ),
         ),
-        Expanded(child: _shop ? const _FishShop() : const _PondView()),
+        Expanded(
+          child: _shop
+              ? const _FishShop()
+              : _PondView(onShop: () => _set(true)),
+        ),
       ],
     );
   }
 }
 
 class _PondView extends ConsumerStatefulWidget {
-  const _PondView();
+  const _PondView({required this.onShop});
+
+  /// ไปหน้าร้านปลา (ตอนบ่อว่าง)
+  final VoidCallback onShop;
 
   @override
   ConsumerState<_PondView> createState() => _PondViewState();
@@ -93,10 +101,11 @@ class _PondViewState extends ConsumerState<_PondView> {
     final e = session.engine;
     final s = session.state;
     final ctl = ref.read(gameProvider.notifier);
-    final ws = e.waterStatus;
+    final ws = e.pondStatus;
     final wc = Color(ws.color);
     final fu = e.feedUnit;
     final scene = PondSceneData.fromState(s);
+    final advice = e.waterAdvice;
 
     return ListView(
       padding: const EdgeInsets.all(Gap.m),
@@ -140,15 +149,35 @@ class _PondViewState extends ConsumerState<_PondView> {
                 physics: const NeverScrollableScrollPhysics(),
                 mainAxisSpacing: Gap.s,
                 crossAxisSpacing: Gap.s,
-                childAspectRatio: 1.45,
+                childAspectRatio: 1.25,
                 children: [
-                  _Gauge('NH3', s.ammonia.toStringAsFixed(2), 'ppm'),
-                  _Gauge('NO2', s.nitrite.toStringAsFixed(2), 'ppm'),
-                  _Gauge('NO3', s.nitrate.toStringAsFixed(1), 'ppm'),
+                  _Gauge(
+                    'แอมโมเนีย',
+                    s.ammonia.toStringAsFixed(2),
+                    'ppm',
+                    level: e.ammoniaLevel,
+                    help: 'ของเสียจากปลาและเศษอาหาร (NH3) ยิ่งต่ำยิ่งดี',
+                  ),
+                  _Gauge(
+                    'ไนไตรต์',
+                    s.nitrite.toStringAsFixed(2),
+                    'ppm',
+                    level: e.nitriteLevel,
+                    help: 'ของเสียที่ตัวกรองย่อยมาครึ่งทาง (NO2) ยิ่งต่ำยิ่งดี',
+                  ),
+                  _Gauge(
+                    'ไนเตรต',
+                    s.nitrate.toStringAsFixed(1),
+                    'ppm',
+                    level: e.nitrateLevel,
+                    help: 'ของเสียที่ย่อยแล้ว (NO3) อันตรายน้อย แต่สะสมได้ เปลี่ยนน้ำเพื่อลด',
+                  ),
                   _Gauge(
                     'อุณหภูมิ',
                     s.temp.toStringAsFixed(1),
                     '°C',
+                    level: e.tempLevel,
+                    help: 'น้ำเกิน 31°C ปลาเริ่มเครียด',
                     icon: const PixelGlyph(
                       Glyph.sun,
                       size: 14,
@@ -159,17 +188,44 @@ class _PondViewState extends ConsumerState<_PondView> {
                     'ออกซิเจน',
                     _num(s.o2),
                     '%',
+                    level: e.o2Level,
+                    help: s.pond.isEmpty
+                        ? 'ออกซิเจนในน้ำ ลดลงทุกคืนตามจำนวนปลา'
+                        : 'ปลาในบ่อต้องการอย่างน้อย ${e.pondO2Need}% ต่ำกว่านี้ปลาเสียสุขภาพ',
                     icon: const PixelIcon('bub', size: 16),
                   ),
                   _Gauge(
-                    'กรองชีวภาพ',
+                    'ตัวกรอง',
                     '${s.bio}',
                     '%',
+                    help: 'ตัวกรองชีวภาพ: แบคทีเรียช่วยย่อยของเสีย โตขึ้นเองทุกวันที่มีปลา',
                     icon: const PixelIcon('filt', size: 16),
                   ),
                 ],
               ),
-              const SizedBox(height: Gap.s),
+              if (advice != null) ...[
+                const SizedBox(height: Gap.s),
+                PaperCard(
+                  key: const ValueKey('water-advice'),
+                  fill: AquaColors.goldPale,
+                  padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
+                  child: Text(
+                    advice,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: FontSize.body,
+                      color: AquaColors.text,
+                    ),
+                  ),
+                ),
+              ],
+              const SizedBox(height: Gap.xs),
+              const Muted(
+                'แตะค้างที่การ์ดเพื่อดูคำอธิบาย · สีเหลือง = เริ่มแย่ · สีแดง = อันตราย',
+                size: 13,
+                align: TextAlign.center,
+              ),
+              const SizedBox(height: Gap.xs),
               const Muted(
                 'ค่าน้ำเป็นแบบจำลองเพื่อการเรียนรู้ ไม่ใช่คำแนะนำการเลี้ยงจริง',
                 size: 13,
@@ -271,6 +327,17 @@ class _PondViewState extends ConsumerState<_PondView> {
                 onPressed: () =>
                     showResult(context, ctl.run((e) => e.catchFish())),
               ),
+              const SizedBox(height: Gap.xs),
+              Muted(
+                s.pond.isEmpty
+                    ? 'บ่อยังว่าง ซื้อปลาที่ "ร้านปลา" ก่อน'
+                    : e.matureCount == 0
+                    ? 'ยังจับไม่ได้: ปลาโตสุด ${e.maxPondGrowth}% (จับได้เมื่อโตครบ 100%)'
+                    : 'จับปลาที่โตครบ ${e.matureCount} ตัว ไปเก็บในคลังเพื่อทำอาหาร',
+                key: const ValueKey('catch-info'),
+                size: 13,
+                align: TextAlign.center,
+              ),
             ],
           ),
         ),
@@ -283,7 +350,7 @@ class _PondViewState extends ConsumerState<_PondView> {
                 icon: const PixelIcon('f_nila', size: 30),
                 trailing: Tag('${s.pond.length}/$kPondCapacity'),
               ),
-              if (s.pond.isEmpty)
+              if (s.pond.isEmpty) ...[
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: Gap.s),
                   child: Muted(
@@ -292,6 +359,14 @@ class _PondViewState extends ConsumerState<_PondView> {
                     align: TextAlign.center,
                   ),
                 ),
+                PixelButton(
+                  key: const ValueKey('go-shop'),
+                  label: 'ไปร้านปลา',
+                  icon: const PixelIcon('f_nila', size: 28),
+                  expand: true,
+                  onPressed: widget.onShop,
+                ),
+              ],
               if (s.pond.isNotEmpty) _FishCards(fish: s.pond, fed: s.fed),
             ],
           ),
@@ -304,66 +379,107 @@ class _PondViewState extends ConsumerState<_PondView> {
 String _num(double v) =>
     v == v.roundToDouble() ? v.toInt().toString() : v.toStringAsFixed(1);
 
-/// ช่องค่าน้ำ 1 ค่า
+/// ช่องค่าน้ำ 1 ค่า: ชื่อ ค่า และสถานะเป็นสี (แตะค้างดูคำอธิบาย)
 class _Gauge extends StatelessWidget {
-  const _Gauge(this.label, this.value, this.unit, {this.icon});
+  const _Gauge(
+    this.label,
+    this.value,
+    this.unit, {
+    required this.help,
+    this.level,
+    this.icon,
+  });
   final String label;
   final String value;
   final String unit;
+  final String help;
+
+  /// null = ไม่มีเกณฑ์ดี/แย่ (เช่น ตัวกรอง)
+  final ValueLevel? level;
   final Widget? icon;
 
   @override
   Widget build(BuildContext context) {
-    return Semantics(
-      label: '$label $value $unit',
-      child: ExcludeSemantics(
-        child: PaperCard(
-          padding: const EdgeInsets.fromLTRB(6, 4, 6, 4),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  if (icon != null) ...[icon!, const SizedBox(width: 3)],
-                  Flexible(
-                    child: Text(
-                      label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AquaColors.textSoft,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text.rich(
-                  TextSpan(
-                    children: [
-                      TextSpan(
-                        text: value,
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      TextSpan(
-                        text: ' $unit',
+    final lv = level;
+    final low = label == 'ออกซิเจน';
+    final (fill, status, color) = switch (lv) {
+      ValueLevel.bad => (AquaColors.redPale, 'อันตราย', AquaColors.bad),
+      ValueLevel.watch => (
+        AquaColors.goldPale,
+        low ? 'เริ่มต่ำ' : 'เริ่มสูง',
+        AquaColors.goldDark,
+      ),
+      ValueLevel.good => (AquaColors.paper, 'ปกติ', AquaColors.ok),
+      null => (AquaColors.paper, '', AquaColors.textSoft),
+    };
+    return Tooltip(
+      message: help,
+      triggerMode: TooltipTriggerMode.longPress,
+      child: Semantics(
+        label: '$label $value $unit $status',
+        child: ExcludeSemantics(
+          child: PaperCard(
+            fill: fill,
+            border: lv == ValueLevel.bad ? AquaColors.bad : AquaColors.woodDark,
+            padding: const EdgeInsets.fromLTRB(6, 3, 6, 3),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    if (icon != null) ...[icon!, const SizedBox(width: 3)],
+                    Flexible(
+                      child: Text(
+                        label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           fontSize: 12,
                           color: AquaColors.textSoft,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
-                    ],
+                    ),
+                  ],
+                ),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text.rich(
+                    TextSpan(
+                      children: [
+                        TextSpan(
+                          text: value,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            height: 1.15,
+                          ),
+                        ),
+                        TextSpan(
+                          text: ' $unit',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AquaColors.textSoft,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-            ],
+                if (status.isNotEmpty)
+                  Text(
+                    status,
+                    maxLines: 1,
+                    style: TextStyle(
+                      fontSize: 11,
+                      height: 1.1,
+                      color: color,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
       ),

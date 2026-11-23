@@ -68,7 +68,7 @@ final List<TutorialStep> kTutorial = [
     (e, cur) => e.state.fed > 0,
   ),
   TutorialStep(
-    'ดูค่า Ammonia, Nitrite, Nitrate และออกซิเจนของบ่อ ถ้าค่าแย่ให้เปลี่ยนน้ำหรือเติมอากาศ',
+    'ดูการ์ดค่าน้ำในบ่อ: สีเหลือง = เริ่มแย่ สีแดง = อันตราย ทำตามคำแนะนำใต้การ์ด (เปลี่ยนน้ำหรือเติมอากาศ)',
     TutorialTarget.pond,
     (e, cur) => cur == GameScreen.pond,
   ),

@@ -29,17 +29,33 @@ class ActionResult {
   String toString() => '${ok ? 'OK' : 'FAIL'}: $message';
 }
 
-/// สถานะคุณภาพน้ำ (wstat)
+/// สถานะคุณภาพน้ำ (wstat) — ต้นแบบใช้คำอังกฤษ ในเกมแสดงเป็นภาษาไทย
 enum WaterStatus {
-  excellent('Excellent', 0xFF65A30D),
-  good('Good', 0xFFA3C94A),
-  warning('Warning', 0xFFE9B949),
-  critical('Critical', 0xFFE0584D);
+  excellent('ดีมาก', 0xFF65A30D),
+  good('ดี', 0xFFA3C94A),
+  warning('เฝ้าระวัง', 0xFFE9B949),
+  critical('อันตราย', 0xFFE0584D);
 
   const WaterStatus(this.label, this.color);
   final String label;
   final int color;
 }
+
+/// ระดับของค่าน้ำแต่ละค่า (ใช้แสดงสีบนการ์ดค่าน้ำ ไม่มีผลต่อการคำนวณ)
+enum ValueLevel {
+  good('ปกติ'),
+  watch('เริ่มสูง'),
+  bad('อันตราย');
+
+  const ValueLevel(this.label);
+  final String label;
+}
+
+ValueLevel _levelAbove(double v, double watch, double bad) => v >= bad
+    ? ValueLevel.bad
+    : v >= watch
+    ? ValueLevel.watch
+    : ValueLevel.good;
 
 /// สถานะความสดของอาหาร (stCls)
 enum Freshness {
@@ -54,13 +70,26 @@ enum Freshness {
 
 /// ผล Readiness Check ก่อนภัย
 class Readiness {
-  const Readiness(this.equipmentRatio, this.pct);
+  const Readiness(
+    this.equipmentRatio,
+    this.pct, {
+    this.equipmentPts = 0,
+    this.supplyPts = 0,
+    this.waterPts = 0,
+    this.moneyPts = 0,
+  });
 
   /// สัดส่วนอุปกรณ์ที่มี 0..1 (e)
   final double equipmentRatio;
 
   /// ความพร้อมรวม % (pct)
   final int pct;
+
+  /// คะแนนแยกส่วน: อุปกรณ์ (เต็ม 50) เสบียง (30) น้ำ (10) เงิน (10)
+  final int equipmentPts;
+  final int supplyPts;
+  final int waterPts;
+  final int moneyPts;
 }
 
 /// คะแนนสรุปตอนจบเกม (หน้าชนะ / Game Over)
@@ -253,15 +282,87 @@ class GameEngine {
     final dz = s.upcoming;
     if (dz == null) return null;
     final e = protection(dz.type);
+    final sup = min(1.0, supplyDays / dz.duration);
     final pct = jsRound(
       (e * .5 +
-              min(1.0, supplyDays / dz.duration) * .3 +
+              sup * .3 +
               (s.water >= 60 ? .1 : 0) +
               (s.money >= 100 ? .1 : 0)) *
           100,
     );
-    return Readiness(e, pct);
+    return Readiness(
+      e,
+      pct,
+      equipmentPts: jsRound(e * 50),
+      supplyPts: jsRound(sup * 30),
+      waterPts: s.water >= 60 ? 10 : 0,
+      moneyPts: s.money >= 100 ? 10 : 0,
+    );
   }
+
+  // ------------------------------------------------ ค่าน้ำรายตัว (แสดงผล)
+  // เกณฑ์ตั้งจากสูตร calcWater: แต่ละค่าลดคะแนนน้ำราว 10 = เริ่มสูง, 30 = อันตราย
+
+  ValueLevel get ammoniaLevel => _levelAbove(s.ammonia, .5, 1.5);
+  ValueLevel get nitriteLevel => _levelAbove(s.nitrite, .5, 1.5);
+  ValueLevel get nitrateLevel => _levelAbove(s.nitrate, 7, 20);
+  ValueLevel get tempLevel => _levelAbove(s.temp, 31.5, 34);
+
+  /// ออกซิเจนที่ปลาในบ่อต้องการ (ปลาที่ต้องการมากที่สุด)
+  int get pondO2Need => s.pond.fold(0, (a, f) => max(a, kFish[f.type]!.o2Need));
+
+  /// ต่ำกว่าที่ปลาต้องการ = ปลาเสียสุขภาพทุกวัน
+  ValueLevel get o2Level {
+    final need = s.pond.isEmpty ? 35 : pondO2Need;
+    return s.o2 < need
+        ? ValueLevel.bad
+        : s.o2 < need + 15
+        ? ValueLevel.watch
+        : ValueLevel.good;
+  }
+
+  /// ค่าของเสีย (แอมโมเนีย ไนไตรต์ ไนเตรต) ที่แย่ที่สุด
+  ValueLevel get wasteLevel => [
+    ammoniaLevel,
+    nitriteLevel,
+    nitrateLevel,
+  ].reduce((a, b) => a.index >= b.index ? a : b);
+
+  /// สถานะบ่อรวม (ป้ายบนสุด): คะแนนน้ำ แต่ไม่ดีกว่าค่าที่แย่ที่สุด
+  /// ค่าเริ่มสูง → ไม่เกิน "ดี" · ค่าอันตราย → ไม่เกิน "เฝ้าระวัง"
+  /// · ออกซิเจนต่ำกว่าที่ปลาต้องการ → "อันตราย"
+  WaterStatus get pondStatus {
+    var st = waterStatus;
+    final worst = [
+      wasteLevel,
+      tempLevel,
+      o2Level,
+    ].reduce((a, b) => a.index >= b.index ? a : b);
+    final cap = o2Level == ValueLevel.bad
+        ? WaterStatus.critical
+        : worst == ValueLevel.bad
+        ? WaterStatus.warning
+        : worst == ValueLevel.watch
+        ? WaterStatus.good
+        : WaterStatus.excellent;
+    if (cap.index > st.index) st = cap;
+    return st;
+  }
+
+  /// คำแนะนำสั้นๆ ว่าควรทำอะไรกับบ่อ (null = ไม่ต้องทำอะไร)
+  String? get waterAdvice {
+    final tips = <String>[
+      if (o2Level != ValueLevel.good)
+        'ออกซิเจน${o2Level == ValueLevel.bad ? 'ไม่พอ' : 'เริ่มต่ำ'} → กด "เติมอากาศ"',
+      if (wasteLevel != ValueLevel.good)
+        'ของเสียสะสม → กด "เปลี่ยนน้ำ" หรือให้อาหารน้อยลง',
+      if (tempLevel != ValueLevel.good) 'น้ำร้อนเกินไป ปลาเครียด',
+    ];
+    return tips.isEmpty ? null : tips.join('\n');
+  }
+
+  /// การโตสูงสุดของปลาในบ่อ (%)
+  int get maxPondGrowth => s.pond.fold(0, (a, f) => max(a, f.growth));
 
   WaterStatus get waterStatus => s.water >= 80
       ? WaterStatus.excellent

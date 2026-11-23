@@ -90,6 +90,12 @@ Future<void> buyFish(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
+/// ค่าวันในช่องวันของแถบบน เช่น "1/30"
+Finder dayChip(String v) => find.descendant(
+  of: find.byKey(const ValueKey('day-chip')),
+  matching: find.text(v),
+);
+
 void main() {
   testWidgets('เมนูหลักมีปุ่มครบ และเล่นต่อเมื่อไม่มีเซฟแจ้งเตือน', (
     tester,
@@ -117,9 +123,11 @@ void main() {
     expect(find.byKey(const ValueKey('tutorial')), findsNothing);
     expect(repo.listSlots()[1]!.name, 'ฟาร์มของฉัน');
     expect(find.text('500฿'), findsOneWidget);
-    expect(find.text('วัน 1/30'), findsOneWidget);
+    expect(dayChip('1/30'), findsOneWidget);
     expect(find.text('2 วัน'), findsOneWidget);
-    expect(find.text('Excellent'), findsOneWidget);
+    expect(find.text('เสบียง'), findsOneWidget);
+    expect(find.text('ดีมาก'), findsOneWidget);
+    expect(find.text('Excellent'), findsNothing);
     expect(find.widgetWithText(PixelButton, 'จบวัน'), findsOneWidget);
     for (final t in ['ฟาร์ม', 'ปลา', 'ตลาด', 'ครัว', 'คลัง']) {
       expect(
@@ -193,6 +201,12 @@ void main() {
       200,
       scrollable: find.byType(Scrollable).last,
     );
+    // การ์ดค่าน้ำสูงขึ้น ปุ่มอาจโผล่แค่ขอบล่างใต้เมนู → เลื่อนให้อยู่กลางจอ
+    await Scrollable.ensureVisible(
+      tester.element(find.text('พอดี')),
+      alignment: .5,
+    );
+    await tester.pumpAndSettle();
     await tester.tap(find.text('พอดี'));
     await tester.pump();
     expect(find.text('ให้อาหารพอดี ปลาโตดี'), findsOneWidget);
@@ -209,7 +223,7 @@ void main() {
     );
     await tester.tap(find.text('เริ่มวันใหม่'));
     await tester.pumpAndSettle();
-    expect(find.text('วัน 2/30'), findsOneWidget);
+    expect(dayChip('2/30'), findsOneWidget);
   });
 
   testWidgets('ปลาในบ่อ: การ์ดต่อตัว มีป้ายป่วย/หิวชัดเจน', (tester) async {
@@ -303,7 +317,7 @@ void main() {
     await pumpApp(tester);
     await startNewGame(tester, mode: Difficulty.hard);
     expect(container.read(gameProvider)!.state.mode, Difficulty.hard);
-    expect(find.text('วัน 1/60'), findsOneWidget);
+    expect(dayChip('1/60'), findsOneWidget);
     expect(repo.listSlots()[1]!.mode, Difficulty.hard);
     await container.read(gameProvider.notifier).exitToMenu();
     await tester.pumpAndSettle();
@@ -329,7 +343,7 @@ void main() {
     });
     await ctl.save();
     await tester.pumpAndSettle();
-    expect(find.text('วัน 20/20'), findsOneWidget);
+    expect(dayChip('20/20'), findsOneWidget);
     await tester.tap(find.widgetWithText(PixelButton, 'จบวัน'));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('win')), findsOneWidget);
@@ -401,6 +415,87 @@ void main() {
     expect(find.byKey(const ValueKey('damaged-info')), findsOneWidget);
     expect(
       find.text('ฟาร์มเสียหาย: ปลาโตได้แค่ 50% จนกว่าจะซ่อม'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets(
+    'ข่าวเตือนภัย: บอกว่าภัยมาในอีกกี่วัน แยกคะแนนความพร้อม และปุ่มลัดไปซื้ออุปกรณ์',
+    (tester) async {
+      await pumpApp(tester);
+      await startNewGame(tester);
+      final ctl = container.read(gameProvider.notifier);
+      ctl.update((e) => e.state.day = 2);
+      await tester.pumpAndSettle();
+      expect(find.text('น้ำท่วมในอีก 5 วัน'), findsOneWidget);
+
+      final parts = find.byKey(const ValueKey('readiness-parts'));
+      await tester.scrollUntilVisible(
+        parts,
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(find.text('ความพร้อมรับภัย'), findsOneWidget);
+      expect(find.text('Readiness Check'), findsNothing);
+      expect(
+        find.descendant(of: parts, matching: find.text('อุปกรณ์ 0/50')),
+        findsOneWidget,
+      );
+      // ช่องอุปกรณ์มีชื่อ ไม่ใช่ไอคอนอย่างเดียว
+      expect(find.text('มี 0 / ต้อง 4'), findsOneWidget);
+
+      final go = find.byKey(const ValueKey('go-prepare'));
+      await tester.scrollUntilVisible(
+        go,
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(go);
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('eq-sand')).hitTestable(),
+        findsOneWidget,
+      );
+      expect(find.text('น้ำท่วม: ยังขาด 4'), findsOneWidget);
+    },
+  );
+
+  testWidgets('บ่อปลา: ค่าน้ำมีสีและคำแนะนำ ปุ่มจับปลาบอกเหตุผล', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+    await startNewGame(tester);
+    final ctl = container.read(gameProvider.notifier);
+    ctl.update((e) {
+      e.buyFish('nila', 2);
+      e.state.ammonia = .83;
+    });
+    await tester.tap(find.text('ปลา').last);
+    await tester.pumpAndSettle();
+    expect(find.text('แอมโมเนีย'), findsOneWidget);
+    expect(find.text('NH3'), findsNothing);
+    expect(find.text('เริ่มสูง'), findsOneWidget);
+    expect(
+      find.text('ดี'),
+      findsWidgets,
+    ); // ป้ายน้ำในบ่อลดจาก "ดีมาก" เป็น "ดี"
+
+    final advice = find.byKey(const ValueKey('water-advice'));
+    await tester.scrollUntilVisible(
+      advice,
+      200,
+      scrollable: find.byType(Scrollable).last,
+    );
+    expect(find.textContaining('กด "เปลี่ยนน้ำ"'), findsOneWidget);
+
+    final info = find.byKey(const ValueKey('catch-info'));
+    await tester.scrollUntilVisible(
+      info,
+      200,
+      scrollable: find.byType(Scrollable).last,
+    );
+    expect(
+      find.text('ยังจับไม่ได้: ปลาโตสุด 0% (จับได้เมื่อโตครบ 100%)'),
       findsOneWidget,
     );
   });
@@ -754,7 +849,11 @@ void main() {
 
     Finder buttonIn(String key) => find.descendant(
       of: find.byKey(ValueKey(key)),
-      matching: find.byType(PixelButton),
+      matching: find.byWidgetPredicate(
+        (w) =>
+            w is PixelButton &&
+            (w.label == 'ทำอาหาร' || w.label == 'เริ่มถนอม'),
+      ),
     );
 
     bool enabled(WidgetTester tester, Finder f) =>
@@ -764,7 +863,12 @@ void main() {
       await pumpApp(tester);
       await startNewGame(tester);
       await openKitchen(tester);
-      expect(find.text('ไม่มีปลาในคลัง จับปลาที่บ่อก่อน'), findsOneWidget);
+      // บ่อยังว่าง → บอกเหตุผล และมีปุ่มพาไปบ่อปลา
+      expect(
+        find.text('ไม่มีปลาในคลัง และบ่อยังว่าง ซื้อปลาที่ร้านปลาก่อน'),
+        findsOneWidget,
+      );
+      expect(find.byKey(const ValueKey('go-pond')), findsOneWidget);
       for (final r in ['fry', 'garlic', 'tomyum', 'bake', 'herb']) {
         await scrollTo(tester, buttonIn('recipe-$r'));
         expect(enabled(tester, buttonIn('recipe-$r')), isFalse);
@@ -833,6 +937,8 @@ void main() {
           .run((e) => const ActionResult.ok(''));
       await tester.pumpAndSettle();
       expect(find.text('แผงตากปลา ว่าง 1/1'), findsOneWidget);
+      // เหตุผลและปุ่ม "ไปตลาด" หายไป การ์ดเตี้ยลง → เลื่อนหาปุ่มใหม่
+      await scrollTo(tester, dry);
       await tester.tap(dry);
       await tester.pump();
       expect(find.text('เริ่มตากแห้ง (Drying) ใช้เวลา 2 วัน'), findsOneWidget);
@@ -907,11 +1013,11 @@ void main() {
       final e = container.read(gameProvider)!.engine;
       await openStorage(tester);
 
-      expect(find.text('อาหารกินได้ 2 จาน'), findsOneWidget);
       expect(
-        find.text('อยู่ได้ ${fmtNum(e.supplyDays)} วัน (ต้องการ 20/วัน)'),
+        find.text('อาหารพอกิน ${fmtNum(e.supplyDays)} วัน'),
         findsOneWidget,
       );
+      expect(find.textContaining('มีอาหาร 2 จาน'), findsOneWidget);
       expect(find.byKey(const ValueKey('supply-after')), findsOneWidget);
       await scrollTo(tester, find.byKey(const ValueKey('goal-status')));
       expect(

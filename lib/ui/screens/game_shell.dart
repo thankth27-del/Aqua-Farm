@@ -66,7 +66,7 @@ class _GameShellState extends ConsumerState<GameShell> {
       0 => FarmTab(onOpenTab: _select),
       1 => FishTab(onShopChanged: (v) => setState(() => _fishShop = v)),
       2 => const MarketTab(),
-      3 => const KitchenTab(),
+      3 => KitchenTab(onOpenTab: _select),
       _ => const StorageTab(),
     };
     return Scaffold(
@@ -330,14 +330,15 @@ class TopBar extends ConsumerWidget {
     final session = ref.watch(gameProvider)!;
     final e = session.engine;
     final s = session.state;
-    final ws = e.waterStatus;
+    final ws = e.pondStatus;
     final w = e.warnDays;
     final a = s.active;
     String? alert;
     if (a != null) {
-      alert = '${kDisasters[a.type]!.name} ${a.dayIndex + 1}/${a.duration}';
+      alert =
+          '${kDisasters[a.type]!.name} วันที่ ${a.dayIndex + 1}/${a.duration}';
     } else if (w > 0) {
-      alert = '${kDisasters[s.upcoming!.type]!.name} $w วัน';
+      alert = '${kDisasters[s.upcoming!.type]!.name}ในอีก $w วัน';
     }
 
     return WoodPlank(
@@ -357,7 +358,8 @@ class TopBar extends ConsumerWidget {
                 child: _Chip(
                   icon: const PixelIcon('cal', size: 22),
                   key: const ValueKey('day-chip'),
-                  text: 'วัน ${s.day}/${e.targetDays}',
+                  caption: 'วันที่',
+                  text: '${s.day}/${e.targetDays}',
                   tooltip:
                       'วันที่ ${s.day} จาก ${e.targetDays} '
                       '(โหมด${kDifficulties[s.mode]!.name} '
@@ -365,20 +367,24 @@ class TopBar extends ConsumerWidget {
                 ),
               ),
               Expanded(
-                flex: 4,
+                flex: 5,
                 child: _Chip(
+                  key: const ValueKey('supply-chip'),
                   icon: const PixelIcon('crate', size: 22),
+                  caption: 'เสบียง',
                   text: '${fmtNum(e.supplyDays)} วัน',
-                  tooltip: 'เสบียงอยู่ได้กี่วัน',
+                  tooltip: 'อาหารในคลังพอกินอีกกี่วัน',
                 ),
               ),
               Expanded(
-                flex: 6,
+                flex: 5,
                 child: _Chip(
+                  key: const ValueKey('water-chip'),
                   icon: const PixelIcon('drop', size: 22),
+                  caption: 'น้ำ',
                   text: ws.label,
                   dot: Color(ws.color),
-                  tooltip: 'คุณภาพน้ำ ${s.water}%',
+                  tooltip: 'คุณภาพน้ำ ${s.water}% · ออกซิเจน ${s.o2.round()}%',
                 ),
               ),
             ],
@@ -453,6 +459,7 @@ class _MoneyChipState extends State<MoneyChip> {
           value: widget.money,
           builder: (_, v) => _Chip(
             icon: const PixelIcon('coin', size: 22),
+            caption: 'เงิน',
             text: '$v฿',
             tooltip: 'เงิน',
             highlight: true,
@@ -510,12 +517,16 @@ class _Chip extends StatelessWidget {
     required this.icon,
     required this.text,
     required this.tooltip,
+    this.caption,
     this.dot,
     this.highlight = false,
   });
   final Widget icon;
   final String text;
   final String tooltip;
+
+  /// ป้ายเล็กเหนือค่า บอกว่าเลขนี้คืออะไร
+  final String? caption;
   final Color? dot;
   final bool highlight;
 
@@ -545,17 +556,36 @@ class _Chip extends StatelessWidget {
                 const SizedBox(width: 3),
               ],
               Expanded(
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    text,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w700,
-                      color: AquaColors.text,
-                      fontSize: 16,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (caption != null)
+                      Text(
+                        caption!,
+                        maxLines: 1,
+                        overflow: TextOverflow.clip,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: AquaColors.textSoft,
+                          fontSize: 11,
+                          height: 1.1,
+                        ),
+                      ),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        text,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: AquaColors.text,
+                          fontSize: 16,
+                          height: 1.15,
+                        ),
+                      ),
                     ),
-                  ),
+                  ],
                 ),
               ),
             ],
@@ -588,13 +618,17 @@ class _AlertChip extends StatelessWidget {
               const SizedBox(width: 6),
             ],
             Flexible(
-              child: Text(
-                text,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 16,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  text,
+                  maxLines: 1,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 16,
+                  ),
                 ),
               ),
             ),

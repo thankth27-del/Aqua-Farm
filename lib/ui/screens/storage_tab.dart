@@ -248,37 +248,41 @@ class _SupplyPanel extends StatelessWidget {
             'เสบียงฉุกเฉิน',
             icon: PixelIcon('crate', size: 28),
           ),
-          const Muted('คำนวณจากความอิ่ม ไม่ใช่นับจาน', size: 13),
-          const SizedBox(height: Gap.s),
-          Wrap(
-            spacing: Gap.xs,
-            runSpacing: Gap.xs,
-            children: [
-              Tag('อาหารกินได้ ${e.servings} จาน'),
-              Tag('ความอิ่มรวม ${e.supplyHunger} หน่วย'),
-              Tag(
-                'อยู่ได้ ${fmtNum(e.supplyDays)} วัน (ต้องการ $kHungerPerDay/วัน)',
-                color: AquaColors.goldPale,
-              ),
-              Tag('ภัยครั้งถัดไป ${need > 0 ? '~$need วัน' : '—'}'),
-            ],
+          // ตัวเลขหลักตัวเดียว: อาหารพอกินกี่วัน
+          Text(
+            'อาหารพอกิน ${fmtNum(e.supplyDays)} วัน',
+            key: const ValueKey('supply-days'),
+            style: const TextStyle(
+              color: AquaColors.text,
+              fontWeight: FontWeight.w700,
+              fontSize: FontSize.title,
+            ),
           ),
-          if (need > 0) ...[
-            const SizedBox(height: Gap.s),
+          if (need > 0)
             Text(
               after >= 0
-                  ? 'หลังภัยพิบัติเหลือ ${fmtNum(after)} วัน'
-                  : 'ขาดเสบียงอีก ${fmtNum(-after)} วัน',
+                  ? 'ภัยครั้งถัดไปนาน $need วัน → พอแล้ว ✓'
+                  : 'ภัยครั้งถัดไปนาน $need วัน → ยังขาดอีก ${fmtNum(-after)} วัน',
               key: const ValueKey('supply-after'),
               style: TextStyle(
                 color: after >= 0 ? AquaColors.ok : AquaColors.bad,
                 fontWeight: FontWeight.w700,
                 fontSize: FontSize.label,
               ),
-            ),
-          ],
+            )
+          else
+            const Muted('ยังไม่มีประกาศภัย', size: FontSize.body),
+          const SizedBox(height: Gap.xs),
+          Muted(
+            'มีอาหาร ${e.servings} จาน · ความอิ่มลดวันละ $kHungerPerDay ต้องกด "กิน" เองเมื่อหิว',
+            size: 13,
+          ),
           const SizedBox(height: Gap.m),
           const Bold('เป้าหมายเสบียง'),
+          const Muted(
+            'ตั้งเป้าเองเพื่อดูแถบความคืบหน้า (ไม่มีผลกับเกม)',
+            size: 13,
+          ),
           const SizedBox(height: Gap.xs),
           Row(
             children: [
@@ -374,9 +378,11 @@ class _BatchRow extends StatelessWidget {
                           : Colors.white,
                     ),
                     const SizedBox(height: 3),
-                    Muted(
-                      'อิ่ม +${it.hunger} · พลังงาน +${it.energy} · ${it.kcal} kcal · โปรตีน ${it.protein} g${it.coolable ? ' · แช่เย็นได้' : ''}',
-                      size: 13,
+                    Tooltip(
+                      message:
+                          'พลังงาน +${it.energy} · ${it.kcal} kcal · โปรตีน ${it.protein} g${it.coolable ? ' · เก็บในตู้เย็นได้ (เสียช้าลง)' : ''}',
+                      triggerMode: TooltipTriggerMode.longPress,
+                      child: Muted('อิ่ม +${it.hunger} ต่อจาน', size: 13),
                     ),
                   ],
                 ),

@@ -14,6 +14,8 @@ class EquipmentRow extends StatelessWidget {
     required this.closed,
     required this.onBuy,
     this.usage,
+    this.badge,
+    this.badgeOk = false,
   });
 
   final EquipmentSpec spec;
@@ -29,6 +31,12 @@ class EquipmentRow extends StatelessWidget {
   /// บรรทัดประโยชน์ / ใช้กับภัยอะไร (ถ้ามี)
   final String? usage;
 
+  /// ป้ายเด่นบนสุด เช่น "น้ำท่วม: ยังขาด 3" (ถ้ามี)
+  final String? badge;
+
+  /// ป้ายเป็นสีผ่าน (ครบแล้ว) แทนสีแดง
+  final bool badgeOk;
+
   @override
   Widget build(BuildContext context) {
     return PaperCard(
@@ -41,6 +49,16 @@ class EquipmentRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                if (badge != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 2),
+                    child: Tag(
+                      badge!,
+                      size: 13,
+                      color: badgeOk ? AquaColors.creamDark : AquaColors.red,
+                      textColor: badgeOk ? AquaColors.ok : Colors.white,
+                    ),
+                  ),
                 Row(
                   children: [
                     Flexible(child: Bold(spec.name, maxLines: 2)),

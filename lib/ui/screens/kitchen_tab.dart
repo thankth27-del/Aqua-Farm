@@ -14,7 +14,10 @@ import '../theme/theme.dart';
 /// แท็บ "ครัว" (cook ในต้นแบบ): ทำอาหาร 5 เมนู และถนอมอาหาร 4 วิธี
 /// ใช้ปลาจากคลัง 1 ตัว + วัตถุดิบ ได้อาหารเท่ากับจำนวนจานของปลาตัวนั้น
 class KitchenTab extends StatefulWidget {
-  const KitchenTab({super.key});
+  const KitchenTab({super.key, this.onOpenTab});
+
+  /// เปิดแท็บอื่น (1 = ปลา, 2 = ตลาด) จากปุ่มบอกทางเมื่อของไม่พอ
+  final ValueChanged<int>? onOpenTab;
 
   @override
   State<KitchenTab> createState() => _KitchenTabState();
@@ -55,15 +58,58 @@ class _KitchenTabState extends State<KitchenTab> {
             ],
           ),
         ),
-        Expanded(child: _KitchenView(preserve: _preserve)),
+        Expanded(
+          child: _KitchenView(preserve: _preserve, onOpenTab: widget.onOpenTab),
+        ),
       ],
     );
   }
 }
 
 class _KitchenView extends ConsumerWidget {
-  const _KitchenView({required this.preserve});
+  const _KitchenView({required this.preserve, this.onOpenTab});
   final bool preserve;
+  final ValueChanged<int>? onOpenTab;
+
+  /// เหตุผลที่ยังทำไม่ได้ (null = ทำได้)
+  static String? _reason(
+    GameEngine e,
+    Map<String, int> need, {
+    String? equipment,
+  }) {
+    final s = e.state;
+    final parts = <String>[
+      if (e.fishForCooking.isEmpty) 'ไม่มีปลาในคลัง',
+      for (final n in need.entries)
+        if ((s.inventory[n.key] ?? 0) < n.value)
+          'ขาด${kIngredients[n.key]!.name}',
+      if (equipment != null && e.freeCapacity(equipment) <= 0)
+        s.equipmentCount(equipment) == 0
+            ? 'ยังไม่มี${kEquipment[equipment]!.name}'
+            : '${kEquipment[equipment]!.name}ไม่ว่าง',
+    ];
+    return parts.isEmpty ? null : parts.join(' · ');
+  }
+
+  /// ขาดของที่ซื้อได้ที่ตลาด (วัตถุดิบ / อุปกรณ์ถนอม)
+  static bool _needsMarket(
+    GameEngine e,
+    Map<String, int> need, {
+    String? equipment,
+  }) =>
+      need.entries.any((n) => (e.state.inventory[n.key] ?? 0) < n.value) ||
+      (equipment != null && e.state.equipmentCount(equipment) == 0);
+
+  /// ข้อความตอนไม่มีปลาในคลัง: บอกว่าทำไมและต้องทำอะไรต่อ
+  static String _noFishText(GameEngine e) {
+    if (e.state.pond.isEmpty) {
+      return 'ไม่มีปลาในคลัง และบ่อยังว่าง ซื้อปลาที่ร้านปลาก่อน';
+    }
+    if (e.matureCount == 0) {
+      return 'ไม่มีปลาในคลัง ปลาในบ่อโตสุด ${e.maxPondGrowth}% จับได้เมื่อโตครบ 100%';
+    }
+    return 'ไม่มีปลาในคลัง ไปกด "จับปลา" ที่บ่อ (โตครบแล้ว ${e.matureCount} ตัว)';
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -94,16 +140,26 @@ class _KitchenView extends ConsumerWidget {
                 icon: const PixelIcon('f_nila', size: 30),
                 trailing: Tag('${e.fishTotal} ตัว'),
               ),
-              if (fish.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: Gap.s),
+              if (fish.isEmpty) ...[
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: Gap.s),
                   child: Muted(
-                    'ไม่มีปลาในคลัง จับปลาที่บ่อก่อน',
+                    _noFishText(e),
+                    key: const ValueKey('no-fish'),
                     size: FontSize.body,
                     align: TextAlign.center,
                   ),
-                )
-              else
+                ),
+                if (onOpenTab != null)
+                  PixelButton(
+                    key: const ValueKey('go-pond'),
+                    label: 'ไปบ่อปลา',
+                    icon: const PixelIcon('drop', size: 24),
+                    style: PixelButtonStyle.water,
+                    expand: true,
+                    onPressed: () => onOpenTab!(1),
+                  ),
+              ] else
                 Wrap(
                   spacing: Gap.s,
                   runSpacing: Gap.s,
@@ -143,14 +199,20 @@ class _KitchenView extends ConsumerWidget {
                       key: ValueKey('recipe-${r.id}'),
                       food: kFoods[r.id]!,
                       details: [
-                        'ขาย ${e.foodSellPrice(r.id)} บาท',
                         'อิ่ม +${kFoods[r.id]!.hunger}',
+                        'เก็บได้ ${kFoods[r.id]!.shelfDays} วัน',
+                        'ขาย ${e.foodSellPrice(r.id)} บาท',
+                      ],
+                      more: [
                         'พลังงาน +${kFoods[r.id]!.energy}',
                         '${kFoods[r.id]!.kcal} kcal',
                         'โปรตีน ${kFoods[r.id]!.protein} g',
                         'ปรุง ${r.minutes} นาที',
-                        'เก็บได้ ${kFoods[r.id]!.shelfDays} วัน',
-                      ],
+                      ].join(' · '),
+                      reason: _reason(e, r.need),
+                      onMarket: onOpenTab != null && _needsMarket(e, r.need)
+                          ? () => onOpenTab!(2)
+                          : null,
                       chips: [
                         _fishChip(fish),
                         ..._ingredientChips(r.need, s.inventory),
@@ -196,6 +258,12 @@ class _KitchenView extends ConsumerWidget {
                         ),
                       ],
                       action: 'เริ่มถนอม',
+                      reason: _reason(e, p.need, equipment: p.equipment),
+                      onMarket:
+                          onOpenTab != null &&
+                              _needsMarket(e, p.need, equipment: p.equipment)
+                          ? () => onOpenTab!(2)
+                          : null,
                       enabled: e.canPreserve(p.id),
                       onPressed: () => showResult(
                         context,
@@ -367,11 +435,23 @@ class _RecipeCard extends StatelessWidget {
     required this.enabled,
     required this.onPressed,
     this.title,
+    this.more,
+    this.reason,
+    this.onMarket,
   });
 
   final FoodSpec food;
   final String? title;
   final List<String> details;
+
+  /// รายละเอียดเพิ่มเติม (แตะค้างที่รายละเอียดเพื่อดู)
+  final String? more;
+
+  /// เหตุผลที่ยังทำไม่ได้
+  final String? reason;
+
+  /// ปุ่มไปตลาด (เมื่อขาดของที่ซื้อได้ที่ตลาด)
+  final VoidCallback? onMarket;
   final List<Widget> chips;
   final String action;
   final bool enabled;
@@ -395,7 +475,14 @@ class _RecipeCard extends StatelessWidget {
                   children: [
                     Bold(title ?? food.name, size: FontSize.label),
                     const SizedBox(height: 2),
-                    Muted(details.join(' · '), size: 13),
+                    if (more == null)
+                      Muted(details.join(' · '), size: 13)
+                    else
+                      Tooltip(
+                        message: more!,
+                        triggerMode: TooltipTriggerMode.longPress,
+                        child: Muted(details.join(' · '), size: 13),
+                      ),
                   ],
                 ),
               ),
@@ -405,13 +492,37 @@ class _RecipeCard extends StatelessWidget {
           // ป้ายของที่ต้องใช้กว้างเต็มการ์ด (ชื่ออุปกรณ์ยาว) แล้วปุ่มอยู่ขวาล่าง
           Wrap(spacing: Gap.xs, runSpacing: Gap.xs, children: chips),
           const SizedBox(height: Gap.s),
-          Align(
-            alignment: Alignment.centerRight,
-            child: PixelButton(
-              label: action,
-              style: PixelButtonStyle.green,
-              onPressed: enabled ? onPressed : null,
+          if (!enabled && reason != null) ...[
+            Text(
+              reason!,
+              style: const TextStyle(
+                color: AquaColors.bad,
+                fontWeight: FontWeight.w700,
+                fontSize: 13,
+              ),
             ),
+            const SizedBox(height: Gap.xs),
+          ],
+          Row(
+            children: [
+              if (!enabled && onMarket != null) ...[
+                Expanded(
+                  child: PixelButton(
+                    label: 'ไปตลาด',
+                    style: PixelButtonStyle.wood,
+                    expand: true,
+                    onPressed: onMarket,
+                  ),
+                ),
+                const SizedBox(width: Gap.s),
+              ] else
+                const Spacer(),
+              PixelButton(
+                label: action,
+                style: PixelButtonStyle.green,
+                onPressed: enabled ? onPressed : null,
+              ),
+            ],
           ),
         ],
       ),

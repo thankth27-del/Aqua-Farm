@@ -13,6 +13,9 @@ import '../theme/theme.dart';
 import '../widgets/disaster_icon.dart';
 import '../widgets/equipment_row.dart';
 
+/// ตำแหน่งแผง "เตรียมภัย" สำหรับปุ่มลัดจากการ์ดข่าวเตือนภัย
+final _prepareKey = GlobalKey();
+
 /// หน้า "ฟาร์ม": ฉากฟาร์ม คำแนะนำ สถานะตัวละคร (พักผ่อน) และข่าวเตือนภัย
 class FarmTab extends ConsumerWidget {
   const FarmTab({super.key, required this.onOpenTab});
@@ -29,31 +32,41 @@ class FarmTab extends ConsumerWidget {
     final hint = farmHint(e);
     final target = e.tutorialStep?.target;
 
-    return ListView(
+    // Column ใน SingleChildScrollView: ทุกแผงถูกสร้างไว้ ปุ่มลัดเลื่อนไปหาได้เสมอ
+    return SingleChildScrollView(
       padding: const EdgeInsets.all(Gap.m),
-      children: [
-        PageHeader(
-          scene: PixelScene(painterBuilder: (t) => FarmPainter(t, scene)),
-          title: 'ฟาร์ม',
-          icon: const PixelIcon('house', size: 30),
-        ),
-        if (hint != null) ...[_HintBubble(hint), const SizedBox(height: Gap.m)],
-        Spotlight(
-          on: target == TutorialTarget.status,
-          child: _CharacterCard(
-            restSpotlight: target == TutorialTarget.home,
-            onRest: () => showResult(context, ctl.run((e) => e.rest())),
-            onPond: () => onOpenTab(1),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          PageHeader(
+            scene: PixelScene(painterBuilder: (t) => FarmPainter(t, scene)),
+            title: 'ฟาร์ม',
+            icon: const PixelIcon('house', size: 30),
           ),
-        ),
-        _DisasterCard(
-          onRepair: () => showResult(context, ctl.run((e) => e.repair())),
-        ),
-        Spotlight(
-          on: target == TutorialTarget.prepare,
-          child: const _PreparePanel(),
-        ),
-      ],
+          if (hint != null) ...[
+            _HintBubble(hint),
+            const SizedBox(height: Gap.m),
+          ],
+          Spotlight(
+            on: target == TutorialTarget.status,
+            child: _CharacterCard(
+              restSpotlight: target == TutorialTarget.home,
+              onRest: () => showResult(context, ctl.run((e) => e.rest())),
+              onPond: () => onOpenTab(1),
+            ),
+          ),
+          _DisasterCard(
+            onRepair: () => showResult(context, ctl.run((e) => e.repair())),
+          ),
+          KeyedSubtree(
+            key: _prepareKey,
+            child: Spotlight(
+              on: target == TutorialTarget.prepare,
+              child: const _PreparePanel(),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -316,42 +329,84 @@ class _DisasterCard extends ConsumerWidget {
           children: [
             const PixelIcon('shield', size: 28),
             const SizedBox(width: Gap.s),
-            const Expanded(child: Bold('Readiness Check')),
+            const Expanded(child: Bold('ความพร้อมรับภัย')),
             OutlinedText('${rd.pct}%', size: FontSize.title, color: rc),
           ],
         ),
         const SizedBox(height: Gap.xs),
         PixelBar(value: rd.pct, color: rc, height: 22),
-        const SizedBox(height: Gap.m),
+        const SizedBox(height: Gap.s),
+        // คะแนนมาจากไหน: อุปกรณ์ 50 + เสบียง 30 + น้ำ 10 + เงิน 10
         Wrap(
-          spacing: Gap.s,
-          runSpacing: Gap.s,
-          children: [
-            for (final k in d.equipment.keys)
-              _EquipTile(
-                icon: kEquipment[k]!.icon,
-                name: kEquipment[k]!.name,
-                have: s.equipmentCount(k),
-                need: d.equipment[k]!,
-              ),
-          ],
-        ),
-        const SizedBox(height: Gap.m),
-        Wrap(
-          spacing: Gap.s,
+          key: const ValueKey('readiness-parts'),
+          spacing: Gap.xs,
           runSpacing: Gap.xs,
           children: [
-            Tag(
-              'เสบียง ${fmtNum(e.supplyDays)}/${dz.duration} วัน',
-              icon: const PixelIcon('crate', size: 16),
-              color: e.supplyDays >= dz.duration
-                  ? AquaColors.creamDark
-                  : AquaColors.redPale,
+            _PartTag(
+              'อุปกรณ์',
+              rd.equipmentPts,
+              50,
+              icon: const PixelIcon('shield', size: 16),
             ),
-            Tag(e.waterStatus.label, icon: const PixelIcon('drop', size: 16)),
-            CoinTag(s.money, boxed: true, size: FontSize.small),
+            _PartTag(
+              'เสบียง ${fmtNum(e.supplyDays)}/${dz.duration} วัน',
+              rd.supplyPts,
+              30,
+              icon: const PixelIcon('crate', size: 16),
+            ),
+            _PartTag(
+              'น้ำ ${s.water}%',
+              rd.waterPts,
+              10,
+              icon: const PixelIcon('drop', size: 16),
+            ),
+            _PartTag(
+              'เงิน ${s.money}฿',
+              rd.moneyPts,
+              10,
+              icon: const PixelIcon('coin', size: 16),
+            ),
           ],
         ),
+        const SizedBox(height: Gap.xs),
+        const Muted(
+          'คะแนน: อุปกรณ์ครบ 50 · เสบียงพอตลอดภัย 30 · น้ำดีขึ้นไป 10 · เงิน 100฿ ขึ้นไป 10',
+          size: 13,
+        ),
+        const SizedBox(height: Gap.m),
+        Bold('อุปกรณ์ที่${d.name}ต้องใช้'),
+        const SizedBox(height: Gap.xs),
+        for (final k in d.equipment.keys)
+          Padding(
+            padding: const EdgeInsets.only(bottom: Gap.xs),
+            child: _EquipTile(
+              icon: kEquipment[k]!.icon,
+              name: kEquipment[k]!.name,
+              have: s.equipmentCount(k),
+              need: d.equipment[k]!,
+            ),
+          ),
+        if (d.equipment.keys.any(
+          (k) => s.equipmentCount(k) < d.equipment[k]!,
+        )) ...[
+          const SizedBox(height: Gap.xs),
+          PixelButton(
+            key: const ValueKey('go-prepare'),
+            label: 'ไปซื้ออุปกรณ์ที่ขาด',
+            icon: const PixelIcon('shield', size: 24),
+            expand: true,
+            onPressed: () {
+              final c = _prepareKey.currentContext;
+              if (c != null) {
+                Scrollable.ensureVisible(
+                  c,
+                  duration: const Duration(milliseconds: 400),
+                  curve: Curves.easeOut,
+                );
+              }
+            },
+          ),
+        ],
       ]);
     } else {
       children.addAll([
@@ -379,7 +434,7 @@ class _DisasterCard extends ConsumerWidget {
                           fontWeight: FontWeight.w700,
                         ),
                       ),
-                      Tag('${d.leadDays} วัน', size: 12),
+                      Tag('ก่อน ${d.leadDays} วัน', size: 12),
                     ],
                   ),
                 ),
@@ -388,7 +443,7 @@ class _DisasterCard extends ConsumerWidget {
         ),
         const SizedBox(height: Gap.s),
         const Muted(
-          'ตัวเลข = แจ้งเตือนล่วงหน้า · ภัยเกิดต่อเนื่องหลายวัน',
+          'ตัวเลข = ระบบจะเตือนกี่วันก่อนภัยมาถึง · ภัยเกิดต่อเนื่องหลายวัน',
           align: TextAlign.center,
         ),
       ]);
@@ -439,6 +494,14 @@ class _PreparePanel extends ConsumerWidget {
     final s = session.state;
     final e = session.engine;
     final ctl = ref.read(gameProvider.notifier);
+    final dType = s.active?.type ?? s.upcoming?.type;
+    final needs = dType == null
+        ? const <String, int>{}
+        : kDisasters[dType]!.equipment;
+    final order = [
+      ...kDefenseEquipmentOrder.where(needs.containsKey),
+      ...kDefenseEquipmentOrder.where((id) => !needs.containsKey(id)),
+    ];
     return WoodPanel(
       key: const ValueKey('prepare'),
       child: Column(
@@ -448,7 +511,15 @@ class _PreparePanel extends ConsumerWidget {
             'เตรียมภัย: อุปกรณ์ป้องกัน',
             icon: PixelIcon('shield', size: 28),
           ),
-          for (final id in kDefenseEquipmentOrder)
+          if (dType != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: Gap.s),
+              child: Muted(
+                'อุปกรณ์ที่${kDisasters[dType]!.name}ต้องใช้อยู่ด้านบน',
+                size: 13,
+              ),
+            ),
+          for (final id in order)
             Padding(
               padding: const EdgeInsets.only(bottom: Gap.s),
               child: EquipmentRow(
@@ -457,6 +528,13 @@ class _PreparePanel extends ConsumerWidget {
                 price: e.equipmentPrice(id),
                 owned: s.equipmentCount(id),
                 closed: s.marketClosed,
+                badge: needs.containsKey(id)
+                    ? (s.equipmentCount(id) >= needs[id]!
+                          ? '${kDisasters[dType]!.name}: ครบแล้ว'
+                          : '${kDisasters[dType]!.name}: ยังขาด ${needs[id]! - s.equipmentCount(id)}')
+                    : null,
+                badgeOk:
+                    needs.containsKey(id) && s.equipmentCount(id) >= needs[id]!,
                 usage: [
                   'ประโยชน์: ${kEquipment[id]!.use}',
                   if (_usedWith(id).isNotEmpty) 'ใช้กับ: ${_usedWith(id)}',
@@ -520,7 +598,25 @@ class _Banner extends StatelessWidget {
   }
 }
 
-/// ช่องอุปกรณ์: ไอคอน + มี/ต้อง + เครื่องหมายผ่าน
+/// ป้ายคะแนนย่อยของความพร้อม: "อุปกรณ์ 25/50" แดงเมื่อยังไม่เต็ม
+class _PartTag extends StatelessWidget {
+  const _PartTag(this.label, this.pts, this.max, {required this.icon});
+  final String label;
+  final int pts;
+  final int max;
+  final Widget icon;
+
+  @override
+  Widget build(BuildContext context) => Tag(
+    '$label $pts/$max',
+    size: 13,
+    icon: icon,
+    color: pts >= max ? AquaColors.creamDark : AquaColors.redPale,
+    textColor: pts >= max ? AquaColors.text : AquaColors.redDark,
+  );
+}
+
+/// ช่องอุปกรณ์: ไอคอน + ชื่อ + มี/ต้อง + เครื่องหมายผ่าน
 class _EquipTile extends StatelessWidget {
   const _EquipTile({
     required this.icon,
@@ -543,14 +639,15 @@ class _EquipTile extends StatelessWidget {
         child: ExcludeSemantics(
           child: PaperCard(
             fill: ok ? AquaColors.paper : AquaColors.redPale,
-            padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
+            padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
             child: Row(
-              mainAxisSize: MainAxisSize.min,
               children: [
                 PixelIcon(icon, size: 32),
                 const SizedBox(width: 6),
+                Expanded(child: Bold(name, maxLines: 2)),
+                const SizedBox(width: 6),
                 Text(
-                  '$have/$need',
+                  'มี $have / ต้อง $need',
                   style: TextStyle(
                     fontWeight: FontWeight.w700,
                     fontSize: FontSize.body,
