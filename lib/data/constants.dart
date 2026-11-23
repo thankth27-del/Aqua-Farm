@@ -13,6 +13,9 @@ const int kSaveVersion = 4;
 /// คีย์ที่เก็บเซฟทั้ง 3 ช่อง (SK)
 const String kSaveKey = 'aquafarm_slots_v3';
 
+/// คีย์ตั้งค่าเสียง (ต่อเครื่อง)
+const String kSoundKey = 'aq_snd';
+
 /// ช่องเซฟที่ใช้ได้
 const List<int> kSaveSlots = [1, 2, 3];
 

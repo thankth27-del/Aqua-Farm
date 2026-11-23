@@ -47,6 +47,12 @@ class SaveRepository {
   static Future<SaveRepository> open() async =>
       SaveRepository(await SharedPreferences.getInstance());
 
+  /// เปิดเสียงอยู่ไหม (ต่อเครื่อง ไม่ผูกกับช่องเซฟ — คีย์ aq_snd เหมือนต้นแบบ)
+  bool get soundOn => _prefs.getString(kSoundKey) != '0';
+
+  Future<void> setSoundOn(bool on) =>
+      _prefs.setString(kSoundKey, on ? '1' : '0');
+
   Map<String, dynamic> _all() {
     final raw = _prefs.getString(kSaveKey);
     if (raw == null) return {};

@@ -4,6 +4,7 @@ import 'package:aqua_farm/save/save_repository.dart';
 import 'package:aqua_farm/ui/app.dart';
 import 'package:aqua_farm/ui/providers.dart';
 import 'package:aqua_farm/ui/screens/game_shell.dart';
+import 'package:aqua_farm/ui/sound.dart';
 import 'package:aqua_farm/ui/screens/kitchen_tab.dart';
 import 'package:aqua_farm/ui/screens/market_tab.dart';
 import 'package:aqua_farm/ui/screens/storage_tab.dart';
@@ -15,6 +16,16 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 late SaveRepository repo;
 late ProviderContainer container;
+late FakeBeeper beeper;
+
+/// เก็บความถี่ที่บี๊บไว้ตรวจ (ไม่เล่นเสียงจริงในเทสต์)
+class FakeBeeper implements Beeper {
+  final beeps = <double>[];
+  @override
+  void beep(double freq) => beeps.add(freq);
+  @override
+  void dispose() {}
+}
 
 Future<void> pumpApp(WidgetTester tester) async {
   tester.view
@@ -27,6 +38,7 @@ Future<void> pumpApp(WidgetTester tester) async {
     overrides: [
       saveRepositoryProvider.overrideWithValue(repo),
       sceneAnimationProvider.overrideWithValue(false),
+      beeperProvider.overrideWithValue(beeper = FakeBeeper()),
     ],
   );
   addTearDown(container.dispose);
@@ -230,6 +242,33 @@ void main() {
     await tester.pumpAndSettle();
     expect(inCard(1, find.text('หิว')), findsNothing);
     expect(inCard(1, find.text('พอดี')), findsOneWidget);
+  });
+
+  testWidgets('เสียง: บี๊บตอนแจ้งผล และปิดเสียงได้ในเมนู (จำค่าไว้)', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+    await startNewGame(tester);
+    final before = beeper.beeps.length;
+
+    await tester.tap(find.byTooltip('เมนู / พัก'));
+    await tester.pumpAndSettle();
+    expect(find.text('เสียง: เปิด'), findsOneWidget);
+    await tester.tap(find.text('บันทึกเกม'));
+    await tester.pumpAndSettle();
+    expect(beeper.beeps.sublist(before), [kBeepOk]);
+
+    // ปิดเสียง: ปุ่มเปลี่ยนทันทีโดยไม่ปิดเมนู และจำค่าไว้ในเครื่อง
+    await tester.tap(find.byTooltip('เมนู / พัก'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('sound-toggle')));
+    await tester.pumpAndSettle();
+    expect(find.text('เสียง: ปิด'), findsOneWidget);
+    expect(repo.soundOn, isFalse);
+    await tester.tap(find.text('บันทึกเกม'));
+    await tester.pumpAndSettle();
+    // ปิดเสียงแล้ว: ไม่มีเสียงบี๊บเพิ่ม
+    expect(beeper.beeps.sublist(before), [kBeepOk]);
   });
 
   testWidgets('ช่องเซฟ: ลบต้องยืนยัน และเปลี่ยนชื่อได้', (tester) async {

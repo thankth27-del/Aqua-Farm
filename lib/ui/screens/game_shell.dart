@@ -5,6 +5,7 @@ import '../../data/disaster_data.dart';
 import '../../game/tutorial.dart';
 import '../dialogs.dart';
 import '../providers.dart';
+import '../sound.dart';
 import '../theme/theme.dart';
 import '../widgets/tutorial_panel.dart';
 import 'farm_tab.dart';
@@ -38,9 +39,7 @@ class _GameShellState extends ConsumerState<GameShell> {
 
   /// แท็บที่บทเรียนชี้
   static int tabOf(TutorialTarget t) => switch (t) {
-    TutorialTarget.status ||
-    TutorialTarget.home ||
-    TutorialTarget.prepare => 0,
+    TutorialTarget.status || TutorialTarget.home || TutorialTarget.prepare => 0,
     TutorialTarget.pond || TutorialTarget.shop => 1,
     TutorialTarget.kitchen => 3,
     TutorialTarget.storage => 4,
@@ -165,11 +164,7 @@ class _NavItem extends StatelessWidget {
           height: 40,
           child: Center(
             child: selected
-                ? BounceIn(
-                    key: ValueKey('nav-$label'),
-                    from: .7,
-                    child: iconW,
-                  )
+                ? BounceIn(key: ValueKey('nav-$label'), from: .7, child: iconW)
                 : iconW,
           ),
         ),
@@ -265,6 +260,28 @@ class TopBar extends ConsumerWidget {
                   style: PixelButtonStyle.water,
                   expand: true,
                   onPressed: () => Navigator.pop(c, 'save'),
+                ),
+                const SizedBox(height: Gap.s),
+                // เปิด/ปิดเสียง (กดแล้วสลับทันที ไม่ปิดเมนู เหมือนต้นแบบ)
+                Consumer(
+                  builder: (context, ref, _) {
+                    final on = ref.watch(soundProvider);
+                    return PixelButton(
+                      key: const ValueKey('sound-toggle'),
+                      label: on ? 'เสียง: เปิด' : 'เสียง: ปิด',
+                      icon: PixelGlyph(
+                        on ? Glyph.wave : Glyph.cross,
+                        size: 18,
+                        color: AquaColors.paper,
+                      ),
+                      style: on
+                          ? PixelButtonStyle.green
+                          : PixelButtonStyle.wood,
+                      expand: true,
+                      onPressed: () =>
+                          ref.read(soundProvider.notifier).toggle(),
+                    );
+                  },
                 ),
                 const SizedBox(height: Gap.s),
                 PixelButton(

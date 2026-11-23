@@ -1,9 +1,11 @@
 /// หน้ายืนยัน ช่องใส่ชื่อ และ toast (ใช้หน้าต่างจากชุดดีไซน์กลาง)
 library;
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../game/game_engine.dart';
+import 'sound.dart';
 import 'theme/theme.dart';
 
 /// หน้ายืนยัน — คืน true เมื่อกด "ตกลง" (ใช้กับทุกการซื้อ ขาย ทิ้ง)
@@ -132,8 +134,11 @@ class _NameDialogState extends State<_NameDialog> {
 }
 
 /// toast (แจ้งผลการกระทำ) ด้านบนจอใต้แถบบน — สีแดงเมื่อไม่สำเร็จหรือเป็นคำเตือน
-void toast(BuildContext context, String message, {bool bad = false}) =>
-    ToastHost.show(context, message, bad: bad);
+/// พร้อมเสียงบี๊บเหมือนต้นแบบ (สำเร็จเสียงสูง ไม่สำเร็จเสียงต่ำ)
+void toast(BuildContext context, String message, {bool bad = false}) {
+  ToastHost.show(context, message, bad: bad);
+  beepFor(ProviderScope.containerOf(context, listen: false), bad: bad);
+}
 
 void showResult(BuildContext context, ActionResult r) =>
     toast(context, r.message, bad: r.warning);
