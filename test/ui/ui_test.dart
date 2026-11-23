@@ -1,14 +1,16 @@
 import 'package:aqua_farm/data/difficulty.dart';
+import 'package:aqua_farm/data/disaster_data.dart';
 import 'package:aqua_farm/data/equipment_data.dart';
 import 'package:aqua_farm/game/game_engine.dart';
+import 'package:aqua_farm/game/game_state.dart';
 import 'package:aqua_farm/save/save_repository.dart';
 import 'package:aqua_farm/ui/app.dart';
 import 'package:aqua_farm/ui/providers.dart';
 import 'package:aqua_farm/ui/screens/game_shell.dart';
-import 'package:aqua_farm/ui/sound.dart';
 import 'package:aqua_farm/ui/screens/kitchen_tab.dart';
 import 'package:aqua_farm/ui/screens/market_tab.dart';
 import 'package:aqua_farm/ui/screens/storage_tab.dart';
+import 'package:aqua_farm/ui/sound.dart';
 import 'package:aqua_farm/ui/theme/theme.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -373,6 +375,36 @@ void main() {
     expect(find.widgetWithText(PixelButton, 'โหลดเซฟล่าสุด'), findsOneWidget);
   });
 
+  testWidgets('หน้าฟาร์มบอกว่าภัยและฟาร์มเสียหายทำให้ปลาโตช้า', (tester) async {
+    await pumpApp(tester);
+    await startNewGame(tester);
+    final ctl = container.read(gameProvider.notifier);
+    ctl.update((e) {
+      e.state
+        ..upcoming = null
+        ..active = ActiveDisaster(
+          type: DisasterType.flood,
+          duration: 4,
+          severity: .5,
+          fishBefore: 0,
+        )
+        ..damaged = true
+        ..repairCost = 30;
+    });
+    await tester.pumpAndSettle();
+    final growth = find.byKey(const ValueKey('growth-info'));
+    await tester.scrollUntilVisible(growth, 200);
+    expect(
+      find.text('ปลาโตได้ 0% ระหว่างภัย (ตามอุปกรณ์ป้องกัน)'),
+      findsOneWidget,
+    );
+    expect(find.byKey(const ValueKey('damaged-info')), findsOneWidget);
+    expect(
+      find.text('ฟาร์มเสียหาย: ปลาโตได้แค่ 50% จนกว่าจะซ่อม'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('ช่องเซฟ: ลบต้องยืนยัน และเปลี่ยนชื่อได้', (tester) async {
     await pumpApp(tester);
     await startNewGame(tester);
@@ -563,7 +595,7 @@ void main() {
       await scrollTo(tester, sell);
       await tester.tap(sell);
       await tester.pumpAndSettle();
-      expect(find.text('ยืนยันขายปลาแห้ง 1 จาน ได้ 70 บาท?'), findsOneWidget);
+      expect(find.text('ยืนยันขายปลาแห้ง 1 จาน ได้ 42 บาท?'), findsOneWidget);
       await tester.tap(find.text('ยกเลิก').last);
       await tester.pumpAndSettle();
       expect(s.stock.single.qty, 2);
@@ -573,7 +605,7 @@ void main() {
       await tester.tap(find.text('ตกลง'));
       await tester.pumpAndSettle();
       expect(s.stock.single.qty, 1);
-      expect(s.money, 570);
+      expect(s.money, 542);
     });
 
     testWidgets('ซื้ออุปกรณ์ครัวต้องยืนยันก่อน', (tester) async {
@@ -951,7 +983,7 @@ void main() {
       await scrollTo(tester, sell);
       await tester.tap(sell);
       await tester.pumpAndSettle();
-      expect(find.text('ยืนยันขายปลาแห้ง 1 จาน ได้ 70 บาท?'), findsOneWidget);
+      expect(find.text('ยืนยันขายปลาแห้ง 1 จาน ได้ 42 บาท?'), findsOneWidget);
       await tester.tap(find.text('ยกเลิก').last);
       await tester.pumpAndSettle();
       expect(s.money, 500);
@@ -959,7 +991,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('ตกลง'));
       await tester.pumpAndSettle();
-      expect(s.money, 570);
+      expect(s.money, 542);
       expect(s.stock.single.qty, 1);
     });
 

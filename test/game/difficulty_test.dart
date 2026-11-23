@@ -41,6 +41,71 @@ void endDisasterToday(GameEngine e) {
 }
 
 void main() {
+  group('สมดุลเกม: ภัยกระทบการเติบโตของปลา', () {
+    GameEngine floodNow({Map<String, int> equipment = const {}}) {
+      final e = engineFor(Difficulty.normal);
+      final s = e.state
+        ..upcoming = null
+        ..active = ActiveDisaster(
+          type: DisasterType.flood,
+          duration: 4,
+          severity: .5,
+          fishBefore: 0,
+        );
+      s.equipment.addAll(equipment);
+      return e;
+    }
+
+    test('ปกติปลาโตเต็มที่', () {
+      expect(engineFor(Difficulty.normal).farmGrowth, 1);
+    });
+
+    test('ระหว่างภัยไม่มีอุปกรณ์ ปลาไม่โต', () {
+      final e = floodNow();
+      expect(e.farmGrowth, kDisasterGrowthBase);
+      e.buyFish('nila', 1);
+      e.feed(2);
+      e.endDay();
+      expect(e.state.pond.single.growth, 0);
+    });
+
+    test('อุปกรณ์ครบ ปลาโตปกติ / ครบบางส่วน โตตามความพร้อม', () {
+      expect(
+        floodNow(equipment: {'sand': 4, 'pump': 1, 'net': 1}).farmGrowth,
+        1,
+      );
+      final part = floodNow(equipment: {'pump': 1});
+      expect(
+        part.farmGrowth,
+        closeTo(part.protection(DisasterType.flood), 1e-9),
+      );
+      expect(part.farmGrowth, greaterThan(0));
+      expect(part.farmGrowth, lessThan(1));
+    });
+
+    test('ฟาร์มเสียหายยังไม่ซ่อม ปลาโตช้าลง ซ่อมแล้วกลับเป็นปกติ', () {
+      final e = engineFor(Difficulty.normal);
+      e.state
+        ..damaged = true
+        ..repairCost = 10;
+      expect(e.farmGrowth, kDamagedGrowth);
+      e.buyFish('nila', 1);
+      e.feed(2);
+      e.endDay();
+      expect(
+        e.state.pond.single.growth,
+        jsRound(kFeedGrowth[2] * kDamagedGrowth),
+      );
+      expect(e.repair().ok, isTrue);
+      expect(e.farmGrowth, 1);
+    });
+
+    test('ราคาขายอาหาร = ต้นแบบ × kFoodSellScale', () {
+      final e = engineFor(Difficulty.normal);
+      expect(e.foodSellPrice('fry'), jsRound(110 * kFoodSellScale));
+    });
+  });
+
   group('ปานกลาง วันแรกเท่าต้นแบบ', () {
     test('ตัวคูณทุกตัวเป็น 1 และราคา/ภัยเท่าข้อมูลต้นแบบ', () {
       final e = newEngine();
@@ -67,8 +132,9 @@ void main() {
       for (final f in kFish.values) {
         expect(e.fishSellPrice(f.id), f.sellPrice);
       }
+      // ราคาขายอาหารเป็นค่าเดียวที่ปรับจากต้นแบบ (สมดุลเกม kFoodSellScale)
       for (final f in kFoods.values) {
-        expect(e.foodSellPrice(f.id), f.value);
+        expect(e.foodSellPrice(f.id), jsRound(f.value * kFoodSellScale));
       }
       e.buyFish('nila', 2);
       for (final lv in [1, 2, 3]) {

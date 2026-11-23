@@ -184,7 +184,19 @@ class GameEngine {
   int fishSellPrice(String type) =>
       jsRound(kFish[type]!.sellPrice * sellMultiplier);
   int foodSellPrice(String food) =>
-      jsRound(kFoods[food]!.value * sellMultiplier);
+      jsRound(kFoods[food]!.value * kFoodSellScale * sellMultiplier);
+
+  /// ตัวคูณการเติบโตของปลาวันนี้: ระหว่างภัยโตตามความพร้อมของอุปกรณ์
+  /// และฟาร์มที่เสียหายยังไม่ซ่อมโตช้าลง (1 = ปกติ)
+  double get farmGrowth {
+    var g = 1.0;
+    final a = s.active;
+    if (a != null) {
+      g *= kDisasterGrowthBase + (1 - kDisasterGrowthBase) * protection(a.type);
+    }
+    if (s.damaged) g *= kDamagedGrowth;
+    return g;
+  }
 
   /// เกรดรวมของทั้งเกม จากเกรดรายวันเฉลี่ย (S=3 A=2 B=1)
   String get overallGrade {
@@ -719,6 +731,7 @@ class GameEngine {
     calcWater();
 
     // สุขภาพและการเติบโตของปลา
+    final fg = farmGrowth;
     for (final f in s.pond) {
       final spec = kFish[f.type]!;
       double st = s.water < 40 ? -25 : (s.water < 60 ? -10 : 5);
@@ -732,7 +745,8 @@ class GameEngine {
               kFeedGrowth[s.fed] *
                   spec.growthMul *
                   max(.5, f.health / 100) *
-                  (s.water >= 60 ? 1 : .6),
+                  (s.water >= 60 ? 1 : .6) *
+                  fg,
         ),
       );
     }

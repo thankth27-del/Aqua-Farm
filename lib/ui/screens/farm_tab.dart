@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../../data/difficulty.dart';
 import '../../data/disaster_data.dart';
 import '../../data/equipment_data.dart';
 import '../../game/hints.dart';
@@ -263,6 +264,15 @@ class _DisasterCard extends ConsumerWidget {
           disasterDayText(a.type, a.duration, a.dayIndex),
           size: FontSize.body,
         ),
+        const SizedBox(height: Gap.s),
+        Tag(
+          'ปลาโตได้ ${(e.protection(a.type) * 100).round()}% ระหว่างภัย (ตามอุปกรณ์ป้องกัน)',
+          key: const ValueKey('growth-info'),
+          color: e.protection(a.type) >= 1
+              ? AquaColors.creamDark
+              : AquaColors.redPale,
+          icon: const PixelIcon('f_nila', size: 18),
+        ),
       ]);
     } else if (w > 0 && dz != null) {
       final d = kDisasters[dz.type]!;
@@ -295,6 +305,12 @@ class _DisasterCard extends ConsumerWidget {
         ),
         const SizedBox(height: Gap.s),
         Muted(d.message, size: FontSize.body),
+        const SizedBox(height: Gap.xs),
+        const Muted(
+          'ระหว่างภัย ปลาจะโตตามความพร้อมของอุปกรณ์ ไม่มีอุปกรณ์ = ปลาไม่โตเลย',
+          size: FontSize.body,
+          color: AquaColors.red,
+        ),
         const SizedBox(height: Gap.m),
         Row(
           children: [
@@ -381,6 +397,13 @@ class _DisasterCard extends ConsumerWidget {
     if (s.damaged) {
       children.addAll([
         const SizedBox(height: Gap.m),
+        Muted(
+          'ฟาร์มเสียหาย: ปลาโตได้แค่ ${(kDamagedGrowth * 100).round()}% จนกว่าจะซ่อม',
+          key: const ValueKey('damaged-info'),
+          size: FontSize.body,
+          color: AquaColors.red,
+        ),
+        const SizedBox(height: Gap.s),
         PixelButton(
           label: 'ซ่อมแซมและฟื้นฟูฟาร์ม',
           icon: const PixelIcon('wrench', size: 24),

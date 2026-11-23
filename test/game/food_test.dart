@@ -80,8 +80,9 @@ void main() {
     test('ขายและทิ้งอาหาร', () {
       final e = kitchen();
       e.cook('bake');
-      expect(e.sellStock(0).message, 'ขายปลาอบ +140 บาท');
-      expect(e.state.earned, 140);
+      // ราคาขายอาหาร ×0.6 จากต้นแบบ (140 → 84)
+      expect(e.sellStock(0).message, 'ขายปลาอบ +84 บาท');
+      expect(e.state.earned, 84);
       expect(e.discardStock(0).ok, isTrue);
       expect(e.state.stock, isEmpty);
     });
