@@ -3,6 +3,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../save/save_repository.dart';
 import '../dialogs.dart';
+import '../layout/responsive.dart';
 import '../providers.dart';
 import '../story_provider.dart';
 import '../scenes/pixel_scene.dart';
@@ -139,8 +140,12 @@ class MainMenuScreen extends ConsumerWidget {
     context: context,
     backgroundColor: Colors.transparent,
     barrierColor: const Color(0xAA1B120B),
+    // จอกว้าง: แผงเลือกไม่ยืดเต็มจอ
+    constraints: const BoxConstraints(maxWidth: Responsive.maxPanel),
+    // จอเตี้ย (มือถือแนวนอน): แผงสูงเกินจอได้ จึงเลื่อนได้
+    isScrollControlled: true,
     builder: (c) => SafeArea(
-      child: Padding(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.all(Gap.m),
         child: WoodPanel(
           margin: EdgeInsets.zero,
@@ -176,6 +181,104 @@ class MainMenuScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final unlocked = ref.watch(survivalUnlockedProvider);
     final saved = ref.watch(storySavedProvider);
+    final panel = WoodPanel(
+      margin: EdgeInsets.zero,
+      padding: const EdgeInsets.all(Gap.m),
+      child: Column(
+        children: [
+          PixelButton(
+            key: const ValueKey('menu-story'),
+            label: 'เนื้อเรื่อง',
+            icon: const PixelIcon('scroll', size: 28),
+            size: PixelButtonSize.large,
+            expand: true,
+            below: Text(
+              saved ? 'เล่นต่อจากบทที่ค้างไว้' : 'เรียนรู้ทีละบท 7 บท',
+              style: const TextStyle(
+                color: AquaColors.ink,
+                fontSize: FontSize.small,
+              ),
+            ),
+            onPressed: () => _story(context, ref),
+          ),
+          const SizedBox(height: Gap.m),
+          Opacity(
+            opacity: unlocked ? 1 : .55,
+            child: PixelButton(
+              key: const ValueKey('menu-survival'),
+              label: 'เอาชีวิตรอด',
+              icon: unlocked
+                  ? const PixelIcon('f_nila', size: 28)
+                  : const PixelGlyph(
+                      Glyph.lock,
+                      size: 22,
+                      color: AquaColors.paper,
+                    ),
+              style: unlocked ? PixelButtonStyle.green : PixelButtonStyle.wood,
+              size: PixelButtonSize.large,
+              expand: true,
+              below: Text(
+                unlocked
+                    ? '20 / 30 / 60 วัน'
+                    : 'ล็อกอยู่ · เล่นเนื้อเรื่องจบเพื่อปลดล็อก',
+                style: const TextStyle(
+                  color: AquaColors.paper,
+                  fontSize: FontSize.small,
+                ),
+              ),
+              onPressed: () => _survival(context, ref),
+            ),
+          ),
+          const SizedBox(height: Gap.m),
+          PixelButton(
+            label: 'เครดิต',
+            icon: const PixelGlyph(
+              Glyph.star,
+              size: 20,
+              color: AquaColors.gold,
+            ),
+            style: PixelButtonStyle.wood,
+            expand: true,
+            onPressed: () => infoDialog(context, 'Credits', const [
+              'AQUA FARM: From Farm to Food',
+              'โปรเจกต์ต้นแบบเกมจำลองฟาร์มปลา',
+              'ค่าน้ำ ปลา และโภชนาการเป็นแบบจำลองเพื่อการเรียนรู้',
+              'ฟอนต์ Mali (SIL Open Font License)',
+            ], icon: const PixelIcon('f_nila', size: 72)),
+          ),
+        ],
+      ),
+    );
+    // แผงปุ่มไม่ยืดเกินขนาดโทรศัพท์บนจอกว้าง
+    final buttons = Center(
+      heightFactor: 1,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: Responsive.maxPanel),
+        child: panel,
+      ),
+    );
+    // แนวนอน: ฉาก | ปุ่ม ไม่ต้องเลื่อนจอ
+    if (context.rs.useSplit) {
+      return Scaffold(
+        body: GrassBackground(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Expanded(flex: 5, child: TitleBackdrop()),
+              Expanded(
+                flex: 4,
+                child: Center(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(Gap.l),
+                    child: buttons,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
     return Scaffold(
       body: GrassBackground(
         child: Column(
@@ -185,78 +288,7 @@ class MainMenuScreen extends ConsumerWidget {
               offset: const Offset(0, -26),
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: Gap.l),
-                child: WoodPanel(
-                  margin: EdgeInsets.zero,
-                  padding: const EdgeInsets.all(Gap.m),
-                  child: Column(
-                    children: [
-                      PixelButton(
-                        key: const ValueKey('menu-story'),
-                        label: 'เนื้อเรื่อง',
-                        icon: const PixelIcon('scroll', size: 28),
-                        size: PixelButtonSize.large,
-                        expand: true,
-                        below: Text(
-                          saved
-                              ? 'เล่นต่อจากบทที่ค้างไว้'
-                              : 'เรียนรู้ทีละบท 7 บท',
-                          style: const TextStyle(
-                            color: AquaColors.ink,
-                            fontSize: FontSize.small,
-                          ),
-                        ),
-                        onPressed: () => _story(context, ref),
-                      ),
-                      const SizedBox(height: Gap.m),
-                      Opacity(
-                        opacity: unlocked ? 1 : .55,
-                        child: PixelButton(
-                          key: const ValueKey('menu-survival'),
-                          label: 'เอาชีวิตรอด',
-                          icon: unlocked
-                              ? const PixelIcon('f_nila', size: 28)
-                              : const PixelGlyph(
-                                  Glyph.lock,
-                                  size: 22,
-                                  color: AquaColors.paper,
-                                ),
-                          style: unlocked
-                              ? PixelButtonStyle.green
-                              : PixelButtonStyle.wood,
-                          size: PixelButtonSize.large,
-                          expand: true,
-                          below: Text(
-                            unlocked
-                                ? '20 / 30 / 60 วัน'
-                                : 'ล็อกอยู่ · เล่นเนื้อเรื่องจบเพื่อปลดล็อก',
-                            style: const TextStyle(
-                              color: AquaColors.paper,
-                              fontSize: FontSize.small,
-                            ),
-                          ),
-                          onPressed: () => _survival(context, ref),
-                        ),
-                      ),
-                      const SizedBox(height: Gap.m),
-                      PixelButton(
-                        label: 'เครดิต',
-                        icon: const PixelGlyph(
-                          Glyph.star,
-                          size: 20,
-                          color: AquaColors.gold,
-                        ),
-                        style: PixelButtonStyle.wood,
-                        expand: true,
-                        onPressed: () => infoDialog(context, 'Credits', const [
-                          'AQUA FARM: From Farm to Food',
-                          'โปรเจกต์ต้นแบบเกมจำลองฟาร์มปลา',
-                          'ค่าน้ำ ปลา และโภชนาการเป็นแบบจำลองเพื่อการเรียนรู้',
-                          'ฟอนต์ Mali (SIL Open Font License)',
-                        ], icon: const PixelIcon('f_nila', size: 72)),
-                      ),
-                    ],
-                  ),
-                ),
+                child: buttons,
               ),
             ),
             SizedBox(height: MediaQuery.paddingOf(context).bottom),

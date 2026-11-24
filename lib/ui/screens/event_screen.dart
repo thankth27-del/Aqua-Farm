@@ -3,6 +3,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../data/disaster_data.dart';
 import '../../game/game_state.dart';
+import '../layout/responsive.dart';
 import '../providers.dart';
 import '../scenes/pixel_scene.dart';
 import '../theme/theme.dart';
@@ -68,8 +69,9 @@ class _EventScreenState extends ConsumerState<EventScreen>
       key: const ValueKey('event-screen'),
       body: GrassBackground(
         child: SafeArea(
-          child: ListView(
-            padding: const EdgeInsets.all(Gap.m),
+          // แนวนอน: ฉาก | ข้อความและปุ่ม
+          child: TabScroll(
+            header: 1,
             children: [
               PixelScene(painterBuilder: (t) => FarmPainter(t, scene)),
               const SizedBox(height: Gap.s),

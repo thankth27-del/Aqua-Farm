@@ -328,6 +328,18 @@ abstract final class Story {
   static bool canEndDay(StoryProgress p, GameEngine e) =>
       endDayBlock(p, e) == null;
 
+  /// คำแนะนำตามสถานการณ์ (null = ใช้คำแนะนำประจำบท)
+  /// บท 6 ก่อนน้ำมาถึง: ตลาดยังเปิด ให้รู้ว่าต้องรออีกกี่วัน
+  static String? situationHint(StoryProgress p, GameEngine e) {
+    final s = e.state;
+    final up = s.upcoming;
+    if (p.chapter == 6 && s.active == null && up != null) {
+      final left = up.startDay - s.day;
+      return 'น้ำท่วมมาในอีก $left วัน · ตลาดยังเปิด เตรียมเพิ่มได้ แล้วกด "จบวัน" รอ';
+    }
+    return null;
+  }
+
   /// เหตุผลที่จบวันไม่ได้ (null = จบได้)
   static String? endDayBlock(StoryProgress p, GameEngine e) {
     if (p.failed) return 'ลองบทนี้ใหม่ก่อน';

@@ -8,9 +8,6 @@ const String kFont = 'Mali';
 /// ขนาดปุ่มกดขั้นต่ำตามกติกาโปรเจกต์
 const double kMinTap = 48;
 
-/// ความกว้างสูงสุดของเกม (แนวตั้ง) เมื่อเปิดบนจอกว้าง
-const double kMaxPhoneWidth = 480;
-
 /// ระยะห่างมาตรฐาน
 abstract final class Gap {
   static const xs = 4.0;

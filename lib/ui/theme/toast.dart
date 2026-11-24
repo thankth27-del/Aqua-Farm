@@ -11,7 +11,10 @@ class ToastHost extends StatefulWidget {
 
   /// แสดงข้อความ — สีแดงเมื่อไม่สำเร็จหรือเป็นคำเตือน
   static void show(BuildContext context, String message, {bool bad = false}) =>
-      context.findAncestorStateOfType<ToastHostState>()?.show(message, bad: bad);
+      context.findAncestorStateOfType<ToastHostState>()?.show(
+        message,
+        bad: bad,
+      );
 
   @override
   State<ToastHost> createState() => ToastHostState();

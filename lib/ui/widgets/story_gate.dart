@@ -168,7 +168,7 @@ class StoryGoalBar extends ConsumerWidget {
                   ? 'แพ้บทนี้: ${p.failReason}'
                   : p.done
                   ? 'ผ่านบทนี้แล้ว! กด "บทถัดไป"'
-                  : (block ?? spec.hint),
+                  : (block ?? Story.situationHint(p, e) ?? spec.hint),
               key: const ValueKey('story-hint'),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,

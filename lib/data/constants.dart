@@ -22,6 +22,9 @@ const String kStoryKey = 'aquafarm_story_v1';
 /// คีย์บอกว่าเล่นเนื้อเรื่องจบแล้ว (ปลดล็อกโหมดเอาชีวิตรอด)
 const String kSurvivalUnlockKey = 'aquafarm_survival_unlocked';
 
+/// คีย์เก็บว่าเห็นคำแนะนำหน้าไหนแล้ว (ต่อเครื่อง คั่นด้วยจุลภาค)
+const String kTipsKey = 'aquafarm_tips_seen';
+
 /// ช่องเซฟที่ใช้ได้
 const List<int> kSaveSlots = [1, 2, 3];
 

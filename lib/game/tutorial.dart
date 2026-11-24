@@ -75,8 +75,7 @@ final List<TutorialStep> kTutorial = [
   TutorialStep(
     'ลองทำอาหาร: ระบบแจกปลา 1 ตัวและเครื่องปรุงให้แล้ว ไปที่ "ครัว" แล้วกดทำปลาทอด',
     TutorialTarget.kitchen,
-    (e, cur) =>
-        e.state.stock.any((b) => kFoods[b.food]!.kind == FoodKind.meal),
+    (e, cur) => e.state.stock.any((b) => kFoods[b.food]!.kind == FoodKind.meal),
     (e) {
       final s = e.state;
       s.fishStock['nila'] = (s.fishStock['nila'] ?? 0) + 1;

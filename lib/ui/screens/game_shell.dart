@@ -3,12 +3,15 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../data/difficulty.dart';
 import '../../data/disaster_data.dart';
+import '../../game/hints.dart';
 import '../../game/story.dart';
 import '../../game/tutorial.dart';
 import '../dialogs.dart';
+import '../layout/responsive.dart';
 import '../providers.dart';
 import '../sound.dart';
 import '../theme/theme.dart';
+import '../widgets/guide_bars.dart';
 import '../widgets/story_gate.dart';
 import '../widgets/tutorial_panel.dart';
 import 'farm_tab.dart';
@@ -32,6 +35,9 @@ class _GameShellState extends ConsumerState<GameShell> {
 
   /// แท็บปลากำลังเปิดร้านปลาอยู่ไหม (แยก "บ่อปลา" กับ "ร้านปลา" ให้บทเรียน)
   bool _fishShop = false;
+
+  /// เพิ่มทุกครั้งที่แถบ "ตอนนี้ควรทำ" สั่งเปิดแท็บปลา (สร้างแท็บใหม่ตามหน้าบ่อ/ร้าน)
+  int _fishOpen = 0;
 
   static const tabs = [
     ('ฟาร์ม', 'house'),
@@ -61,6 +67,17 @@ class _GameShellState extends ConsumerState<GameShell> {
     _tab = i;
     _fishShop = false;
   });
+
+  /// แถบ "ตอนนี้ควรทำ" → เปิดหน้าที่ต้องไป
+  void _go(NextPlace p) {
+    final tab = tabOfPlace(p);
+    if (tab == null) return;
+    setState(() {
+      _tab = tab;
+      _fishShop = p == NextPlace.shop;
+      _fishOpen++;
+    });
+  }
 
   /// เนื้อเรื่องเปลี่ยนบท → เปิดแท็บของสิ่งที่ต้องทำต่อ
   void _followStory() {
@@ -95,36 +112,62 @@ class _GameShellState extends ConsumerState<GameShell> {
     }
     final body = switch (_tab) {
       0 => FarmTab(onOpenTab: _select),
-      1 => FishTab(onShopChanged: (v) => setState(() => _fishShop = v)),
+      1 => FishTab(
+        key: ValueKey('fish-$_fishOpen'),
+        initialShop: _fishShop,
+        onShopChanged: (v) => setState(() => _fishShop = v),
+      ),
       2 => const MarketTab(),
       3 => KitchenTab(onOpenTab: _select),
       _ => const StorageTab(),
     };
+    // จอแคบ: เมนูล่าง · จอกว้าง/แนวนอน: เมนูข้าง (ระบบเลย์เอาต์กลาง)
+    final side = context.rs.useSideNav;
+    // โหมดเอาชีวิตรอด (นอกบทเรียน): ป้ายงานค้างบนเมนู + คำแนะนำ + แถบ "ตอนนี้ควรทำ"
+    final guide = guideOn(ref);
+    final tipOn = tipActive(ref, _screen);
+    final nav = GameNavBar(
+      selected: _tab,
+      items: tabs,
+      vertical: side,
+      highlight: story != null
+          ? storyTab
+          : (target == null ? null : tabOf(target)),
+      locked: locked ?? const {},
+      badges: guide ? tabBadges(ref.read(gameProvider)!.engine) : null,
+      onSelect: _select,
+    );
     return Scaffold(
       body: GrassBackground(
-        child: Column(
-          children: [
-            // ข้อความแจ้งเตือนแสดงใต้แถบบนนี้
-            ToastAnchor(child: TopBar(onReplayTutorial: () => _select(0))),
-            StoryGoalBar(onChapterChanged: _followStory),
-            TutorialPanel(screen: _screen),
-            Expanded(
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 180),
-                child: KeyedSubtree(key: ValueKey(_tab), child: body),
+        child: AdaptiveShell(
+          top: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // ข้อความแจ้งเตือนแสดงใต้แถบบนนี้
+              ToastAnchor(
+                child: TopBar(
+                  onReplayTutorial: () => _select(0),
+                  endDayTip: tipOn && _screen == GameScreen.farm,
+                  onHelp: guide
+                      ? () =>
+                            ref.read(tipsProvider.notifier).replay(_screen.name)
+                      : null,
+                ),
               ),
-            ),
-          ],
+              StoryGoalBar(onChapterChanged: _followStory),
+              TutorialPanel(screen: _screen),
+              // คำแนะนำครั้งแรกของหน้า แทนที่แถบ "ตอนนี้ควรทำ" จนกด "เข้าใจแล้ว"
+              if (guide)
+                tipOn ? TipBar(screen: _screen) : NextStepBar(onGo: _go),
+            ],
+          ),
+          body: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 180),
+            child: KeyedSubtree(key: ValueKey(_tab), child: body),
+          ),
+          bottomNav: nav,
+          sideNav: nav,
         ),
-      ),
-      bottomNavigationBar: GameNavBar(
-        selected: _tab,
-        items: tabs,
-        highlight: story != null
-            ? storyTab
-            : (target == null ? null : tabOf(target)),
-        locked: locked ?? const {},
-        onSelect: _select,
       ),
     );
   }
@@ -139,9 +182,17 @@ class GameNavBar extends StatelessWidget {
     required this.onSelect,
     this.highlight,
     this.locked = const {},
+    this.vertical = false,
+    this.badges,
   });
 
   final int selected;
+
+  /// ป้ายงานค้างต่อแท็บ: null = ไม่มี · 0 = จุดแดง · n = ตัวเลข
+  final List<int?>? badges;
+
+  /// เมนูข้าง (จอกว้าง/แนวนอน) แทนเมนูล่าง
+  final bool vertical;
   final List<(String, String)> items;
   final ValueChanged<int> onSelect;
 
@@ -153,44 +204,82 @@ class GameNavBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return WoodPlank(
-      padding: EdgeInsets.fromLTRB(
-        6,
-        6,
-        6,
-        6 + MediaQuery.paddingOf(context).bottom,
-      ),
-      child: Row(
+    final pad = MediaQuery.paddingOf(context);
+    Widget badge(int i, Widget w) {
+      final b = badges == null || i >= badges!.length ? null : badges![i];
+      if (b == null || i == selected || locked.contains(i)) return w;
+      return Stack(
+        clipBehavior: Clip.none,
         children: [
-          for (var i = 0; i < items.length; i++)
-            Expanded(
-              child: Spotlight(
-                on: i == highlight && i != selected,
-                pad: 0,
-                child: locked.contains(i)
-                    ? Semantics(
-                        enabled: false,
-                        child: IgnorePointer(
-                          child: Opacity(
-                            key: ValueKey('nav-locked-$i'),
-                            opacity: .35,
-                            child: _NavItem(
-                              label: items[i].$1,
-                              icon: items[i].$2,
-                              selected: false,
-                              onTap: () {},
-                            ),
-                          ),
-                        ),
-                      )
-                    : _NavItem(
-                        label: items[i].$1,
-                        icon: items[i].$2,
-                        selected: i == selected,
-                        onTap: () => onSelect(i),
+          w,
+          Positioned(
+            top: 2,
+            right: 4,
+            child: NavBadge(key: ValueKey('nav-badge-$i'), count: b),
+          ),
+        ],
+      );
+    }
+
+    Widget cell(int i) => Spotlight(
+      on: i == highlight && i != selected,
+      pad: 0,
+      child: locked.contains(i)
+          ? Semantics(
+              enabled: false,
+              child: IgnorePointer(
+                child: Opacity(
+                  key: ValueKey('nav-locked-$i'),
+                  opacity: .35,
+                  child: _NavItem(
+                    label: items[i].$1,
+                    icon: items[i].$2,
+                    selected: false,
+                    onTap: () {},
+                  ),
+                ),
+              ),
+            )
+          : _NavItem(
+              label: items[i].$1,
+              icon: items[i].$2,
+              selected: i == selected,
+              onTap: () => onSelect(i),
+            ),
+    );
+    Widget item(int i) => badge(i, cell(i));
+    if (vertical) {
+      // เมนูข้าง: เรียงลงกลางแนวตั้ง กว้างคงที่ ย่อพอดีถ้าจอเตี้ย
+      return WoodPlank(
+        padding: EdgeInsets.fromLTRB(6, 6 + pad.top, 6, 6 + pad.bottom),
+        child: SizedBox(
+          width: 92,
+          child: Center(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: SizedBox(
+                width: 92,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (var i = 0; i < items.length; i++)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 3),
+                        child: item(i),
                       ),
+                  ],
+                ),
               ),
             ),
+          ),
+        ),
+      );
+    }
+    return WoodPlank(
+      padding: EdgeInsets.fromLTRB(6, 6, 6, 6 + pad.bottom),
+      child: Row(
+        children: [
+          for (var i = 0; i < items.length; i++) Expanded(child: item(i)),
         ],
       ),
     );
@@ -267,7 +356,18 @@ class _NavItem extends StatelessWidget {
 
 /// แถบบน: เงิน วัน เสบียง คุณภาพน้ำ เตือนภัย ปุ่มเมนู และปุ่ม "จบวัน"
 class TopBar extends ConsumerWidget {
-  const TopBar({super.key, this.onReplayTutorial});
+  const TopBar({
+    super.key,
+    this.onReplayTutorial,
+    this.onHelp,
+    this.endDayTip = false,
+  });
+
+  /// ปุ่ม "?" แสดงคำแนะนำของหน้านี้อีกครั้ง (null = ไม่มีปุ่ม)
+  final VoidCallback? onHelp;
+
+  /// คำแนะนำหน้าฟาร์มชี้ปุ่ม "จบวัน"
+  final bool endDayTip;
 
   /// หลังกด "เล่นบทเรียนซ้ำ" (ให้หน้าเกมกลับไปหน้าฟาร์ม)
   final VoidCallback? onReplayTutorial;
@@ -463,6 +563,15 @@ class TopBar extends ConsumerWidget {
                   padding: EdgeInsets.only(left: 6),
                   child: _AlertChip(text: 'ไฟดับ', icon: false),
                 ),
+              if (onHelp != null) ...[
+                const SizedBox(width: Gap.s),
+                PixelIconButton(
+                  key: const ValueKey('tip-help'),
+                  icon: const OutlinedText('?', size: 22),
+                  tooltip: 'คำแนะนำหน้านี้',
+                  onPressed: onHelp,
+                ),
+              ],
               const SizedBox(width: Gap.s),
               PixelIconButton(
                 icon: const PixelIcon('gear', size: 28),
@@ -472,19 +581,22 @@ class TopBar extends ConsumerWidget {
               const SizedBox(width: Gap.s),
               StoryGate(
                 target: StoryTarget.endDay,
-                child: PixelButton(
-                  label: 'จบวัน',
-                  icon: const PixelGlyph(
-                    Glyph.moon,
-                    size: 22,
-                    color: AquaColors.goldPale,
+                child: Spotlight(
+                  on: endDayTip,
+                  child: PixelButton(
+                    label: 'จบวัน',
+                    icon: const PixelGlyph(
+                      Glyph.moon,
+                      size: 22,
+                      color: AquaColors.goldPale,
+                    ),
+                    trailing: const PixelGlyph(
+                      Glyph.arrowRight,
+                      size: 18,
+                      color: AquaColors.paper,
+                    ),
+                    onPressed: () => _endDay(context, ref),
                   ),
-                  trailing: const PixelGlyph(
-                    Glyph.arrowRight,
-                    size: 18,
-                    color: AquaColors.paper,
-                  ),
-                  onPressed: () => _endDay(context, ref),
                 ),
               ),
             ],

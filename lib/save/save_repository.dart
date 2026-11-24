@@ -68,6 +68,15 @@ class SaveRepository {
   Future<void> setSurvivalUnlocked(bool on) =>
       _prefs.setString(kSurvivalUnlockKey, on ? '1' : '0');
 
+  /// หน้าที่ผู้เล่นกด "เข้าใจแล้ว" ที่คำแนะนำครั้งแรกไปแล้ว (ต่อเครื่อง)
+  Set<String> get tipsSeen => {
+    for (final s in (_prefs.getString(kTipsKey) ?? '').split(','))
+      if (s.isNotEmpty) s,
+  };
+
+  Future<void> setTipsSeen(Set<String> ids) =>
+      _prefs.setString(kTipsKey, ids.join(','));
+
   /// มีเนื้อเรื่องที่เล่นค้างไว้ไหม
   bool get hasStory => _prefs.getString(kStoryKey) != null;
 

@@ -94,9 +94,7 @@ Future<void> pressIn(
 }) async {
   final g = lit(gate);
   expectNoScroll(tester, g, gate);
-  await tester.tap(
-    find.descendant(of: g, matching: find.text(label)).first,
-  );
+  await tester.tap(find.descendant(of: g, matching: find.text(label)).first);
   await settle(tester);
   if (confirm != null) {
     await tester.tap(find.widgetWithText(PixelButton, confirm).last);
@@ -124,7 +122,9 @@ Future<void> step(WidgetTester tester) async {
       await settle(tester);
       final buy = lit('buyFish');
       expect(buy, findsOneWidget);
-      await tester.tap(find.descendant(of: buy, matching: find.text('ซื้อปลา')));
+      await tester.tap(
+        find.descendant(of: buy, matching: find.text('ซื้อปลา')),
+      );
       await settle(tester);
       await tester.tap(find.widgetWithText(PixelButton, 'ตกลง').last);
       await settle(tester);
@@ -198,29 +198,30 @@ Future<void> step(WidgetTester tester) async {
 }
 
 void main() {
-  testWidgets('เล่นเนื้อเรื่องบท 1-7 ผ่าน UI: ทุกขั้นเห็นปุ่มที่ต้องกดโดยไม่ต้องเลื่อนจอ', (
-    tester,
-  ) async {
-    await pumpStory(tester);
-    final chapters = <int>{};
-    var guard = 0;
-    while (find.byType(StorySummaryScreen).evaluate().isEmpty) {
-      expect(guard++ < 150, isTrue, reason: 'เนื้อเรื่องไม่จบใน 150 ขั้น');
-      expect(progress.failed, isFalse, reason: progress.failReason);
-      chapters.add(progress.chapter);
-      // แถบเป้าหมายอยู่บนจอทุกขั้น
-      expect(find.byKey(const ValueKey('story-goal')), findsOneWidget);
-      await step(tester);
-    }
-    expect(chapters, {1, 2, 3, 4, 5, 6});
-    expect(find.byKey(const ValueKey('story-grade')), findsOneWidget);
-    expect(find.byKey(const ValueKey('story-ending')), findsOneWidget);
+  testWidgets(
+    'เล่นเนื้อเรื่องบท 1-7 ผ่าน UI: ทุกขั้นเห็นปุ่มที่ต้องกดโดยไม่ต้องเลื่อนจอ',
+    (tester) async {
+      await pumpStory(tester);
+      final chapters = <int>{};
+      var guard = 0;
+      while (find.byType(StorySummaryScreen).evaluate().isEmpty) {
+        expect(guard++ < 150, isTrue, reason: 'เนื้อเรื่องไม่จบใน 150 ขั้น');
+        expect(progress.failed, isFalse, reason: progress.failReason);
+        chapters.add(progress.chapter);
+        // แถบเป้าหมายอยู่บนจอทุกขั้น
+        expect(find.byKey(const ValueKey('story-goal')), findsOneWidget);
+        await step(tester);
+      }
+      expect(chapters, {1, 2, 3, 4, 5, 6});
+      expect(find.byKey(const ValueKey('story-grade')), findsOneWidget);
+      expect(find.byKey(const ValueKey('story-ending')), findsOneWidget);
 
-    await tester.tap(find.byKey(const ValueKey('story-finish')));
-    await settle(tester);
-    // กลับเมนูหลัก และโหมดเอาชีวิตรอดปลดล็อกแล้ว
-    expect(find.text('20 / 30 / 60 วัน'), findsOneWidget);
-    final prefs = await SharedPreferences.getInstance();
-    expect(prefs.getString(kSurvivalUnlockKey), '1');
-  });
+      await tester.tap(find.byKey(const ValueKey('story-finish')));
+      await settle(tester);
+      // กลับเมนูหลัก และโหมดเอาชีวิตรอดปลดล็อกแล้ว
+      expect(find.text('20 / 30 / 60 วัน'), findsOneWidget);
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString(kSurvivalUnlockKey), '1');
+    },
+  );
 }

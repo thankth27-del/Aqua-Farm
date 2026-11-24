@@ -7,6 +7,7 @@ import '../../data/constants.dart';
 import '../../data/fish_data.dart';
 import '../../game/story.dart';
 import '../dialogs.dart';
+import '../layout/responsive.dart';
 import '../providers.dart';
 import '../scenes/pixel_scene.dart';
 import '../theme/theme.dart';
@@ -195,8 +196,7 @@ class _FishDetailScreenState extends ConsumerState<FishDetailScreen> {
       body: GrassBackground(
         child: SafeArea(
           bottom: false,
-          child: ListView(
-            padding: const EdgeInsets.all(Gap.m),
+          child: TabScroll(
             children: [
               Align(
                 alignment: Alignment.centerLeft,

@@ -3,6 +3,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../data/disaster_data.dart';
 import '../../data/food_data.dart';
+import '../layout/responsive.dart';
 import '../providers.dart';
 import '../scenes/pixel_scene.dart';
 import '../theme/theme.dart';
@@ -24,10 +25,40 @@ class ReportScreen extends ConsumerWidget {
     };
 
     return Scaffold(
+      // ปุ่มหลักติดล่างจอเสมอ ไม่ต้องเลื่อนหา (วันเกิดภัยรายงานยาว)
+      bottomNavigationBar: GrassBackground(
+        child: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(Gap.m, Gap.s, Gap.m, Gap.m),
+            child: Center(
+              heightFactor: 1,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(
+                  maxWidth: Responsive.maxColumn,
+                ),
+                child: PixelButton(
+                  label: 'เริ่มวันใหม่',
+                  icon: const PixelGlyph(
+                    Glyph.sun,
+                    size: 24,
+                    color: AquaColors.goldLight,
+                  ),
+                  size: PixelButtonSize.large,
+                  expand: true,
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
       body: GrassBackground(
         child: SafeArea(
-          child: ListView(
-            padding: const EdgeInsets.all(Gap.m),
+          bottom: false,
+          // แนวนอน: ฉากเกรด | ตัวเลขรายงาน
+          child: TabScroll(
+            header: 1,
             children: [
               PageHeader(
                 scene: PixelScene(
@@ -227,17 +258,6 @@ class ReportScreen extends ConsumerWidget {
                     ],
                   ),
                 ),
-              PixelButton(
-                label: 'เริ่มวันใหม่',
-                icon: const PixelGlyph(
-                  Glyph.sun,
-                  size: 24,
-                  color: AquaColors.goldLight,
-                ),
-                size: PixelButtonSize.large,
-                expand: true,
-                onPressed: () => Navigator.of(context).pop(),
-              ),
             ],
           ),
         ),

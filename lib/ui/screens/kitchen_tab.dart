@@ -7,12 +7,15 @@ import '../../data/food_data.dart';
 import '../../data/ingredients.dart';
 import '../../game/game_engine.dart';
 import '../../game/story.dart';
+import '../../game/tutorial.dart';
 import '../dialogs.dart';
+import '../layout/responsive.dart';
 import '../providers.dart';
 import '../story_provider.dart';
 import '../scenes/pixel_scene.dart';
 import '../theme/theme.dart';
 import '../widgets/story_gate.dart';
+import '../widgets/guide_bars.dart';
 
 /// แท็บ "ครัว" (cook ในต้นแบบ): ทำอาหาร 5 เมนู และถนอมอาหาร 4 วิธี
 /// ใช้ปลาจากคลัง 1 ตัว + วัตถุดิบ ได้อาหารเท่ากับจำนวนจานของปลาตัวนั้น
@@ -201,9 +204,11 @@ class _KitchenView extends ConsumerWidget {
       ),
     );
 
-    return ListView(
-      key: PageStorageKey(preserve ? 'kitchen-pres' : 'kitchen-cook'),
-      padding: const EdgeInsets.all(Gap.m),
+    final fishFirst = story == null && fish.isEmpty;
+    return TabScroll(
+      listKey: PageStorageKey(preserve ? 'kitchen-pres' : 'kitchen-cook'),
+      header: story == null ? 1 : 0,
+      decorative: true,
       children: [
         if (story == null)
           PageHeader(
@@ -213,8 +218,10 @@ class _KitchenView extends ConsumerWidget {
             titleSize: 21,
           ),
 
-        // ---------- ปลาที่ใช้ ---------- (เนื้อเรื่อง: ไว้ท้าย ให้ปุ่มที่ต้องกดอยู่บนจอ)
-        if (story == null) fishPanel,
+        // ---------- ปลาที่ใช้ ----------
+        // ไม่มีปลา: แผงนี้ขึ้นก่อน (บอกเหตุผล + ปุ่มไปบ่อ)
+        // มีปลา: ไว้ท้าย ให้ปุ่ม "ทำอาหาร" อยู่บนจอ (การ์ดสูตรบอกปลาที่ใช้อยู่แล้ว)
+        if (fishFirst) fishPanel,
 
         if (!preserve)
           // ---------- สูตรอาหาร ----------
@@ -232,32 +239,36 @@ class _KitchenView extends ConsumerWidget {
                     child: pick(
                       r.id == 'fry',
                       StoryTarget.cook,
-                      _RecipeCard(
-                        key: ValueKey('recipe-${r.id}'),
-                        food: kFoods[r.id]!,
-                        details: [
-                          'อิ่ม +${kFoods[r.id]!.hunger}',
-                          'เก็บได้ ${kFoods[r.id]!.shelfDays} วัน',
-                          'ขาย ${e.foodSellPrice(r.id)} บาท',
-                        ],
-                        more: [
-                          'พลังงาน +${kFoods[r.id]!.energy}',
-                          '${kFoods[r.id]!.kcal} kcal',
-                          'โปรตีน ${kFoods[r.id]!.protein} g',
-                          'ปรุง ${r.minutes} นาที',
-                        ].join(' · '),
-                        reason: _reason(e, r.need),
-                        onMarket: onOpenTab != null && _needsMarket(e, r.need)
-                            ? () => onOpenTab!(2)
-                            : null,
-                        chips: [
-                          _fishChip(fish),
-                          ..._ingredientChips(r.need, s.inventory),
-                        ],
-                        action: 'ทำอาหาร',
-                        enabled: e.canCook(r.id),
-                        onPressed: () =>
-                            showResult(context, ctl.run((e) => e.cook(r.id))),
+                      TipSpot(
+                        screen: GameScreen.kitchen,
+                        enabled: r.id == kRecipes.keys.first,
+                        child: _RecipeCard(
+                          key: ValueKey('recipe-${r.id}'),
+                          food: kFoods[r.id]!,
+                          details: [
+                            'อิ่ม +${kFoods[r.id]!.hunger}',
+                            'เก็บได้ ${kFoods[r.id]!.shelfDays} วัน',
+                            'ขาย ${e.foodSellPrice(r.id)} บาท',
+                          ],
+                          more: [
+                            'พลังงาน +${kFoods[r.id]!.energy}',
+                            '${kFoods[r.id]!.kcal} kcal',
+                            'โปรตีน ${kFoods[r.id]!.protein} g',
+                            'ปรุง ${r.minutes} นาที',
+                          ].join(' · '),
+                          reason: _reason(e, r.need),
+                          onMarket: onOpenTab != null && _needsMarket(e, r.need)
+                              ? () => onOpenTab!(2)
+                              : null,
+                          chips: [
+                            _fishChip(fish),
+                            ..._ingredientChips(r.need, s.inventory),
+                          ],
+                          action: 'ทำอาหาร',
+                          enabled: e.canCook(r.id),
+                          onPressed: () =>
+                              showResult(context, ctl.run((e) => e.cook(r.id))),
+                        ),
                       ),
                     ),
                   ),
@@ -376,7 +387,7 @@ class _KitchenView extends ConsumerWidget {
             ),
           ),
         ],
-        if (story != null) fishPanel,
+        if (!fishFirst) fishPanel,
       ],
     );
   }

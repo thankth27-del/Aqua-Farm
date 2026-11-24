@@ -4,6 +4,7 @@ import 'package:material_ui/material_ui.dart';
 import '../../data/difficulty.dart';
 import '../../save/save_repository.dart';
 import '../dialogs.dart';
+import '../layout/responsive.dart';
 import '../providers.dart';
 import '../theme/theme.dart';
 import '../widgets/mode_dialog.dart';
@@ -69,53 +70,58 @@ class SlotsScreen extends ConsumerWidget {
     final top = MediaQuery.paddingOf(context).top;
     return Scaffold(
       body: GrassBackground(
-        child: ListView(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.paddingOf(context).bottom + Gap.l,
-          ),
-          children: [
-            SizedBox(
-              height: 230 + top,
-              child: const TitleBackdrop(logoSize: 40),
-            ),
-            Transform.translate(
-              offset: const Offset(0, -24),
-              child: const Center(
-                child: WoodSign(
-                  'เลือกช่องบันทึก',
-                  icon: PixelIcon('scroll', size: 28),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: Responsive.maxColumn),
+            child: ListView(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.paddingOf(context).bottom + Gap.l,
+              ),
+              children: [
+                SizedBox(
+                  height: 230 + top,
+                  child: const TitleBackdrop(logoSize: 40),
                 ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: Gap.m),
-              child: Column(
-                children: [
-                  for (final e in slots.entries)
-                    _SlotCard(
-                      slot: e.key,
-                      info: e.value,
-                      onNew: () => _new(context, ref, e.key),
-                      onLoad: () => _load(context, ref, e.value!),
-                      onRename: () => _rename(context, ref, e.value!),
-                      onDelete: () => _delete(context, ref, e.value!),
+                Transform.translate(
+                  offset: const Offset(0, -24),
+                  child: const Center(
+                    child: WoodSign(
+                      'เลือกช่องบันทึก',
+                      icon: PixelIcon('scroll', size: 28),
                     ),
-                  PixelButton(
-                    label: 'กลับ',
-                    icon: const PixelGlyph(
-                      Glyph.arrowRight,
-                      flipX: true,
-                      size: 20,
-                      color: AquaColors.paper,
-                    ),
-                    style: PixelButtonStyle.wood,
-                    expand: true,
-                    onPressed: () => Navigator.of(context).pop(),
                   ),
-                ],
-              ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: Gap.m),
+                  child: Column(
+                    children: [
+                      for (final e in slots.entries)
+                        _SlotCard(
+                          slot: e.key,
+                          info: e.value,
+                          onNew: () => _new(context, ref, e.key),
+                          onLoad: () => _load(context, ref, e.value!),
+                          onRename: () => _rename(context, ref, e.value!),
+                          onDelete: () => _delete(context, ref, e.value!),
+                        ),
+                      PixelButton(
+                        label: 'กลับ',
+                        icon: const PixelGlyph(
+                          Glyph.arrowRight,
+                          flipX: true,
+                          size: 20,
+                          color: AquaColors.paper,
+                        ),
+                        style: PixelButtonStyle.wood,
+                        expand: true,
+                        onPressed: () => Navigator.of(context).pop(),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );

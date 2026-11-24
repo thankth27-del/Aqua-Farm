@@ -229,7 +229,15 @@ class SectionTitle extends StatelessWidget {
         children: [
           if (icon != null) ...[icon!, const SizedBox(width: Gap.s)],
           Expanded(child: Bold(text, size: FontSize.label)),
-          ?trailing,
+          // ป้ายท้ายย่อลงเมื่อจอแคบ ไม่ล้นขอบ
+          if (trailing != null)
+            Flexible(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerRight,
+                child: trailing,
+              ),
+            ),
         ],
       ),
     );

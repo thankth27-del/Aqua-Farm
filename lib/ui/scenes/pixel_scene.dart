@@ -13,6 +13,7 @@ import '../../data/disaster_data.dart';
 import '../../data/fish_data.dart';
 import '../../game/game_state.dart';
 import '../providers.dart';
+import '../layout/responsive.dart';
 import 'fish_swim.dart';
 import '../theme/colors.dart';
 
@@ -778,6 +779,45 @@ class _PixelSceneState extends ConsumerState<PixelScene> {
     }
     scene = ExcludeSemantics(child: scene);
     if (widget.cover) return scene;
-    return AspectRatio(aspectRatio: kSceneW / kSceneH, child: scene);
+    // ระบบเลย์เอาต์กลาง: ขยายฉากเป็นจำนวนเต็มเท่าของพิกเซลจริง (คม ไม่เบลอ)
+    // ที่เหลือด้านข้างเติมด้วยฉากเดียวกันแบบหรี่ ไม่ใช่แถบดำ
+    return LayoutBuilder(
+      builder: (context, box) {
+        final w = box.maxWidth;
+        final ppl = context.rs.physicalPerLogical(
+          MediaQuery.devicePixelRatioOf(context),
+        );
+        final fit = integerSceneSize(
+          Size(w, w * kSceneH / kSceneW),
+          ppl,
+          const Size(kSceneW, kSceneH),
+        );
+        final inner = SizedBox.fromSize(size: fit, child: scene);
+        if (w - fit.width < 1) return inner;
+        return SizedBox(
+          width: w,
+          height: fit.height,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              ExcludeSemantics(
+                child: ClipRect(
+                  child: FittedBox(
+                    fit: BoxFit.cover,
+                    child: SizedBox(
+                      width: kSceneW,
+                      height: kSceneH,
+                      child: CustomPaint(painter: widget.painterBuilder(_tick)),
+                    ),
+                  ),
+                ),
+              ),
+              const ColoredBox(color: Color(0x8C0B1A12)),
+              Center(child: inner),
+            ],
+          ),
+        );
+      },
+    );
   }
 }

@@ -8,25 +8,37 @@ import '../../data/food_data.dart';
 import '../../data/ingredients.dart';
 import '../../game/game_engine.dart';
 import '../../game/story.dart';
+import '../../game/tutorial.dart';
 import '../dialogs.dart';
+import '../layout/responsive.dart';
 import '../providers.dart';
 import '../scenes/pixel_scene.dart';
 import '../theme/theme.dart';
 import '../widgets/equipment_row.dart';
 import '../widgets/story_gate.dart';
+import '../widgets/sub_tabs.dart';
+import '../widgets/guide_bars.dart';
 
 /// แท็บ "ตลาด" (market ในต้นแบบ): ซื้อวัตถุดิบ ขายปลาในคลัง ขายอาหาร ซื้ออุปกรณ์ครัว
 /// ทุกการซื้อขายต้องผ่านหน้ายืนยัน · ตลาดปิดตอนเกิดภัย (ซื้อขายไม่ได้)
-class MarketTab extends ConsumerWidget {
+class MarketTab extends ConsumerStatefulWidget {
   const MarketTab({super.key});
+
+  @override
+  ConsumerState<MarketTab> createState() => _MarketTabState();
 
   /// อุปกรณ์ครัวที่ขายในตลาด (ตามต้นแบบ: rack, jar, fridge, canner)
   static final kitchenEquipment = [
     for (final id in kKitchenEquipmentOrder) kEquipment[id]!,
   ];
+}
+
+class _MarketTabState extends ConsumerState<MarketTab> {
+  /// แท็บย่อย: false = ซื้อ (วัตถุดิบ อุปกรณ์) · true = ขาย (ปลา อาหาร)
+  bool _sell = false;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final session = ref.watch(gameProvider)!;
     final e = session.engine;
     final s = session.state;
@@ -203,7 +215,7 @@ class MarketTab extends ConsumerWidget {
             'อุปกรณ์ครัว',
             icon: PixelIcon('fridge', size: 28),
           ),
-          for (final eq in kitchenEquipment)
+          for (final eq in MarketTab.kitchenEquipment)
             Padding(
               padding: const EdgeInsets.only(bottom: Gap.s),
               child: pick(
@@ -241,10 +253,20 @@ class MarketTab extends ConsumerWidget {
         for (final x in sections)
           if (Story.allows(p, ge, x.$1)) x,
       ]..sort((a, b) => (a.$1 == next ? 0 : 1) - (b.$1 == next ? 0 : 1));
+    } else {
+      // โหมดเอาชีวิตรอด: แยกแท็บย่อย ซื้อ | ขาย แทนหน้ายาว
+      bool selling(StoryTarget t) =>
+          t == StoryTarget.sellFish || t == StoryTarget.sellFood;
+      sections = [
+        for (final x in sections)
+          if (selling(x.$1) == _sell) x,
+      ];
     }
 
-    return ListView(
-      padding: const EdgeInsets.all(Gap.m),
+    final list = TabScroll(
+      header: story == null ? 1 : 0,
+      decorative: true,
+      listKey: PageStorageKey(_sell ? 'market-sell-list' : 'market-buy-list'),
       children: [
         if (story == null)
           PageHeader(
@@ -254,6 +276,30 @@ class MarketTab extends ConsumerWidget {
           ),
         if (closed) _ClosedBanner(engine: e),
         for (final x in sections) x.$2,
+      ],
+    );
+    if (story != null) return list;
+    final food = s.stock.fold<int>(0, (n, b) => n + b.qty);
+    return Column(
+      children: [
+        TipSpot(
+          screen: GameScreen.market,
+          child: SubTabs(
+            key: const ValueKey('primary-market'),
+            selected: _sell ? 1 : 0,
+            onSelect: (i) => setState(() => _sell = i == 1),
+            items: [
+              ('market-buy', 'ซื้อ', 'garlic', null),
+              (
+                'market-sell',
+                'ขาย',
+                'coin',
+                e.fishTotal + food > 0 ? e.fishTotal + food : null,
+              ),
+            ],
+          ),
+        ),
+        Expanded(child: list),
       ],
     );
   }

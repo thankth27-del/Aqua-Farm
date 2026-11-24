@@ -8,6 +8,7 @@ import '../../game/hints.dart';
 import '../../game/story.dart';
 import '../../game/tutorial.dart';
 import '../dialogs.dart';
+import '../layout/responsive.dart';
 import '../providers.dart';
 import '../scenes/pixel_scene.dart';
 import '../theme/theme.dart';
@@ -57,35 +58,25 @@ class FarmTab extends ConsumerWidget {
 
     // เนื้อเรื่อง: อุปกรณ์ที่ต้องซื้ออยู่บนสุด ไม่ต้องเลื่อนหา
     if (isStory) {
-      return SingleChildScrollView(
-        padding: const EdgeInsets.all(Gap.m),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [prepare, disaster, character],
-        ),
-      );
+      return TabScroll(lazy: false, children: [prepare, disaster, character]);
     }
 
     // Column ใน SingleChildScrollView: ทุกแผงถูกสร้างไว้ ปุ่มลัดเลื่อนไปหาได้เสมอ
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(Gap.m),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          PageHeader(
-            scene: PixelScene(painterBuilder: (t) => FarmPainter(t, scene)),
-            title: 'ฟาร์ม',
-            icon: const PixelIcon('house', size: 30),
-          ),
-          if (hint != null) ...[
-            _HintBubble(hint),
-            const SizedBox(height: Gap.m),
-          ],
-          character,
-          disaster,
-          prepare,
-        ],
-      ),
+    return TabScroll(
+      lazy: false,
+      // แนวนอน: ฉาก + คำแนะนำอยู่ซ้าย แผงควบคุมอยู่ขวา
+      header: hint != null ? 3 : 1,
+      children: [
+        PageHeader(
+          scene: PixelScene(painterBuilder: (t) => FarmPainter(t, scene)),
+          title: 'ฟาร์ม',
+          icon: const PixelIcon('house', size: 30),
+        ),
+        if (hint != null) ...[_HintBubble(hint), const SizedBox(height: Gap.m)],
+        character,
+        disaster,
+        prepare,
+      ],
     );
   }
 }
@@ -671,12 +662,18 @@ class _EquipTile extends StatelessWidget {
                 const SizedBox(width: 6),
                 Expanded(child: Bold(name, maxLines: 2)),
                 const SizedBox(width: 6),
-                Text(
-                  'มี $have / ต้อง $need',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: FontSize.body,
-                    color: ok ? AquaColors.ok : AquaColors.bad,
+                // จอแคบ: ย่อตัวเลขให้พอดี ไม่ล้นขอบ
+                Flexible(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      'มี $have / ต้อง $need',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: FontSize.body,
+                        color: ok ? AquaColors.ok : AquaColors.bad,
+                      ),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 4),

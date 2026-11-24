@@ -127,8 +127,7 @@ class _BobState extends State<Bob> with SingleTickerProviderStateMixin {
     super.didChangeDependencies();
     final loops = MotionSettings.loopsOf(context);
     if (loops && _c == null) {
-      _c = AnimationController(vsync: this, duration: widget.period)
-        ..repeat();
+      _c = AnimationController(vsync: this, duration: widget.period)..repeat();
     } else if (!loops && _c != null) {
       _c!.dispose();
       _c = null;
@@ -264,9 +263,7 @@ class _FloatAwayState extends State<FloatAway>
       animation: _c,
       child: widget.child,
       builder: (_, child) {
-        final v = _c.value <= _start
-            ? 0.0
-            : (_c.value - _start) / (1 - _start);
+        final v = _c.value <= _start ? 0.0 : (_c.value - _start) / (1 - _start);
         final t = Curves.easeOut.transform(v);
         final pop = v < .15 ? v / .15 : 1.0;
         return Opacity(

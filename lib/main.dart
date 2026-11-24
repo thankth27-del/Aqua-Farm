@@ -1,4 +1,3 @@
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -8,8 +7,6 @@ import 'ui/providers.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // แนวตั้งเท่านั้น
-  await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   final repo = await SaveRepository.open();
   runApp(
     ProviderScope(

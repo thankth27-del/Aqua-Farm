@@ -22,6 +22,8 @@ class Spotlight extends StatelessWidget {
   Widget build(BuildContext context) {
     if (!on) return child;
     return Stack(
+      // ส่งขนาดเดิมให้ลูก: เปิดกรอบแล้วปุ่มต้องไม่หด/ขยาย
+      fit: StackFit.passthrough,
       clipBehavior: Clip.none,
       children: [
         child,

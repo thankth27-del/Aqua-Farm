@@ -10,10 +10,13 @@ import '../../game/game_engine.dart';
 import '../../game/game_state.dart';
 import '../dialogs.dart';
 import '../../game/story.dart';
+import '../../game/tutorial.dart';
+import '../layout/responsive.dart';
 import '../providers.dart';
 import '../scenes/pixel_scene.dart';
 import '../theme/theme.dart';
 import '../widgets/story_gate.dart';
+import '../widgets/guide_bars.dart';
 
 /// แท็บ "คลัง" (store ในต้นแบบ): เสบียงฉุกเฉิน เป้าหมายเสบียง อาหาร (กิน ขาย ทิ้ง)
 /// วัตถุดิบสด และอุปกรณ์ — กิน ขาย ทิ้ง ต้องผ่านหน้ายืนยัน
@@ -44,61 +47,65 @@ class StorageTab extends ConsumerWidget {
 
     Widget batch(int i) => Padding(
       padding: const EdgeInsets.only(bottom: Gap.s),
-      child: _BatchRow(
-        key: ValueKey('batch-$i'),
-        engine: e,
-        pointEat: i == firstEdible,
-        batch: s.stock[i],
-        closed: s.marketClosed,
-        onEat: () async {
-          final b = s.stock[i];
-          final it = kFoods[b.food]!;
-          // อิ่มแล้ว → บอกเหตุผลเลย ไม่ต้องถาม (ตามต้นแบบ)
-          if (s.hunger >= 100) {
-            showResult(context, ctl.run((e) => e.eatStock(i)));
-            return;
-          }
-          final h2 = (s.hunger + it.hunger).clamp(0, 100);
-          final e2 = (s.energy + it.energy).clamp(0, 100);
-          final ok = await confirmDialog(
-            context,
-            'กิน${it.name}? ความอิ่ม ${s.hunger} → $h2 · พลังงาน ${s.energy} → $e2 (${it.kcal} kcal, โปรตีน ${it.protein} g)',
-            ok: 'กิน',
-            icon: PixelIcon(it.icon, size: 56),
-          );
-          if (ok && context.mounted) {
-            showResult(context, ctl.run((e) => e.eatStock(i)));
-          }
-        },
-        onSell: () async {
-          final it = kFoods[s.stock[i].food]!;
-          if (s.marketClosed) {
-            showResult(context, ctl.run((e) => e.sellStock(i)));
-            return;
-          }
-          final ok = await confirmDialog(
-            context,
-            'ยืนยันขาย${it.name} 1 จาน ได้ ${e.foodSellPrice(it.id)} บาท?',
-            icon: PixelIcon(it.icon, size: 56),
-          );
-          if (ok && context.mounted) {
-            showResult(context, ctl.run((e) => e.sellStock(i)));
-          }
-        },
-        onDiscard: () async {
-          final b = s.stock[i];
-          final it = kFoods[b.food]!;
-          final ok = await confirmDialog(
-            context,
-            'ทิ้ง${it.name} ${b.qty} จาน?',
-            ok: 'ทิ้ง',
-            danger: true,
-            icon: PixelIcon(it.icon, size: 56),
-          );
-          if (ok && context.mounted) {
-            showResult(context, ctl.run((e) => e.discardStock(i)));
-          }
-        },
+      child: TipSpot(
+        screen: GameScreen.storage,
+        enabled: i == firstEdible,
+        child: _BatchRow(
+          key: ValueKey('batch-$i'),
+          engine: e,
+          pointEat: i == firstEdible,
+          batch: s.stock[i],
+          closed: s.marketClosed,
+          onEat: () async {
+            final b = s.stock[i];
+            final it = kFoods[b.food]!;
+            // อิ่มแล้ว → บอกเหตุผลเลย ไม่ต้องถาม (ตามต้นแบบ)
+            if (s.hunger >= 100) {
+              showResult(context, ctl.run((e) => e.eatStock(i)));
+              return;
+            }
+            final h2 = (s.hunger + it.hunger).clamp(0, 100);
+            final e2 = (s.energy + it.energy).clamp(0, 100);
+            final ok = await confirmDialog(
+              context,
+              'กิน${it.name}? ความอิ่ม ${s.hunger} → $h2 · พลังงาน ${s.energy} → $e2 (${it.kcal} kcal, โปรตีน ${it.protein} g)',
+              ok: 'กิน',
+              icon: PixelIcon(it.icon, size: 56),
+            );
+            if (ok && context.mounted) {
+              showResult(context, ctl.run((e) => e.eatStock(i)));
+            }
+          },
+          onSell: () async {
+            final it = kFoods[s.stock[i].food]!;
+            if (s.marketClosed) {
+              showResult(context, ctl.run((e) => e.sellStock(i)));
+              return;
+            }
+            final ok = await confirmDialog(
+              context,
+              'ยืนยันขาย${it.name} 1 จาน ได้ ${e.foodSellPrice(it.id)} บาท?',
+              icon: PixelIcon(it.icon, size: 56),
+            );
+            if (ok && context.mounted) {
+              showResult(context, ctl.run((e) => e.sellStock(i)));
+            }
+          },
+          onDiscard: () async {
+            final b = s.stock[i];
+            final it = kFoods[b.food]!;
+            final ok = await confirmDialog(
+              context,
+              'ทิ้ง${it.name} ${b.qty} จาน?',
+              ok: 'ทิ้ง',
+              danger: true,
+              icon: PixelIcon(it.icon, size: 56),
+            );
+            if (ok && context.mounted) {
+              showResult(context, ctl.run((e) => e.discardStock(i)));
+            }
+          },
+        ),
       ),
     );
 
@@ -128,12 +135,14 @@ class StorageTab extends ConsumerWidget {
     );
     // เนื้อเรื่อง: ถึงเวลากิน → อาหารขึ้นก่อนตัวคำนวณเสบียง
     final story = watchStory(ref);
-    final eatFirst =
-        story != null &&
-        Story.nextTarget(story.$1, story.$2) == StoryTarget.eat;
+    // โหมดเอาชีวิตรอด: มีอาหาร → รายการอาหาร (ปุ่มกิน) ขึ้นก่อน
+    final eatFirst = story != null
+        ? Story.nextTarget(story.$1, story.$2) == StoryTarget.eat
+        : s.stock.isNotEmpty;
 
-    return ListView(
-      padding: const EdgeInsets.all(Gap.m),
+    return TabScroll(
+      header: isStory ? 0 : 1,
+      decorative: true,
       children: [
         if (!isStory)
           PageHeader(
@@ -256,7 +265,7 @@ class StorageTab extends ConsumerWidget {
 }
 
 /// เสบียงฉุกเฉิน (คำนวณจากความอิ่ม) + เป้าหมายเสบียง
-class _SupplyPanel extends StatelessWidget {
+class _SupplyPanel extends StatefulWidget {
   const _SupplyPanel({
     required this.engine,
     required this.onGoal,
@@ -267,8 +276,18 @@ class _SupplyPanel extends StatelessWidget {
   final bool showGoal;
 
   @override
+  State<_SupplyPanel> createState() => _SupplyPanelState();
+}
+
+class _SupplyPanelState extends State<_SupplyPanel> {
+  /// ส่วนตั้งเป้าหมาย (ไม่จำเป็นต่อการเล่น) พับไว้ก่อน
+  bool _open = false;
+
+  @override
   Widget build(BuildContext context) {
-    final e = engine;
+    final e = widget.engine;
+    final showGoal = widget.showGoal;
+    final onGoal = widget.onGoal;
     final s = e.state;
     final need = e.supplyNeedDays;
     final after = e.supplyAfterDisaster;
@@ -311,8 +330,24 @@ class _SupplyPanel extends StatelessWidget {
             size: 13,
           ),
           if (showGoal) ...[
-            const SizedBox(height: Gap.m),
-            const Bold('เป้าหมายเสบียง'),
+            const SizedBox(height: Gap.s),
+            PixelButton(
+              key: const ValueKey('goal-toggle'),
+              label: _open
+                  ? 'ซ่อนเป้าหมายเสบียง'
+                  : 'เป้าหมายเสบียง (${s.goal} วัน)',
+              icon: PixelGlyph(
+                _open ? Glyph.cross : Glyph.arrowRight,
+                size: 16,
+                color: AquaColors.paper,
+              ),
+              style: PixelButtonStyle.wood,
+              expand: true,
+              onPressed: () => setState(() => _open = !_open),
+            ),
+          ],
+          if (showGoal && _open) ...[
+            const SizedBox(height: Gap.s),
             const Muted(
               'ตั้งเป้าเองเพื่อดูแถบความคืบหน้า (ไม่มีผลกับเกม)',
               size: 13,

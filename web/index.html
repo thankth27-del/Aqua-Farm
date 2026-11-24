@@ -26,19 +26,9 @@
 
   <style>
     html, body { margin: 0; height: 100%; background: #04161C; overscroll-behavior: none; }
-    /* iPhone ล็อกแนวตั้งด้วยโค้ดไม่ได้ จึงแสดงข้อความให้หมุนกลับเมื่อโทรศัพท์อยู่แนวนอน */
-    #rotate { display: none; }
-    @media (orientation: landscape) and (max-height: 500px) and (hover: none) {
-      #rotate {
-        display: flex; position: fixed; inset: 0; z-index: 2147483647;
-        align-items: center; justify-content: center; flex-direction: column; gap: 12px;
-        background: #04161C; color: #E9B949; font: bold 20px Tahoma, sans-serif; text-align: center;
-      }
-    }
   </style>
 </head>
 <body>
-  <div id="rotate"><div style="font-size:48px">📱↻</div>กรุณาหมุนโทรศัพท์เป็นแนวตั้ง</div>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

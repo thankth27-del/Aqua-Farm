@@ -18,6 +18,9 @@ import 'package:aqua_farm/game/story.dart';
 import 'package:aqua_farm/ui/sound.dart';
 import 'package:aqua_farm/ui/story_provider.dart';
 import 'package:aqua_farm/ui/theme/theme.dart';
+import 'package:aqua_farm/ui/widgets/guide_bars.dart';
+import 'package:aqua_farm/data/food_data.dart';
+import 'package:aqua_farm/data/ingredients.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
@@ -37,13 +40,19 @@ class FakeBeeper implements Beeper {
 }
 
 /// เปิดแอปที่เมนูหลัก — [unlocked] = เล่นเนื้อเรื่องจบแล้ว (โหมดเอาชีวิตรอดเปิด)
-Future<void> pumpApp(WidgetTester tester, {bool unlocked = true}) async {
+/// [tips] = แสดงคำแนะนำครั้งแรกของแต่ละหน้า (ค่าเริ่มต้นถือว่าเห็นครบแล้ว)
+Future<void> pumpApp(
+  WidgetTester tester, {
+  bool unlocked = true,
+  bool tips = false,
+}) async {
   tester.view
     ..physicalSize = const Size(390, 844)
     ..devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   SharedPreferences.setMockInitialValues({
     if (unlocked) kSurvivalUnlockKey: '1',
+    if (!tips) kTipsKey: GameScreen.values.map((s) => s.name).join(','),
   });
   repo = SaveRepository(await SharedPreferences.getInstance());
   container = ProviderContainer(
@@ -105,6 +114,11 @@ Future<void> buyFish(WidgetTester tester) async {
   await tester.tap(find.text('ตกลง'));
   await tester.pumpAndSettle();
 }
+
+/// รายการเลื่อนหลักของหน้าบ่อปลา
+Finder pondScroll() => find
+    .descendant(of: find.byType(FishTab), matching: find.byType(Scrollable))
+    .first;
 
 /// ค่าวันในช่องวันของแถบบน เช่น "1/30"
 Finder dayChip(String v) => find.descendant(
@@ -453,7 +467,7 @@ void main() {
 
     Finder inCard(int i, Finder f) =>
         find.descendant(of: find.byKey(ValueKey('pond-fish-$i')), matching: f);
-    final list = find.byType(Scrollable).last;
+    final list = pondScroll();
     await tester.scrollUntilVisible(
       find.byKey(const ValueKey('pond-fish-1')),
       200,
@@ -771,19 +785,11 @@ void main() {
     ); // ป้ายน้ำในบ่อลดจาก "ดีมาก" เป็น "ดี"
 
     final advice = find.byKey(const ValueKey('water-advice'));
-    await tester.scrollUntilVisible(
-      advice,
-      200,
-      scrollable: find.byType(Scrollable).last,
-    );
+    await tester.scrollUntilVisible(advice, 200, scrollable: pondScroll());
     expect(find.textContaining('กด "เปลี่ยนน้ำ"'), findsOneWidget);
 
     final info = find.byKey(const ValueKey('catch-info'));
-    await tester.scrollUntilVisible(
-      info,
-      200,
-      scrollable: find.byType(Scrollable).last,
-    );
+    await tester.scrollUntilVisible(info, 200, scrollable: pondScroll());
     expect(
       find.text('ยังจับไม่ได้: ปลาโตสุด 0% (จับได้เมื่อโตครบ 100%)'),
       findsOneWidget,
@@ -878,6 +884,12 @@ void main() {
       expect(find.byType(MarketTab), findsOneWidget);
     }
 
+    /// แท็บย่อย ซื้อ | ขาย
+    Future<void> subTab(WidgetTester tester, String key) async {
+      await tester.tap(find.byKey(ValueKey('market-$key')));
+      await tester.pumpAndSettle();
+    }
+
     /// เลื่อนจนเห็นทั้งชิ้น (ไม่ใช่แค่โผล่ขอบ) ก่อนกด
     Future<void> scrollTo(WidgetTester tester, Finder f) async {
       await tester.scrollUntilVisible(f, 200, scrollable: marketScroll());
@@ -945,6 +957,7 @@ void main() {
       final s = container.read(gameProvider)!.state;
       s.fishStock['nila'] = 2;
       await openMarket(tester);
+      await subTab(tester, 'sell');
 
       final card = find.byKey(const ValueKey('sell-fish-nila'));
       await scrollTo(tester, card);
@@ -971,6 +984,7 @@ void main() {
       expect(s.stock.single.food, 'dried');
       expect(s.stock.single.qty, 2);
       await openMarket(tester);
+      await subTab(tester, 'sell');
 
       final sell = find.descendant(
         of: find.byKey(const ValueKey('sell-food-0')),
@@ -1048,6 +1062,7 @@ void main() {
         }
 
         await tapBlocked(find.byKey(const ValueKey('ing-garlic')));
+        await subTab(tester, 'sell');
         await tapBlocked(find.byKey(const ValueKey('sell-fish-nila')));
         await tapBlocked(
           find.descendant(
@@ -1055,6 +1070,7 @@ void main() {
             matching: find.byType(PixelButton),
           ),
         );
+        await subTab(tester, 'buy');
         await tapBlocked(
           find.descendant(
             of: find.byKey(const ValueKey('eq-rack')),
@@ -1174,6 +1190,8 @@ void main() {
       s.inventory['spice'] = 1;
       await openKitchen(tester);
 
+      // แผงเลือกปลาอยู่ท้ายหน้า (ปุ่มทำอาหารขึ้นก่อน)
+      await scrollTo(tester, find.byKey(const ValueKey('cook-fish-nila')));
       expect(find.byKey(const ValueKey('cook-fish-nila')), findsOneWidget);
       final fry = buttonIn('recipe-fry');
       await scrollTo(tester, fry);
@@ -1200,6 +1218,7 @@ void main() {
       await openKitchen(tester);
       final e = container.read(gameProvider)!.engine;
       expect(e.fishForCooking, 'nila');
+      await scrollTo(tester, find.byKey(const ValueKey('cook-fish-dook')));
       await tester.tap(find.byKey(const ValueKey('cook-fish-dook')));
       await tester.pumpAndSettle();
       expect(e.fishForCooking, 'dook');
@@ -1302,12 +1321,18 @@ void main() {
       final e = container.read(gameProvider)!.engine;
       await openStorage(tester);
 
+      // มีอาหาร → รายการอาหารขึ้นก่อน แผงเสบียงอยู่ถัดไป
+      await scrollTo(tester, find.byKey(const ValueKey('supply-after')));
       expect(
         find.text('อาหารพอกิน ${fmtNum(e.supplyDays)} วัน'),
         findsOneWidget,
       );
       expect(find.textContaining('มีอาหาร 2 จาน'), findsOneWidget);
       expect(find.byKey(const ValueKey('supply-after')), findsOneWidget);
+      // ส่วนตั้งเป้าหมายพับไว้ → กดเปิดก่อน
+      await scrollTo(tester, find.byKey(const ValueKey('goal-toggle')));
+      await tester.tap(find.byKey(const ValueKey('goal-toggle')));
+      await tester.pumpAndSettle();
       await scrollTo(tester, find.byKey(const ValueKey('goal-status')));
       expect(
         find.text('ขาดอีก ${fmtNum(e.goalShortfall)} วันจึงถึงเป้า'),
@@ -1639,5 +1664,205 @@ void main() {
     final ctx = tester.element(find.text('เนื้อเรื่อง'));
     expect(Theme.of(ctx).textTheme.bodyMedium!.fontFamily, kFont);
     expect(DefaultTextStyle.of(ctx).style.fontFamily, kFont);
+  });
+
+  group('กดใช้ง่าย', () {
+    Finder navItem(String label) => find.descendant(
+      of: find.byType(GameNavBar),
+      matching: find.text(label),
+    );
+
+    Future<void> openTab(WidgetTester tester, String label) async {
+      await tester.tap(navItem(label));
+      await tester.pumpAndSettle();
+    }
+
+    /// ทั้งชิ้นอยู่บนจอ ไม่ทับเมนูล่าง และกดโดนจริง
+    void fullyVisible(WidgetTester tester, Finder f, String why) {
+      expect(f, findsWidgets, reason: why);
+      final r = tester.getRect(f.first);
+      final screen = tester.view.physicalSize / tester.view.devicePixelRatio;
+      final nav = tester.getRect(find.byType(GameNavBar));
+      expect(r.top, greaterThanOrEqualTo(0), reason: why);
+      expect(r.right, lessThanOrEqualTo(screen.width + .5), reason: why);
+      if (!find
+          .descendant(of: find.byType(GameNavBar), matching: f)
+          .evaluate()
+          .isNotEmpty) {
+        expect(
+          r.bottom,
+          lessThanOrEqualTo(nav.top + .5),
+          reason: '$why ทับเมนู',
+        );
+      } else {
+        expect(r.bottom, lessThanOrEqualTo(screen.height + .5), reason: why);
+      }
+    }
+
+    for (final size in const [Size(360, 740), Size(390, 844)]) {
+      testWidgets(
+        '${size.width.toInt()}x${size.height.toInt()}: ทุกหน้าเห็นเมนูและปุ่มหลักโดยไม่ต้องเลื่อน',
+        (tester) async {
+          await pumpApp(tester);
+          tester.view.physicalSize = size;
+          await tester.pumpAndSettle();
+          await startNewGame(tester);
+          final ctl = container.read(gameProvider.notifier);
+          ctl.update((e) => e.state.fishStock['nila'] = 1);
+          await tester.pumpAndSettle();
+
+          void check(String page, Finder primary) {
+            expect(tester.takeException(), isNull, reason: page);
+            // เมนูครบทุกช่อง = มีทางไปหน้าอื่นเสมอ
+            for (final t in ['ฟาร์ม', 'ปลา', 'ตลาด', 'ครัว', 'คลัง']) {
+              fullyVisible(tester, navItem(t), '$page: เมนู $t');
+            }
+            fullyVisible(tester, primary, '$page: ปุ่มหลัก');
+            fullyVisible(
+              tester,
+              find.byKey(const ValueKey('next-step')),
+              '$page: ตอนนี้ควรทำ',
+            );
+          }
+
+          check('ฟาร์ม', find.widgetWithText(PixelButton, 'จบวัน'));
+          await openTab(tester, 'ปลา');
+          check('บ่อ', find.byKey(const ValueKey('primary-pond')));
+          await tester.tap(find.text('ร้านปลา').first);
+          await tester.pumpAndSettle();
+          check(
+            'ร้านปลา',
+            find.byWidgetPredicate(
+              (w) =>
+                  w.key is ValueKey &&
+                  '${(w.key! as ValueKey).value}'.startsWith('fish-card-'),
+            ),
+          );
+          await openTab(tester, 'ตลาด');
+          check('ตลาด', find.byKey(const ValueKey('market-sell')));
+          check(
+            'ตลาด (ซื้อ)',
+            find.descendant(
+              of: find.byKey(ValueKey('ing-${kIngredients.keys.first}')),
+              matching: find.text('ซื้อ'),
+            ),
+          );
+          await tester.tap(find.byKey(const ValueKey('market-sell')));
+          await tester.pumpAndSettle();
+          check('ตลาด (ขาย)', find.byKey(const ValueKey('sell-fish-nila')));
+          await openTab(tester, 'ครัว');
+          check(
+            'ครัว',
+            find.descendant(
+              of: find.byKey(ValueKey('recipe-${kRecipes.keys.first}')),
+              matching: find.widgetWithText(PixelButton, 'ทำอาหาร'),
+            ),
+          );
+          await openTab(tester, 'คลัง');
+          check(
+            'คลัง',
+            find.descendant(
+              of: find.byKey(const ValueKey('batch-0')),
+              matching: find.widgetWithText(PixelButton, 'กิน'),
+            ),
+          );
+        },
+      );
+    }
+
+    testWidgets('หน้ารายงานหลังจบวัน: ปุ่มไปต่ออยู่บนจอเสมอ', (tester) async {
+      await pumpApp(tester);
+      tester.view.physicalSize = const Size(360, 740);
+      await tester.pumpAndSettle();
+      await startNewGame(tester);
+      await tester.tap(find.widgetWithText(PixelButton, 'จบวัน'));
+      await tester.pumpAndSettle();
+      final next = find.widgetWithText(PixelButton, 'เริ่มวันใหม่');
+      expect(next, findsOneWidget);
+      expect(tester.getRect(next).bottom, lessThanOrEqualTo(740));
+      await tester.tap(next);
+      await tester.pumpAndSettle();
+      expect(find.byType(GameNavBar), findsOneWidget);
+    });
+
+    testWidgets('แถบ "ตอนนี้ควรทำ": กดแล้วพาไปหน้านั้น', (tester) async {
+      await pumpApp(tester);
+      await startNewGame(tester);
+      // บ่อว่าง → ไปร้านปลา
+      expect(find.text('บ่อว่าง ไปซื้อปลาที่ร้านปลา'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('next-step')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('fish-card-nila')), findsOneWidget);
+
+      // มีปลาแต่ยังไม่ให้อาหาร → ไปบ่อ
+      final ctl = container.read(gameProvider.notifier);
+      ctl.update((e) => e.buyFish('nila', 1));
+      await openTab(tester, 'คลัง');
+      expect(find.text('ปลายังไม่ได้กิน ไปให้อาหารที่บ่อ'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('next-step')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('primary-pond')), findsOneWidget);
+    });
+
+    testWidgets('เมนูมีป้ายเมื่อมีงานรอ และไม่ขึ้นที่แท็บที่เปิดอยู่', (
+      tester,
+    ) async {
+      await pumpApp(tester);
+      await startNewGame(tester);
+      final ctl = container.read(gameProvider.notifier);
+      ctl.update((e) {
+        e.buyFish('nila', 1);
+        e.state.fishStock['nila'] = 2;
+      });
+      await tester.pumpAndSettle();
+      Finder badge(int i) => find.byKey(ValueKey('nav-badge-$i'));
+      // ปลา: ยังไม่ให้อาหาร (จุด) · ตลาด: ปลาขายได้ 2 · ครัว: มีปลาทำอาหาร
+      expect(badge(1), findsOneWidget);
+      expect(
+        find.descendant(of: badge(2), matching: find.text('2')),
+        findsOneWidget,
+      );
+      expect(badge(3), findsOneWidget);
+      await openTab(tester, 'ตลาด');
+      expect(badge(2), findsNothing);
+      // ให้อาหารแล้ว → ป้ายบ่อหาย
+      ctl.update((e) => e.feed(2));
+      await tester.pumpAndSettle();
+      expect(badge(1), findsNothing);
+    });
+
+    testWidgets('คำแนะนำครั้งแรก: แสดงครั้งเดียว บันทึกไว้ และกด ? ดูซ้ำได้', (
+      tester,
+    ) async {
+      await pumpApp(tester, tips: true);
+      await startNewGame(tester);
+      expect(find.byKey(const ValueKey('tip-bar')), findsOneWidget);
+      expect(find.text(kPageTips[GameScreen.farm]!), findsOneWidget);
+      // ระหว่างแสดงคำแนะนำ แถบ "ตอนนี้ควรทำ" ถูกแทนที่
+      expect(find.byKey(const ValueKey('next-step')), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('tip-ok')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('tip-bar')), findsNothing);
+      expect(find.byKey(const ValueKey('next-step')), findsOneWidget);
+      expect(repo.tipsSeen, contains('farm'));
+
+      // หน้าใหม่ → คำแนะนำของหน้านั้น
+      await openTab(tester, 'ตลาด');
+      expect(find.text(kPageTips[GameScreen.market]!), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('tip-ok')));
+      await tester.pumpAndSettle();
+
+      // กลับมาหน้าเดิม: ไม่แสดงอีก
+      await openTab(tester, 'ฟาร์ม');
+      expect(find.byKey(const ValueKey('tip-bar')), findsNothing);
+
+      // ปุ่ม ? → แสดงซ้ำ
+      await tester.tap(find.byKey(const ValueKey('tip-help')));
+      await tester.pumpAndSettle();
+      expect(find.text(kPageTips[GameScreen.farm]!), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('tip-ok')));
+      await tester.pumpAndSettle();
+      expect(repo.tipsSeen, containsAll(['farm', 'market']));
+    });
   });
 }

@@ -163,3 +163,22 @@ class SlotsController extends Notifier<Map<int, SlotInfo?>> {
 final slotsProvider = NotifierProvider<SlotsController, Map<int, SlotInfo?>>(
   SlotsController.new,
 );
+
+/// คำแนะนำครั้งแรกของแต่ละหน้า: ชุดหน้าที่เห็นแล้ว (บันทึกในเครื่อง)
+class TipsController extends Notifier<Set<String>> {
+  @override
+  Set<String> build() => ref.read(saveRepositoryProvider).tipsSeen;
+
+  /// กด "เข้าใจแล้ว" → ไม่แสดงอีก
+  Future<void> dismiss(String id) async {
+    state = {...state, id};
+    await ref.read(saveRepositoryProvider).setTipsSeen(state);
+  }
+
+  /// ปุ่ม "?" → แสดงคำแนะนำของหน้านี้อีกครั้ง
+  void replay(String id) => state = {...state}..remove(id);
+}
+
+final tipsProvider = NotifierProvider<TipsController, Set<String>>(
+  TipsController.new,
+);

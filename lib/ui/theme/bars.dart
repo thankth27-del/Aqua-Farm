@@ -58,7 +58,12 @@ class _BarPainter extends CustomPainter {
     canvas.drawRect(fill, p);
     p.color = Color.lerp(color, Colors.white, .45)!;
     canvas.drawRect(
-      Rect.fromLTWH(fill.left, fill.top, fill.width, (inner.height / 4).ceilToDouble()),
+      Rect.fromLTWH(
+        fill.left,
+        fill.top,
+        fill.width,
+        (inner.height / 4).ceilToDouble(),
+      ),
       p,
     );
     // ช่องแบ่ง (แบบ .bar ของต้นแบบ)
@@ -101,7 +106,9 @@ class StatBar extends StatelessWidget {
             children: [
               SizedBox(width: 26, child: Center(child: icon)),
               const SizedBox(width: Gap.s),
-              Expanded(child: PixelBar(value: value, color: color)),
+              Expanded(
+                child: PixelBar(value: value, color: color),
+              ),
               SizedBox(
                 width: 44,
                 child: Text(

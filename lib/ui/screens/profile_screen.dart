@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../layout/responsive.dart';
 import '../providers.dart';
 import '../theme/theme.dart';
 
@@ -35,8 +36,7 @@ class ProfileScreen extends ConsumerWidget {
       key: const ValueKey('profile-screen'),
       body: GrassBackground(
         child: SafeArea(
-          child: ListView(
-            padding: const EdgeInsets.all(Gap.m),
+          child: TabScroll(
             children: [
               WoodPanel(
                 child: Column(

@@ -112,6 +112,24 @@ void main() {
     expect(d.progress.done, isFalse);
   });
 
+  test('บท 6 ก่อนน้ำมาถึง: คำแนะนำบอกจำนวนวันที่เหลือ', () async {
+    final d = PureDriver();
+    for (var i = 0; i < 5; i++) {
+      await clearChapter(d);
+    }
+    expect(d.progress.chapter, 6);
+    final up = d.engine.state.upcoming!;
+    expect(
+      Story.situationHint(d.progress, d.engine),
+      contains('น้ำท่วมมาในอีก ${up.startDay - d.engine.state.day} วัน'),
+    );
+    while (d.engine.state.active == null) {
+      await fedDay(d);
+    }
+    // น้ำมาแล้ว: กลับไปใช้คำแนะนำประจำบท
+    expect(Story.situationHint(d.progress, d.engine), isNull);
+  });
+
   test('บท 6 แพ้เพราะอาหารไม่พอ แล้วลองใหม่เฉพาะบท 6', () async {
     final d = PureDriver();
     for (var i = 0; i < 5; i++) {

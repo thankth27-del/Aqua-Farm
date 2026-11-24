@@ -6,6 +6,8 @@ import '../../data/fish_data.dart';
 import '../../game/tutorial.dart';
 import '../dialogs.dart';
 import '../../game/story.dart';
+import '../layout/responsive.dart';
+import '../widgets/action_dock.dart';
 import '../providers.dart';
 import '../../game/game_engine.dart';
 import '../../game/game_state.dart';
@@ -13,11 +15,15 @@ import '../scenes/fish_swim.dart';
 import '../scenes/pixel_scene.dart';
 import '../theme/theme.dart';
 import '../widgets/story_gate.dart';
+import '../widgets/guide_bars.dart';
 import 'fish_detail_screen.dart';
 
 /// แท็บ "ปลา": บ่อปลา และร้านปลา
 class FishTab extends ConsumerStatefulWidget {
-  const FishTab({super.key, this.onShopChanged});
+  const FishTab({super.key, this.onShopChanged, this.initialShop = false});
+
+  /// เปิดที่หน้าร้านปลา (จากแถบ "ตอนนี้ควรทำ")
+  final bool initialShop;
 
   /// แจ้งว่ากำลังดูร้านปลา (true) หรือบ่อปลา (false) — ใช้กับบทเรียน
   final ValueChanged<bool>? onShopChanged;
@@ -27,7 +33,7 @@ class FishTab extends ConsumerStatefulWidget {
 }
 
 class _FishTabState extends ConsumerState<FishTab> {
-  bool _shop = false;
+  late bool _shop = widget.initialShop;
 
   void _set(bool shop) {
     setState(() => _shop = shop);
@@ -239,52 +245,58 @@ class _PondViewState extends ConsumerState<_PondView> {
         ],
       ),
     );
+    // ---------- ให้อาหาร (งานหลักของบ่อ) ----------
+    final feedTitle = SectionTitle(
+      'ให้อาหาร',
+      icon: const PixelIcon('fry', size: 28),
+      trailing: s.fed > 0
+          ? Tag(
+              'ให้แล้ว',
+              color: AquaColors.leafLight,
+              icon: passGlyph(true, size: 12),
+            )
+          : Tag('$fu หน่วย/วัน'),
+    );
+    final feedRow = StoryGate(
+      target: StoryTarget.feed,
+      child: Row(
+        children: [
+          for (final (lv, name) in const [
+            (1, 'น้อย'),
+            (2, 'พอดี'),
+            (3, 'มาก'),
+          ]) ...[
+            Expanded(
+              child: PixelButton(
+                label: name,
+                style: lv == 2
+                    ? PixelButtonStyle.green
+                    : PixelButtonStyle.water,
+                below: CoinTag(
+                  e.feedCost(lv),
+                  boxed: true,
+                  size: FontSize.small,
+                ),
+                onPressed: s.fed > 0
+                    ? null
+                    : () => showResult(context, ctl.run((e) => e.feed(lv))),
+              ),
+            ),
+            if (lv < 3) const SizedBox(width: Gap.s),
+          ],
+        ],
+      ),
+    );
     final carePanel = WoodPanel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          SectionTitle(
-            'ให้อาหาร',
-            icon: const PixelIcon('fry', size: 28),
-            trailing: s.fed > 0
-                ? Tag(
-                    'ให้แล้ว',
-                    color: AquaColors.leafLight,
-                    icon: passGlyph(true, size: 12),
-                  )
-                : Tag('$fu หน่วย/วัน'),
-          ),
-          StoryGate(
-            target: StoryTarget.feed,
-            child: Row(
-              children: [
-                for (final (lv, name) in const [
-                  (1, 'น้อย'),
-                  (2, 'พอดี'),
-                  (3, 'มาก'),
-                ]) ...[
-                  Expanded(
-                    child: PixelButton(
-                      label: name,
-                      style: lv == 2
-                          ? PixelButtonStyle.green
-                          : PixelButtonStyle.water,
-                      below: CoinTag(
-                        e.feedCost(lv),
-                        boxed: true,
-                        size: FontSize.small,
-                      ),
-                      onPressed: s.fed > 0
-                          ? null
-                          : () =>
-                                showResult(context, ctl.run((e) => e.feed(lv))),
-                    ),
-                  ),
-                  if (lv < 3) const SizedBox(width: Gap.s),
-                ],
-              ],
-            ),
-          ),
+          // โหมดเอาชีวิตรอด: ปุ่มให้อาหารปักไว้แถบล่าง (ไม่ต้องเลื่อนหา)
+          if (isStory) ...[
+            feedTitle,
+            feedRow,
+          ] else
+            const SectionTitle('ดูแลบ่อ', icon: PixelIcon('drop', size: 28)),
           const SizedBox(height: Gap.m),
           StoryGate(
             target: StoryTarget.water,
@@ -390,12 +402,48 @@ class _PondViewState extends ConsumerState<_PondView> {
       ),
     );
 
-    return ListView(
-      padding: const EdgeInsets.all(Gap.m),
+    final list = TabScroll(
+      header: isStory ? 0 : 1,
       // เนื้อเรื่อง: ปุ่มดูแลบ่ออยู่บนสุด ไม่ต้องเลื่อนหา
       children: isStory
           ? [carePanel, waterPanel, sceneView, fishPanel]
           : [sceneView, waterPanel, carePanel, fishPanel],
+    );
+    if (isStory) return list;
+    // แนวนอน (ฉาก | แผงควบคุม): จอเตี้ย ปักแถบล่างแล้วรายการแทบไม่เหลือที่
+    // → ให้อาหารอยู่บนสุดของฝั่งขวาแทน (เห็นทันทีโดยไม่ต้องเลื่อน)
+    if (context.rs.useSplit) {
+      return TabScroll(
+        header: 1,
+        children: [
+          sceneView,
+          TipSpot(
+            screen: GameScreen.pond,
+            child: WoodPanel(
+              key: const ValueKey('primary-pond'),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [feedTitle, feedRow],
+              ),
+            ),
+          ),
+          waterPanel,
+          carePanel,
+          fishPanel,
+        ],
+      );
+    }
+    return Column(
+      children: [
+        Expanded(child: list),
+        TipSpot(
+          screen: GameScreen.pond,
+          child: ActionDock(
+            key: const ValueKey('primary-pond'),
+            children: [feedTitle, feedRow],
+          ),
+        ),
+      ],
     );
   }
 }
@@ -773,8 +821,9 @@ class _FishShop extends ConsumerWidget {
     final s = ref.watch(gameProvider)!.state;
     final fish = kFish.values.toList();
     final isStory = watchStory(ref) != null;
-    return ListView(
-      padding: const EdgeInsets.all(Gap.m),
+    return TabScroll(
+      header: isStory ? 0 : 1,
+      decorative: true,
       children: [
         // เนื้อเรื่อง: ไม่มีภาพหัวร้าน ให้การ์ดปลาขึ้นมาบนจอเลย
         if (!isStory)
@@ -819,33 +868,37 @@ class _FishShop extends ConsumerWidget {
             for (var i = 0; i < fish.length; i++)
               _ShopCardGate(
                 recommended: i == 0,
-                child: Pressable(
-                  key: ValueKey('fish-card-${fish[i].id}'),
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => FishDetailScreen(fishId: fish[i].id),
+                child: TipSpot(
+                  screen: GameScreen.shop,
+                  enabled: i == 0,
+                  child: Pressable(
+                    key: ValueKey('fish-card-${fish[i].id}'),
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => FishDetailScreen(fishId: fish[i].id),
+                      ),
                     ),
-                  ),
-                  child: WoodPanel(
-                    margin: EdgeInsets.zero,
-                    padding: const EdgeInsets.all(6),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Expanded(
-                          child: Center(
-                            child: Bob(
-                              dx: 2,
-                              dy: 2,
-                              phase: i / fish.length,
-                              child: PixelIcon('f_${fish[i].id}', size: 84),
+                    child: WoodPanel(
+                      margin: EdgeInsets.zero,
+                      padding: const EdgeInsets.all(6),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Expanded(
+                            child: Center(
+                              child: Bob(
+                                dx: 2,
+                                dy: 2,
+                                phase: i / fish.length,
+                                child: PixelIcon('f_${fish[i].id}', size: 84),
+                              ),
                             ),
                           ),
-                        ),
-                        Bold(fish[i].name, size: FontSize.body, maxLines: 1),
-                        const SizedBox(height: 2),
-                        CoinTag(fish[i].buyPrice, boxed: true),
-                      ],
+                          Bold(fish[i].name, size: FontSize.body, maxLines: 1),
+                          const SizedBox(height: 2),
+                          CoinTag(fish[i].buyPrice, boxed: true),
+                        ],
+                      ),
                     ),
                   ),
                 ),
