@@ -1685,21 +1685,29 @@ void main() {
       final nav = tester.getRect(find.byType(GameNavBar));
       expect(r.top, greaterThanOrEqualTo(0), reason: why);
       expect(r.right, lessThanOrEqualTo(screen.width + .5), reason: why);
-      if (!find
+      final inNav = find
           .descendant(of: find.byType(GameNavBar), matching: f)
           .evaluate()
-          .isNotEmpty) {
+          .isNotEmpty;
+      final sideNav = nav.height > nav.width;
+      expect(r.bottom, lessThanOrEqualTo(screen.height + .5), reason: why);
+      if (!inNav && sideNav) {
+        // เมนูข้าง: ไม่ทับเมนูทางซ้าย
+        expect(r.left, greaterThanOrEqualTo(nav.right - .5), reason: why);
+      } else if (!inNav) {
         expect(
           r.bottom,
           lessThanOrEqualTo(nav.top + .5),
           reason: '$why ทับเมนู',
         );
-      } else {
-        expect(r.bottom, lessThanOrEqualTo(screen.height + .5), reason: why);
       }
     }
 
-    for (final size in const [Size(360, 740), Size(390, 844)]) {
+    for (final size in const [
+      Size(360, 740),
+      Size(390, 844),
+      Size(844, 390),
+    ]) {
       testWidgets(
         '${size.width.toInt()}x${size.height.toInt()}: ทุกหน้าเห็นเมนูและปุ่มหลักโดยไม่ต้องเลื่อน',
         (tester) async {

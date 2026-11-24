@@ -507,102 +507,127 @@ class TopBar extends ConsumerWidget {
         8,
         10,
       ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Expanded(flex: 5, child: MoneyChip(money: s.money)),
-              Expanded(
-                flex: 5,
-                child: _Chip(
-                  icon: const PixelIcon('cal', size: 22),
-                  key: const ValueKey('day-chip'),
-                  caption: 'วันที่',
-                  // เนื้อเรื่องไม่มีวันเป้าหมาย (จบเมื่อผ่านบท)
-                  text: session.slot == kStorySlot
-                      ? '${s.day}'
-                      : '${s.day}/${e.targetDays}',
-                  tooltip:
-                      'วันที่ ${s.day} จาก ${e.targetDays} '
-                      '(โหมด${kDifficulties[s.mode]!.name} '
-                      'ความยากขั้น ${e.stage + 1}/$kDifficultyStages)',
-                ),
-              ),
-              Expanded(
-                flex: 5,
-                child: _Chip(
-                  key: const ValueKey('supply-chip'),
-                  icon: const PixelIcon('crate', size: 22),
-                  caption: 'เสบียง',
-                  text: '${fmtNum(e.supplyDays)} วัน',
-                  tooltip: 'อาหารในคลังพอกินอีกกี่วัน',
-                ),
-              ),
-              Expanded(
-                flex: 5,
-                child: _Chip(
-                  key: const ValueKey('water-chip'),
-                  icon: const PixelIcon('drop', size: 22),
-                  caption: 'น้ำ',
-                  text: ws.label,
-                  dot: Color(ws.color),
-                  tooltip: 'คุณภาพน้ำ ${s.water}% · ออกซิเจน ${s.o2.round()}%',
-                ),
-              ),
-            ],
+      // โทรศัพท์แนวนอน: จอเตี้ย รวมเป็นแถวเดียว เหลือที่ให้เนื้อหา
+      child: _layout(
+        oneRow: context.rs.isLandscapePhone,
+        chips: [
+          Expanded(flex: 5, child: MoneyChip(money: s.money)),
+          Expanded(
+            flex: 5,
+            child: _Chip(
+              icon: const PixelIcon('cal', size: 22),
+              key: const ValueKey('day-chip'),
+              caption: 'วันที่',
+              // เนื้อเรื่องไม่มีวันเป้าหมาย (จบเมื่อผ่านบท)
+              text: session.slot == kStorySlot
+                  ? '${s.day}'
+                  : '${s.day}/${e.targetDays}',
+              tooltip:
+                  'วันที่ ${s.day} จาก ${e.targetDays} '
+                  '(โหมด${kDifficulties[s.mode]!.name} '
+                  'ความยากขั้น ${e.stage + 1}/$kDifficultyStages)',
+            ),
           ),
-          const SizedBox(height: Gap.s),
-          Row(
-            children: [
-              if (alert != null)
-                Expanded(child: _AlertChip(text: alert))
-              else
-                const Spacer(),
-              if (!s.power)
-                const Padding(
-                  padding: EdgeInsets.only(left: 6),
-                  child: _AlertChip(text: 'ไฟดับ', icon: false),
+          Expanded(
+            flex: 5,
+            child: _Chip(
+              key: const ValueKey('supply-chip'),
+              icon: const PixelIcon('crate', size: 22),
+              caption: 'เสบียง',
+              text: '${fmtNum(e.supplyDays)} วัน',
+              tooltip: 'อาหารในคลังพอกินอีกกี่วัน',
+            ),
+          ),
+          Expanded(
+            flex: 5,
+            child: _Chip(
+              key: const ValueKey('water-chip'),
+              icon: const PixelIcon('drop', size: 22),
+              caption: 'น้ำ',
+              text: ws.label,
+              dot: Color(ws.color),
+              tooltip: 'คุณภาพน้ำ ${s.water}% · ออกซิเจน ${s.o2.round()}%',
+            ),
+          ),
+        ],
+        alert: alert == null ? null : _AlertChip(text: alert),
+        actions: [
+          if (!s.power)
+            const Padding(
+              padding: EdgeInsets.only(left: 6),
+              child: _AlertChip(text: 'ไฟดับ', icon: false),
+            ),
+          if (onHelp != null) ...[
+            const SizedBox(width: Gap.s),
+            PixelIconButton(
+              key: const ValueKey('tip-help'),
+              icon: const OutlinedText('?', size: 22),
+              tooltip: 'คำแนะนำหน้านี้',
+              onPressed: onHelp,
+            ),
+          ],
+          const SizedBox(width: Gap.s),
+          PixelIconButton(
+            icon: const PixelIcon('gear', size: 28),
+            tooltip: 'เมนู / พัก',
+            onPressed: () => _menu(context, ref),
+          ),
+          const SizedBox(width: Gap.s),
+          StoryGate(
+            target: StoryTarget.endDay,
+            child: Spotlight(
+              on: endDayTip,
+              child: PixelButton(
+                label: 'จบวัน',
+                icon: const PixelGlyph(
+                  Glyph.moon,
+                  size: 22,
+                  color: AquaColors.goldPale,
                 ),
-              if (onHelp != null) ...[
-                const SizedBox(width: Gap.s),
-                PixelIconButton(
-                  key: const ValueKey('tip-help'),
-                  icon: const OutlinedText('?', size: 22),
-                  tooltip: 'คำแนะนำหน้านี้',
-                  onPressed: onHelp,
+                trailing: const PixelGlyph(
+                  Glyph.arrowRight,
+                  size: 18,
+                  color: AquaColors.paper,
                 ),
-              ],
-              const SizedBox(width: Gap.s),
-              PixelIconButton(
-                icon: const PixelIcon('gear', size: 28),
-                tooltip: 'เมนู / พัก',
-                onPressed: () => _menu(context, ref),
+                onPressed: () => _endDay(context, ref),
               ),
-              const SizedBox(width: Gap.s),
-              StoryGate(
-                target: StoryTarget.endDay,
-                child: Spotlight(
-                  on: endDayTip,
-                  child: PixelButton(
-                    label: 'จบวัน',
-                    icon: const PixelGlyph(
-                      Glyph.moon,
-                      size: 22,
-                      color: AquaColors.goldPale,
-                    ),
-                    trailing: const PixelGlyph(
-                      Glyph.arrowRight,
-                      size: 18,
-                      color: AquaColors.paper,
-                    ),
-                    onPressed: () => _endDay(context, ref),
-                  ),
-                ),
-              ),
-            ],
+            ),
           ),
         ],
       ),
+    );
+  }
+
+  /// สองแถว (ค่าเริ่มต้น) หรือแถวเดียว (โทรศัพท์แนวนอน)
+  static Widget _layout({
+    required bool oneRow,
+    required List<Widget> chips,
+    required Widget? alert,
+    required List<Widget> actions,
+  }) {
+    if (oneRow) {
+      return Row(
+        children: [
+          ...chips,
+          if (alert != null) ...[
+            const SizedBox(width: Gap.s),
+            Flexible(flex: 6, child: alert),
+          ],
+          ...actions,
+        ],
+      );
+    }
+    return Column(
+      children: [
+        Row(children: chips),
+        const SizedBox(height: Gap.s),
+        Row(
+          children: [
+            if (alert != null) Expanded(child: alert) else const Spacer(),
+            ...actions,
+          ],
+        ),
+      ],
     );
   }
 }

@@ -46,46 +46,56 @@ class _KitchenTabState extends ConsumerState<KitchenTab> {
   Widget build(BuildContext context) {
     final story = watchStory(ref);
     final next = story == null ? null : Story.nextTarget(story.$1, story.$2);
+    // ปุ่มสลับ ทำอาหาร | ถนอมอาหาร
+    final tabs = Padding(
+      padding: const EdgeInsets.fromLTRB(Gap.m, Gap.m, Gap.m, 0),
+      child: Row(
+        children: [
+          Expanded(
+            child: Spotlight(
+              on: _preserve && next == StoryTarget.cook,
+              child: PixelButton(
+                label: 'ทำอาหาร',
+                icon: const PixelIcon('fry', size: 26),
+                style: _preserve
+                    ? PixelButtonStyle.wood
+                    : PixelButtonStyle.gold,
+                onPressed: () => setState(() => _preserve = false),
+              ),
+            ),
+          ),
+          const SizedBox(width: Gap.s),
+          Expanded(
+            child: StoryGate(
+              target: StoryTarget.preserve,
+              point: false,
+              child: Spotlight(
+                on: !_preserve && next == StoryTarget.preserve,
+                child: PixelButton(
+                  label: 'ถนอมอาหาร',
+                  icon: const PixelIcon('jar', size: 26),
+                  style: _preserve
+                      ? PixelButtonStyle.gold
+                      : PixelButtonStyle.wood,
+                  onPressed: () => setState(() => _preserve = true),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    // แนวนอน: ปุ่มสลับอยู่ฝั่งซ้าย ให้สูตรอาหารเริ่มบนสุดของฝั่งขวา
+    if (context.rs.useSplit) {
+      return _KitchenView(
+        preserve: _preserve,
+        onOpenTab: widget.onOpenTab,
+        tabs: tabs,
+      );
+    }
     return Column(
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(Gap.m, Gap.m, Gap.m, 0),
-          child: Row(
-            children: [
-              Expanded(
-                child: Spotlight(
-                  on: _preserve && next == StoryTarget.cook,
-                  child: PixelButton(
-                    label: 'ทำอาหาร',
-                    icon: const PixelIcon('fry', size: 26),
-                    style: _preserve
-                        ? PixelButtonStyle.wood
-                        : PixelButtonStyle.gold,
-                    onPressed: () => setState(() => _preserve = false),
-                  ),
-                ),
-              ),
-              const SizedBox(width: Gap.s),
-              Expanded(
-                child: StoryGate(
-                  target: StoryTarget.preserve,
-                  point: false,
-                  child: Spotlight(
-                    on: !_preserve && next == StoryTarget.preserve,
-                    child: PixelButton(
-                      label: 'ถนอมอาหาร',
-                      icon: const PixelIcon('jar', size: 26),
-                      style: _preserve
-                          ? PixelButtonStyle.gold
-                          : PixelButtonStyle.wood,
-                      onPressed: () => setState(() => _preserve = true),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
+        tabs,
         Expanded(
           child: _KitchenView(preserve: _preserve, onOpenTab: widget.onOpenTab),
         ),
@@ -95,8 +105,11 @@ class _KitchenTabState extends ConsumerState<KitchenTab> {
 }
 
 class _KitchenView extends ConsumerWidget {
-  const _KitchenView({required this.preserve, this.onOpenTab});
+  const _KitchenView({required this.preserve, this.onOpenTab, this.tabs});
   final bool preserve;
+
+  /// ปุ่มสลับ ทำอาหาร | ถนอม (แนวนอน: วางในคอลัมน์ซ้าย)
+  final Widget? tabs;
   final ValueChanged<int>? onOpenTab;
 
   /// เหตุผลที่ยังทำไม่ได้ (null = ทำได้)
@@ -204,12 +217,15 @@ class _KitchenView extends ConsumerWidget {
       ),
     );
 
-    final fishFirst = story == null && fish.isEmpty;
+    // ไม่มีปลา หรือจอแนวนอน (แผงปลาอยู่ฝั่งซ้าย) → แผงปลาขึ้นก่อน
+    final fishFirst = story == null && (fish.isEmpty || tabs != null);
     return TabScroll(
       listKey: PageStorageKey(preserve ? 'kitchen-pres' : 'kitchen-cook'),
-      header: story == null ? 1 : 0,
+      header:
+          (tabs != null ? 1 : 0) + (story == null ? (tabs != null ? 2 : 1) : 0),
       decorative: true,
       children: [
+        ?tabs,
         if (story == null)
           PageHeader(
             scene: PixelScene(painterBuilder: RoomPainter.new),
@@ -229,10 +245,12 @@ class _KitchenView extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const SectionTitle(
-                  'สูตรอาหาร',
-                  icon: PixelIcon('tomyum', size: 28),
-                ),
+                // แนวนอน: ปุ่มสลับฝั่งซ้ายบอกหน้าอยู่แล้ว ไม่ต้องมีหัวข้อ (ปุ่มทำอาหารขึ้นมาบนจอ)
+                if (tabs == null)
+                  const SectionTitle(
+                    'สูตรอาหาร',
+                    icon: PixelIcon('tomyum', size: 28),
+                  ),
                 for (final r in kRecipes.values)
                   Padding(
                     padding: const EdgeInsets.only(bottom: Gap.s),
@@ -281,10 +299,11 @@ class _KitchenView extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const SectionTitle(
-                  'วิธีถนอมอาหาร',
-                  icon: PixelIcon('jar', size: 28),
-                ),
+                if (tabs == null)
+                  const SectionTitle(
+                    'วิธีถนอมอาหาร',
+                    icon: PixelIcon('jar', size: 28),
+                  ),
                 for (final p in kPreserveMethods.values)
                   Padding(
                     padding: const EdgeInsets.only(bottom: Gap.s),

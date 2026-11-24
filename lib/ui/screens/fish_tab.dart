@@ -858,12 +858,13 @@ class _FishShop extends ConsumerWidget {
           ),
         const SizedBox(height: Gap.m),
         GridView.count(
-          crossAxisCount: 2,
+          // แนวนอน: 3 คอลัมน์ การ์ดเตี้ยลง เห็นแถวแรกโดยไม่ต้องเลื่อน
+          crossAxisCount: context.rs.useSplit ? 3 : 2,
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           mainAxisSpacing: Gap.m,
           crossAxisSpacing: Gap.m,
-          childAspectRatio: 1.02,
+          childAspectRatio: context.rs.useSplit ? .95 : 1.02,
           children: [
             for (var i = 0; i < fish.length; i++)
               _ShopCardGate(

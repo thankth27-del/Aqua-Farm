@@ -263,11 +263,35 @@ class _MarketTabState extends ConsumerState<MarketTab> {
       ];
     }
 
+    final food = s.stock.fold<int>(0, (n, b) => n + b.qty);
+    // แท็บย่อย ซื้อ | ขาย (โหมดเอาชีวิตรอด)
+    final tabs = story != null
+        ? null
+        : TipSpot(
+            screen: GameScreen.market,
+            child: SubTabs(
+              key: const ValueKey('primary-market'),
+              selected: _sell ? 1 : 0,
+              onSelect: (i) => setState(() => _sell = i == 1),
+              items: [
+                ('market-buy', 'ซื้อ', 'garlic', null),
+                (
+                  'market-sell',
+                  'ขาย',
+                  'coin',
+                  e.fishTotal + food > 0 ? e.fishTotal + food : null,
+                ),
+              ],
+            ),
+          );
+    // แนวนอน: แท็บย่อยอยู่ฝั่งซ้าย ให้รายการซื้อขายเริ่มบนสุดฝั่งขวา
+    final splitTabs = tabs != null && context.rs.useSplit;
     final list = TabScroll(
-      header: story == null ? 1 : 0,
+      header: (story == null ? 1 : 0) + (splitTabs ? 1 : 0),
       decorative: true,
       listKey: PageStorageKey(_sell ? 'market-sell-list' : 'market-buy-list'),
       children: [
+        if (splitTabs) tabs,
         if (story == null)
           PageHeader(
             scene: PixelScene(painterBuilder: RoomPainter.new),
@@ -278,27 +302,10 @@ class _MarketTabState extends ConsumerState<MarketTab> {
         for (final x in sections) x.$2,
       ],
     );
-    if (story != null) return list;
-    final food = s.stock.fold<int>(0, (n, b) => n + b.qty);
+    if (tabs == null || splitTabs) return list;
     return Column(
       children: [
-        TipSpot(
-          screen: GameScreen.market,
-          child: SubTabs(
-            key: const ValueKey('primary-market'),
-            selected: _sell ? 1 : 0,
-            onSelect: (i) => setState(() => _sell = i == 1),
-            items: [
-              ('market-buy', 'ซื้อ', 'garlic', null),
-              (
-                'market-sell',
-                'ขาย',
-                'coin',
-                e.fishTotal + food > 0 ? e.fishTotal + food : null,
-              ),
-            ],
-          ),
-        ),
+        tabs,
         Expanded(child: list),
       ],
     );

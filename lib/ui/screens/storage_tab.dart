@@ -140,8 +140,10 @@ class StorageTab extends ConsumerWidget {
         ? Story.nextTarget(story.$1, story.$2) == StoryTarget.eat
         : s.stock.isNotEmpty;
 
+    // แนวนอน: แผงเสบียงอยู่ฝั่งซ้ายใต้ภาพ ให้รายการอาหาร (ปุ่มกิน) เริ่มบนสุดฝั่งขวา
+    final split = context.rs.useSplit && !isStory;
     return TabScroll(
-      header: isStory ? 0 : 1,
+      header: isStory ? 0 : (split ? 2 : 1),
       decorative: true,
       children: [
         if (!isStory)
@@ -151,10 +153,12 @@ class StorageTab extends ConsumerWidget {
             icon: const PixelIcon('crate', size: 30),
           ),
 
-        if (!eatFirst) supply,
+        if (split) supply,
+        if (!eatFirst && !split) supply,
 
         // เนื้อเรื่อง: ซ่อนแผงอาหารที่ว่าง ให้จานที่ต้องกินขึ้นมาบนจอ
-        if (!isStory || meals.isNotEmpty)
+        // ไม่มีอาหารสุกแต่มีอาหารถนอม → ซ่อนแผงว่าง ให้ปุ่มกินขึ้นมาบนจอ
+        if (meals.isNotEmpty || (!isStory && preserved.isEmpty))
           WoodPanel(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -192,7 +196,7 @@ class StorageTab extends ConsumerWidget {
             ),
           ),
 
-        if (eatFirst) supply,
+        if (eatFirst && !split) supply,
 
         WoodPanel(
           child: Column(
