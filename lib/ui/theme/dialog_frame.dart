@@ -2,10 +2,10 @@ import 'package:material_ui/material_ui.dart';
 
 import 'app_theme.dart';
 import 'buttons.dart';
+import '../design/design_system.dart';
 import 'colors.dart';
 import 'frames.dart';
 import 'motion.dart';
-import 'texts.dart';
 
 /// หน้าต่างพิกเซล (กรอบไม้ เด้งเข้ามา) — ใช้กับหน้ายืนยัน/ข้อมูล/ใส่ชื่อ
 class PixelDialog extends StatelessWidget {
@@ -35,7 +35,7 @@ class PixelDialog extends StatelessWidget {
             children: [
               if (icon != null) ...[icon!, const SizedBox(height: Gap.s)],
               if (title != null) ...[
-                OutlinedText(title!, size: FontSize.title),
+                Text(title!, textAlign: TextAlign.center, style: DsText.title),
                 const SizedBox(height: Gap.s),
               ],
               Flexible(child: SingleChildScrollView(child: body)),
@@ -109,19 +109,23 @@ class ToastBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return PixelBox(
-      fill: bad ? AquaColors.red : AquaColors.gold,
-      depth: 4,
-      depthColor: bad ? AquaColors.redDark : AquaColors.goldDark,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      child: Text(
-        message,
-        textAlign: TextAlign.center,
-        style: TextStyle(
-          fontFamily: kFont,
-          color: bad ? Colors.white : AquaColors.ink,
-          fontWeight: FontWeight.w700,
-          fontSize: FontSize.body,
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: bad ? DsColors.danger : DsColors.success,
+        borderRadius: BorderRadius.circular(DsRadius.card),
+        boxShadow: DsShadow.raised,
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        child: Text(
+          message,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            fontFamily: kFont,
+            color: DsColors.onPrimary,
+            fontWeight: FontWeight.w700,
+            fontSize: FontSize.body,
+          ),
         ),
       ),
     );

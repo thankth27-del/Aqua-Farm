@@ -1,6 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../design/design_system.dart' show DsColors, DsRadius, DsText;
+
 import '../../data/difficulty.dart';
 import '../../data/disaster_data.dart';
 import '../../game/hints.dart';
@@ -11,6 +13,7 @@ import '../layout/responsive.dart';
 import '../providers.dart';
 import '../sound.dart';
 import '../theme/theme.dart';
+import '../widgets/game_hud.dart';
 import '../widgets/guide_bars.dart';
 import '../widgets/story_gate.dart';
 import '../widgets/tutorial_panel.dart';
@@ -22,7 +25,9 @@ import 'event_screen.dart';
 import 'report_screen.dart';
 import 'storage_tab.dart';
 
-/// โครงหน้าเกม: แถบบน + เมนูล่าง 5 แท็บ
+/// โครงหน้าเกมแบบเกมมือถือ: ฉากของหน้าเต็มจอเป็นพื้นหลัง
+/// ทับด้วย HUD แถบเดียว (บน) + ปุ่มกลมมุมจอ + กล่องคำพูด "ตอนนี้ควรทำ"
+/// + เนื้อหาของแท็บ + เมนูล่าง (มือถือ) หรือเมนูข้างแคบ (แนวนอน/คอม)
 class GameShell extends ConsumerStatefulWidget {
   const GameShell({super.key});
 
@@ -121,7 +126,16 @@ class _GameShellState extends ConsumerState<GameShell> {
       3 => KitchenTab(onOpenTab: _select),
       _ => const StorageTab(),
     };
-    // จอแคบ: เมนูล่าง · จอกว้าง/แนวนอน: เมนูข้าง (ระบบเลย์เอาต์กลาง)
+    // ฉากเต็มจอของแท็บ (แท็บที่ยังไม่มีฉาก ใช้พื้นใต้น้ำกลาง)
+    final backdrop = switch (_tab) {
+      0 => const FarmBackdrop(),
+      1 when !_fishShop => const PondBackdrop(),
+      2 => const MarketBackdrop(),
+      3 => const KitchenBackdrop(),
+      4 => const StorageBackdrop(),
+      _ => const GrassBackground(child: SizedBox.expand()),
+    };
+    // จอแคบ: เมนูล่าง · จอกว้าง/แนวนอน: เมนูข้างแคบ (ระบบเลย์เอาต์กลาง)
     final side = context.rs.useSideNav;
     // โหมดเอาชีวิตรอด (นอกบทเรียน): ป้ายงานค้างบนเมนู + คำแนะนำ + แถบ "ตอนนี้ควรทำ"
     final guide = guideOn(ref);
@@ -137,43 +151,77 @@ class _GameShellState extends ConsumerState<GameShell> {
       badges: guide ? tabBadges(ref.read(gameProvider)!.engine) : null,
       onSelect: _select,
     );
-    return Scaffold(
-      body: GrassBackground(
-        child: AdaptiveShell(
-          top: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // ข้อความแจ้งเตือนแสดงใต้แถบบนนี้
-              ToastAnchor(
-                child: TopBar(
-                  onReplayTutorial: () => _select(0),
-                  endDayTip: tipOn && _screen == GameScreen.farm,
-                  onHelp: guide
-                      ? () =>
-                            ref.read(tipsProvider.notifier).replay(_screen.name)
-                      : null,
-                ),
-              ),
-              StoryGoalBar(onChapterChanged: _followStory),
-              TutorialPanel(screen: _screen),
-              // คำแนะนำครั้งแรกของหน้า แทนที่แถบ "ตอนนี้ควรทำ" จนกด "เข้าใจแล้ว"
-              if (guide)
-                tipOn ? TipBar(screen: _screen) : NextStepBar(onGo: _go),
-            ],
+    final guides = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        StoryGoalBar(onChapterChanged: _followStory),
+        TutorialPanel(screen: _screen),
+        // คำแนะนำครั้งแรกของหน้า แทนที่ "ตอนนี้ควรทำ" จนกด "เข้าใจแล้ว"
+        if (guide) tipOn ? TipBar(screen: _screen) : NextStepBar(onGo: _go),
+      ],
+    );
+    final content = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // ข้อความแจ้งเตือนแสดงใต้ HUD นี้
+        ToastAnchor(
+          child: TopBar(
+            onReplayTutorial: () => _select(0),
+            endDayTip: tipOn && _screen == GameScreen.farm,
+            onHelp: guide
+                ? () => ref.read(tipsProvider.notifier).replay(_screen.name)
+                : null,
           ),
-          body: AnimatedSwitcher(
+        ),
+        // จอกว้าง: แผงคำแนะนำชิดซ้าย ไม่ยืดเต็มจอ (เห็นฉากด้านขวา)
+        if (side)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: Responsive.maxColumn),
+              child: guides,
+            ),
+          )
+        else
+          guides,
+        Expanded(
+          child: AnimatedSwitcher(
             duration: const Duration(milliseconds: 180),
             child: KeyedSubtree(key: ValueKey(_tab), child: body),
           ),
-          bottomNav: nav,
-          sideNav: nav,
         ),
+      ],
+    );
+    return Scaffold(
+      backgroundColor: DsColors.ink,
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          backdrop,
+          if (side)
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                nav,
+                Expanded(child: content),
+              ],
+            )
+          else
+            Column(
+              children: [
+                Expanded(child: content),
+                nav,
+              ],
+            ),
+        ],
       ),
     );
   }
 }
 
-/// เมนูล่างแบบเกม: แผ่นไม้ ไอคอนใหญ่ ชื่อสั้น ช่องที่เลือกยกขึ้นเป็นป้ายทอง
+/// เมนูหลัก: มือถือ = แถบล่างไอคอนใหญ่ ป้ายสั้น / แนวนอน-คอม = แถบข้างแคบ
+/// ช่องที่เลือกเป็นป้ายสีเด่น ช่องอื่นตัวขาวบนพื้นเข้ม (คอนทราสต์ชัด)
 class GameNavBar extends StatelessWidget {
   const GameNavBar({
     super.key,
@@ -201,6 +249,9 @@ class GameNavBar extends StatelessWidget {
 
   /// ช่องที่ยังไม่เปิดในบทนี้ของเนื้อเรื่อง (จาง กดไม่ได้)
   final Set<int> locked;
+
+  /// ความกว้างแถบข้าง
+  static const double sideWidth = 70;
 
   @override
   Widget build(BuildContext context) {
@@ -248,26 +299,38 @@ class GameNavBar extends StatelessWidget {
             ),
     );
     Widget item(int i) => badge(i, cell(i));
+    const edge = BorderSide(color: DsColors.glassEdge, width: 1.5);
     if (vertical) {
-      // เมนูข้าง: เรียงลงกลางแนวตั้ง กว้างคงที่ ย่อพอดีถ้าจอเตี้ย
-      return WoodPlank(
-        padding: EdgeInsets.fromLTRB(6, 6 + pad.top, 6, 6 + pad.bottom),
-        child: SizedBox(
-          width: 92,
-          child: Center(
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              child: SizedBox(
-                width: 92,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    for (var i = 0; i < items.length; i++)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 3),
-                        child: item(i),
-                      ),
-                  ],
+      // แถบข้างแคบ: เรียงลงกลางแนวตั้ง ย่อพอดีถ้าจอเตี้ย
+      return DecoratedBox(
+        decoration: const BoxDecoration(
+          color: DsColors.glass,
+          border: Border(right: edge),
+        ),
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(
+            4 + pad.left,
+            6 + pad.top,
+            4,
+            6 + pad.bottom,
+          ),
+          child: SizedBox(
+            width: sideWidth,
+            child: Center(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: SizedBox(
+                  width: sideWidth,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (var i = 0; i < items.length; i++)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 3),
+                          child: item(i),
+                        ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -275,12 +338,18 @@ class GameNavBar extends StatelessWidget {
         ),
       );
     }
-    return WoodPlank(
-      padding: EdgeInsets.fromLTRB(6, 6, 6, 6 + pad.bottom),
-      child: Row(
-        children: [
-          for (var i = 0; i < items.length; i++) Expanded(child: item(i)),
-        ],
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        color: DsColors.ink,
+        border: Border(top: edge),
+      ),
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(4, 5, 4, 5 + pad.bottom),
+        child: Row(
+          children: [
+            for (var i = 0; i < items.length; i++) Expanded(child: item(i)),
+          ],
+        ),
       ),
     );
   }
@@ -301,26 +370,27 @@ class _NavItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final iconW = PixelIcon(icon, size: selected ? 40 : 34);
+    final iconW = PixelIcon(icon, size: selected ? 38 : 34);
     final content = Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         SizedBox(
-          height: 40,
+          height: 38,
           child: Center(
             child: selected
                 ? BounceIn(key: ValueKey('nav-$label'), from: .7, child: iconW)
                 : iconW,
           ),
         ),
-        const SizedBox(height: 2),
+        const SizedBox(height: 1),
         Text(
           label,
           maxLines: 1,
           style: TextStyle(
-            fontSize: 15,
+            fontSize: 16,
+            height: 1.15,
             fontWeight: FontWeight.w700,
-            color: selected ? AquaColors.ink : AquaColors.paper,
+            color: selected ? DsColors.ink : DsColors.onGlass,
           ),
         ),
       ],
@@ -332,21 +402,22 @@ class _NavItem extends StatelessWidget {
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
         child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 72, minWidth: kMinTap),
+          constraints: const BoxConstraints(minHeight: 66, minWidth: kMinTap),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 2),
-            child: selected
-                ? PixelBox(
-                    fill: AquaColors.gold,
-                    depth: 4,
-                    depthColor: AquaColors.goldDark,
-                    padding: const EdgeInsets.fromLTRB(2, 3, 2, 3),
-                    child: Center(heightFactor: 1, child: content),
-                  )
-                : Padding(
-                    padding: const EdgeInsets.fromLTRB(2, 6, 2, 7),
-                    child: Center(heightFactor: 1, child: content),
-                  ),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              padding: const EdgeInsets.fromLTRB(2, 4, 2, 4),
+              decoration: BoxDecoration(
+                color: selected ? DsColors.accent : Colors.transparent,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: selected ? DsColors.ink : Colors.transparent,
+                  width: 2.5,
+                ),
+              ),
+              child: Center(heightFactor: 1, child: content),
+            ),
           ),
         ),
       ),
@@ -354,7 +425,8 @@ class _NavItem extends StatelessWidget {
   }
 }
 
-/// แถบบน: เงิน วัน เสบียง คุณภาพน้ำ เตือนภัย ปุ่มเมนู และปุ่ม "จบวัน"
+/// HUD แถบเดียว: เงิน · วัน · อาหารพอกี่วัน · คุณภาพน้ำ (ไอคอน + ตัวเลขใหญ่)
+/// และปุ่มกลมมุมจอ: คำแนะนำ (?) · เมนู/ตั้งค่า · จบวัน
 class TopBar extends ConsumerWidget {
   const TopBar({
     super.key,
@@ -388,83 +460,10 @@ class TopBar extends ConsumerWidget {
   Future<void> _menu(BuildContext context, WidgetRef ref) async {
     final ctl = ref.read(gameProvider.notifier);
     final isStory = ctl.isStory;
-    final choice = await showModalBottomSheet<String>(
+    final choice = await showDialog<String>(
       context: context,
-      backgroundColor: Colors.transparent,
-      barrierColor: const Color(0xAA1B120B),
-      builder: (c) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(Gap.m),
-          child: WoodPanel(
-            margin: EdgeInsets.zero,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const OutlinedText('เมนู / พัก'),
-                const SizedBox(height: Gap.m),
-                PixelButton(
-                  label: 'เล่นต่อ',
-                  icon: const PixelGlyph(
-                    Glyph.arrowRight,
-                    size: 20,
-                    color: AquaColors.paper,
-                  ),
-                  expand: true,
-                  onPressed: () => Navigator.pop(c),
-                ),
-                const SizedBox(height: Gap.s),
-                PixelButton(
-                  label: 'บันทึกเกม',
-                  icon: const PixelIcon('scroll', size: 24),
-                  style: PixelButtonStyle.water,
-                  expand: true,
-                  onPressed: () => Navigator.pop(c, 'save'),
-                ),
-                const SizedBox(height: Gap.s),
-                // เปิด/ปิดเสียง (กดแล้วสลับทันที ไม่ปิดเมนู เหมือนต้นแบบ)
-                Consumer(
-                  builder: (context, ref, _) {
-                    final on = ref.watch(soundProvider);
-                    return PixelButton(
-                      key: const ValueKey('sound-toggle'),
-                      label: on ? 'เสียง: เปิด' : 'เสียง: ปิด',
-                      icon: PixelGlyph(
-                        on ? Glyph.wave : Glyph.cross,
-                        size: 18,
-                        color: AquaColors.paper,
-                      ),
-                      style: on
-                          ? PixelButtonStyle.green
-                          : PixelButtonStyle.wood,
-                      expand: true,
-                      onPressed: () =>
-                          ref.read(soundProvider.notifier).toggle(),
-                    );
-                  },
-                ),
-                if (!isStory) ...[
-                  const SizedBox(height: Gap.s),
-                  PixelButton(
-                    label: 'เล่นบทเรียนซ้ำ',
-                    icon: const PixelIcon('scroll', size: 24),
-                    style: PixelButtonStyle.green,
-                    expand: true,
-                    onPressed: () => Navigator.pop(c, 'tutorial'),
-                  ),
-                ],
-                const SizedBox(height: Gap.s),
-                PixelButton(
-                  label: 'กลับเมนูหลัก',
-                  icon: const PixelIcon('house', size: 24),
-                  style: PixelButtonStyle.wood,
-                  expand: true,
-                  onPressed: () => Navigator.pop(c, 'exit'),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
+      barrierColor: DsColors.scrim,
+      builder: (c) => _PauseMenu(isStory: isStory),
     );
     if (!context.mounted) return;
     if (choice == 'save') {
@@ -499,135 +498,196 @@ class TopBar extends ConsumerWidget {
     } else if (w > 0) {
       alert = '${kDisasters[s.upcoming!.type]!.name}ในอีก $w วัน';
     }
+    final r = context.rs;
 
-    return WoodPlank(
-      padding: EdgeInsets.fromLTRB(
-        8,
-        8 + MediaQuery.paddingOf(context).top,
-        8,
-        10,
-      ),
-      // โทรศัพท์แนวนอน: จอเตี้ย รวมเป็นแถวเดียว เหลือที่ให้เนื้อหา
-      child: _layout(
-        oneRow: context.rs.isLandscapePhone,
-        chips: [
-          Expanded(flex: 5, child: MoneyChip(money: s.money)),
-          Expanded(
-            flex: 5,
-            child: _Chip(
-              icon: const PixelIcon('cal', size: 22),
-              key: const ValueKey('day-chip'),
-              caption: 'วันที่',
-              // เนื้อเรื่องไม่มีวันเป้าหมาย (จบเมื่อผ่านบท)
-              text: session.slot == kStorySlot
-                  ? '${s.day}'
-                  : '${s.day}/${e.targetDays}',
-              tooltip:
-                  'วันที่ ${s.day} จาก ${e.targetDays} '
-                  '(โหมด${kDifficulties[s.mode]!.name} '
-                  'ความยากขั้น ${e.stage + 1}/$kDifficultyStages)',
-            ),
-          ),
-          Expanded(
-            flex: 5,
-            child: _Chip(
-              key: const ValueKey('supply-chip'),
-              icon: const PixelIcon('crate', size: 22),
-              caption: 'เสบียง',
-              text: '${fmtNum(e.supplyDays)} วัน',
-              tooltip: 'อาหารในคลังพอกินอีกกี่วัน',
-            ),
-          ),
-          Expanded(
-            flex: 5,
-            child: _Chip(
-              key: const ValueKey('water-chip'),
-              icon: const PixelIcon('drop', size: 22),
-              caption: 'น้ำ',
-              text: ws.label,
-              dot: Color(ws.color),
-              tooltip: 'คุณภาพน้ำ ${s.water}% · ออกซิเจน ${s.o2.round()}%',
-            ),
-          ),
-        ],
-        alert: alert == null ? null : _AlertChip(text: alert),
-        actions: [
-          if (!s.power)
-            const Padding(
-              padding: EdgeInsets.only(left: 6),
-              child: _AlertChip(text: 'ไฟดับ', icon: false),
-            ),
-          if (onHelp != null) ...[
-            const SizedBox(width: Gap.s),
-            PixelIconButton(
-              key: const ValueKey('tip-help'),
-              icon: const OutlinedText('?', size: 22),
-              tooltip: 'คำแนะนำหน้านี้',
-              onPressed: onHelp,
-            ),
-          ],
-          const SizedBox(width: Gap.s),
-          PixelIconButton(
-            icon: const PixelIcon('gear', size: 28),
-            tooltip: 'เมนู / พัก',
-            onPressed: () => _menu(context, ref),
-          ),
-          const SizedBox(width: Gap.s),
-          StoryGate(
-            target: StoryTarget.endDay,
-            child: Spotlight(
-              on: endDayTip,
-              child: PixelButton(
-                label: 'จบวัน',
-                icon: const PixelGlyph(
-                  Glyph.moon,
-                  size: 22,
-                  color: AquaColors.goldPale,
-                ),
-                trailing: const PixelGlyph(
-                  Glyph.arrowRight,
-                  size: 18,
-                  color: AquaColors.paper,
-                ),
-                onPressed: () => _endDay(context, ref),
+    final stats = GlassPanel(
+      radius: 20,
+      padding: const EdgeInsets.fromLTRB(10, 6, 8, 6),
+      child: SizedBox(
+        height: 40,
+        child: Row(
+          children: [
+            Expanded(child: MoneyChip(money: s.money)),
+            Expanded(
+              child: HudStat(
+                key: const ValueKey('day-chip'),
+                icon: const PixelIcon('cal', size: 32),
+                label: 'วันที่',
+                // เนื้อเรื่องไม่มีวันเป้าหมาย (จบเมื่อผ่านบท)
+                value: session.slot == kStorySlot
+                    ? '${s.day}'
+                    : '${s.day}/${e.targetDays}',
+                tooltip:
+                    'วันที่ ${s.day} จาก ${e.targetDays} '
+                    '(โหมด${kDifficulties[s.mode]!.name} '
+                    'ความยากขั้น ${e.stage + 1}/$kDifficultyStages)',
               ),
             ),
+            Expanded(
+              child: HudStat(
+                key: const ValueKey('supply-chip'),
+                icon: const PixelIcon('crate', size: 32),
+                label: 'อาหารพอกิน',
+                value: '${fmtNum(e.supplyDays)} วัน',
+                tooltip: 'อาหารในคลังพอกินอีกกี่วัน',
+              ),
+            ),
+            Expanded(
+              child: HudStat(
+                key: const ValueKey('water-chip'),
+                icon: const PixelIcon('drop', size: 32),
+                label: 'คุณภาพน้ำ',
+                value: waterWord(ws),
+                dot: Color(ws.color),
+                tooltip: 'คุณภาพน้ำ ${s.water}% · ออกซิเจน ${s.o2.round()}%',
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    final buttons = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (onHelp != null) ...[
+          RoundAction(
+            key: const ValueKey('tip-help'),
+            icon: const OutlinedText('?', size: 24),
+            label: 'คำแนะนำหน้านี้',
+            showLabel: false,
+            diameter: 48,
+            onPressed: onHelp,
+          ),
+          const SizedBox(width: Gap.s),
+        ],
+        RoundAction(
+          key: const ValueKey('open-menu'),
+          icon: const PixelIcon('gear', size: 30),
+          label: 'เมนู / พัก',
+          showLabel: false,
+          diameter: 48,
+          onPressed: () => _menu(context, ref),
+        ),
+        const SizedBox(width: Gap.s),
+        StoryGate(
+          target: StoryTarget.endDay,
+          child: Spotlight(
+            on: endDayTip,
+            child: _EndDayButton(onPressed: () => _endDay(context, ref)),
+          ),
+        ),
+      ],
+    );
+
+    final alerts = [
+      if (alert != null) _AlertChip(text: alert),
+      if (!s.power) const _AlertChip(text: 'ไฟดับ', icon: false),
+    ];
+    final top = MediaQuery.paddingOf(context).top;
+
+    // จอกว้าง/แนวนอน: HUD กับปุ่มมุมจออยู่แถวเดียว ป้ายภัยแถวถัดไป
+    if (r.useSideNav) {
+      return Padding(
+        padding: EdgeInsets.fromLTRB(Gap.s, Gap.s + top, Gap.s, 0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                // HUD ใช้ที่ว่างทั้งหมดที่เหลือจากปุ่มมุมจอ (กว้างสุด 620 ชิดซ้าย)
+                Expanded(
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 620),
+                      child: stats,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: Gap.s),
+                buttons,
+              ],
+            ),
+            if (alerts.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: Gap.xs),
+                child: Wrap(spacing: Gap.s, children: alerts),
+              ),
+          ],
+        ),
+      );
+    }
+    // มือถือแนวตั้ง: แถว HUD + แถวป้ายภัย (ซ้าย) กับปุ่มมุมจอ (ขวา)
+    return Padding(
+      padding: EdgeInsets.fromLTRB(Gap.s, Gap.s + top, Gap.s, 0),
+      child: Column(
+        children: [
+          stats,
+          const SizedBox(height: Gap.xs),
+          Row(
+            children: [
+              Expanded(
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Wrap(
+                    spacing: Gap.xs,
+                    runSpacing: Gap.xs,
+                    children: alerts,
+                  ),
+                ),
+              ),
+              const SizedBox(width: Gap.xs),
+              buttons,
+            ],
           ),
         ],
       ),
     );
   }
+}
 
-  /// สองแถว (ค่าเริ่มต้น) หรือแถวเดียว (โทรศัพท์แนวนอน)
-  static Widget _layout({
-    required bool oneRow,
-    required List<Widget> chips,
-    required Widget? alert,
-    required List<Widget> actions,
-  }) {
-    if (oneRow) {
-      return Row(
-        children: [
-          ...chips,
-          if (alert != null) ...[
-            const SizedBox(width: Gap.s),
-            Flexible(flex: 6, child: alert),
-          ],
-          ...actions,
-        ],
-      );
-    }
-    return Column(
-      children: [
-        Row(children: chips),
-        const SizedBox(height: Gap.s),
-        Row(
-          children: [
-            if (alert != null) Expanded(child: alert) else const Spacer(),
-            ...actions,
+/// ปุ่ม "จบวัน": ปุ่มกลมรูปพระจันทร์ + ป้ายชื่อด้านซ้าย (ปุ่มมุมจอที่สำคัญที่สุด)
+class _EndDayButton extends StatelessWidget {
+  const _EndDayButton({required this.onPressed});
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Pressable(
+      key: const ValueKey('end-day'),
+      label: 'จบวัน',
+      onTap: onPressed,
+      child: Container(
+        height: 52,
+        padding: const EdgeInsets.fromLTRB(14, 0, 4, 0),
+        decoration: BoxDecoration(
+          color: DsColors.primaryDark,
+          borderRadius: BorderRadius.circular(26),
+          border: Border.all(color: DsColors.ink, width: 3),
+          boxShadow: const [
+            BoxShadow(color: DsColors.ink, offset: Offset(0, 3)),
           ],
         ),
-      ],
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('จบวัน', style: glassText(size: 17)),
+            const SizedBox(width: 8),
+            Container(
+              width: 40,
+              height: 40,
+              decoration: const BoxDecoration(
+                color: Color(0xFF1C2B4A),
+                shape: BoxShape.circle,
+              ),
+              child: const Center(
+                child: PixelGlyph(Glyph.moon, size: 24, color: AquaColors.gold),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -659,12 +719,10 @@ class _MoneyChipState extends State<MoneyChip> {
       children: [
         AnimatedCount(
           value: widget.money,
-          builder: (_, v) => _Chip(
-            icon: const PixelIcon('coin', size: 22),
-            caption: 'เงิน',
-            text: '$v฿',
-            tooltip: 'เงิน',
-            highlight: true,
+          builder: (_, v) => HudStat(
+            icon: const PixelIcon('coin', size: 32),
+            label: 'เงิน',
+            value: '$v฿',
           ),
         ),
         for (final f in _floats)
@@ -713,91 +771,6 @@ class _Delta extends StatelessWidget {
   }
 }
 
-class _Chip extends StatelessWidget {
-  const _Chip({
-    super.key,
-    required this.icon,
-    required this.text,
-    required this.tooltip,
-    this.caption,
-    this.dot,
-    this.highlight = false,
-  });
-  final Widget icon;
-  final String text;
-  final String tooltip;
-
-  /// ป้ายเล็กเหนือค่า บอกว่าเลขนี้คืออะไร
-  final String? caption;
-  final Color? dot;
-  final bool highlight;
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: tooltip,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 2),
-        child: PixelBox(
-          fill: highlight ? AquaColors.goldPale : AquaColors.cream,
-          px: 3,
-          padding: const EdgeInsets.fromLTRB(5, 4, 5, 4),
-          child: Row(
-            children: [
-              icon,
-              const SizedBox(width: 4),
-              if (dot != null) ...[
-                Container(
-                  width: 8,
-                  height: 8,
-                  decoration: BoxDecoration(
-                    color: dot,
-                    border: Border.all(color: AquaColors.ink, width: 2),
-                  ),
-                ),
-                const SizedBox(width: 3),
-              ],
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (caption != null)
-                      Text(
-                        caption!,
-                        maxLines: 1,
-                        overflow: TextOverflow.clip,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w700,
-                          color: AquaColors.textSoft,
-                          fontSize: 11,
-                          height: 1.1,
-                        ),
-                      ),
-                    FittedBox(
-                      fit: BoxFit.scaleDown,
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        text,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w700,
-                          color: AquaColors.text,
-                          fontSize: 16,
-                          height: 1.15,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _AlertChip extends StatelessWidget {
   const _AlertChip({required this.text, this.icon = true});
   final String text;
@@ -806,13 +779,15 @@ class _AlertChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Blink(
-      low: .7,
-      child: PixelBox(
-        fill: AquaColors.red,
-        depth: 3,
-        depthColor: AquaColors.redDark,
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-        // ย่อทั้งไอคอนและข้อความเมื่อแถบแคบ (เช่น มีป้ายไฟดับด้วย) — ไม่ล้นขอบ
+      low: .75,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(8, 4, 12, 4),
+        decoration: BoxDecoration(
+          color: DsColors.danger,
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: DsColors.ink, width: 2.5),
+        ),
+        // ย่อทั้งไอคอนและข้อความเมื่อแถบแคบ — ไม่ล้นขอบ
         child: FittedBox(
           fit: BoxFit.scaleDown,
           alignment: Alignment.centerLeft,
@@ -820,19 +795,147 @@ class _AlertChip extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               if (icon) ...[
-                const PixelIcon('warn', size: 22),
+                const PixelIcon('warn', size: 28),
                 const SizedBox(width: 6),
               ],
-              Text(
-                text,
-                maxLines: 1,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 16,
-                ),
-              ),
+              Text(text, maxLines: 1, style: glassText(size: 16)),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// เมนูพัก: การ์ดกลางจอ ปุ่มใหญ่ "เล่นต่อ" 1 ปุ่ม + ปุ่มรอง (บันทึก/เสียง/บทเรียน/ออก)
+/// จอกว้างพอ: ปุ่มรองเรียง 2 คอลัมน์ ให้การ์ดเตี้ย (มือถือแนวนอนไม่ต้องเลื่อน)
+class _PauseMenu extends StatelessWidget {
+  const _PauseMenu({required this.isStory});
+  final bool isStory;
+
+  @override
+  Widget build(BuildContext context) {
+    final items = <Widget>[
+      PixelButton(
+        label: 'บันทึกเกม',
+        icon: const PixelIcon('scroll', size: 26),
+        style: PixelButtonStyle.water,
+        expand: true,
+        onPressed: () => Navigator.pop(context, 'save'),
+      ),
+      // เปิด/ปิดเสียง (กดแล้วสลับทันที ไม่ปิดเมนู เหมือนต้นแบบ)
+      Consumer(
+        builder: (context, ref, _) {
+          final on = ref.watch(soundProvider);
+          return PixelButton(
+            key: const ValueKey('sound-toggle'),
+            label: on ? 'เสียง: เปิด' : 'เสียง: ปิด',
+            icon: PixelGlyph(
+              on ? Glyph.wave : Glyph.cross,
+              size: 20,
+              color: AquaColors.paper,
+            ),
+            style: on ? PixelButtonStyle.green : PixelButtonStyle.wood,
+            expand: true,
+            onPressed: () => ref.read(soundProvider.notifier).toggle(),
+          );
+        },
+      ),
+      if (!isStory)
+        PixelButton(
+          label: 'เล่นบทเรียนซ้ำ',
+          icon: const PixelIcon('scroll', size: 26),
+          style: PixelButtonStyle.water,
+          expand: true,
+          onPressed: () => Navigator.pop(context, 'tutorial'),
+        ),
+      PixelButton(
+        label: 'กลับเมนูหลัก',
+        icon: const PixelIcon('house', size: 26),
+        style: PixelButtonStyle.wood,
+        expand: true,
+        onPressed: () => Navigator.pop(context, 'exit'),
+      ),
+    ];
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      insetPadding: const EdgeInsets.all(Gap.m),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: Responsive.maxPanel),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: DsColors.background,
+            borderRadius: BorderRadius.circular(DsRadius.sheet),
+            border: Border.all(color: DsColors.ink, width: 3),
+            boxShadow: const [
+              BoxShadow(color: DsColors.ink, offset: Offset(0, 4)),
+            ],
+          ),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(Gap.m),
+            child: LayoutBuilder(
+              builder: (context, box) {
+                final twoCols = box.maxWidth >= 420;
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        const PixelIcon('gear', size: 36),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'เมนู / พัก',
+                            style: DsText.title.copyWith(fontSize: 24),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'เกมหยุดไว้ก่อน กด "เล่นต่อ" เพื่อกลับไปที่ฟาร์ม',
+                      style: DsText.body.copyWith(color: DsColors.textMuted),
+                    ),
+                    const SizedBox(height: Gap.m),
+                    PixelButton(
+                      key: const ValueKey('menu-resume'),
+                      label: 'เล่นต่อ',
+                      icon: const PixelGlyph(
+                        Glyph.arrowRight,
+                        size: 22,
+                        color: DsColors.onAccent,
+                      ),
+                      size: PixelButtonSize.large,
+                      expand: true,
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                    const SizedBox(height: Gap.m),
+                    if (twoCols)
+                      for (var i = 0; i < items.length; i += 2) ...[
+                        if (i > 0) const SizedBox(height: Gap.s),
+                        Row(
+                          children: [
+                            Expanded(child: items[i]),
+                            const SizedBox(width: Gap.s),
+                            Expanded(
+                              child: i + 1 < items.length
+                                  ? items[i + 1]
+                                  : const SizedBox(),
+                            ),
+                          ],
+                        ),
+                      ]
+                    else
+                      for (var i = 0; i < items.length; i++) ...[
+                        if (i > 0) const SizedBox(height: Gap.s),
+                        items[i],
+                      ],
+                  ],
+                );
+              },
+            ),
           ),
         ),
       ),

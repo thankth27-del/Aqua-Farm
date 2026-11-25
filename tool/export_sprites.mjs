@@ -1,5 +1,6 @@
 // ส่งออกภาพพิกเซลจาก reference/index.html เป็น PNG ใน assets/pixel/
-// ใช้ฟังก์ชัน ico() ของต้นแบบเองวาดลง canvas แล้วบันทึกตามขนาดจริง (12x12, ปลา 12x7)
+// ใช้ฟังก์ชัน ico() ของต้นแบบเองวาดลง canvas แล้วบันทึกตามขนาดจริง (12x12)
+// ปลาไม่ส่งออกแล้ว: ใช้ปลาชุดใหม่ใน assets/fish/ (แถบ 8 เฟรม 128x128)
 // รัน: node tool/export_sprites.mjs
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -16,7 +17,7 @@ try {
   await b.send('Page.navigate', { url: pathToFileURL(resolve(root, 'reference/index.html')).href });
   await b.sleep(1500);
   const sprites = await b.evaluate(`(() => {
-    const names = [...Object.keys(MAPS), ...Object.keys(FISH).map(k => 'f_' + k)];
+    const names = Object.keys(MAPS);
     const r = {};
     for (const n of names) { ico(n); r[n] = IC[n][0]; }
     return r;

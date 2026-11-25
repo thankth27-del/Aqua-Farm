@@ -2,42 +2,63 @@ import 'package:material_ui/material_ui.dart';
 
 import 'app_theme.dart';
 import 'colors.dart';
-import 'frames.dart';
+import '../design/design_system.dart';
 
-/// สีปุ่ม: ทอง (การกระทำหลัก) / เขียว / ฟ้าน้ำ / ไม้ (รอง) / แดง (ลบ ทิ้ง)
+/// ชนิดปุ่ม (ผูกกับระบบดีไซน์กลาง):
+/// - gold = ปุ่มหลัก (เหลืองส้ม เด่นสุด หน้าละปุ่มเดียว)
+/// - green = ปุ่มยืนยันรอง (สีหลักทึบ)
+/// - water = ปุ่มรองแบบอ่อน (พื้นฟ้าอ่อน)
+/// - wood = ปุ่มรอง (พื้นขาว ขอบสีหลัก)
+/// - danger = ลบ/ทิ้ง
 enum PixelButtonStyle { gold, green, water, wood, danger }
 
 /// ขนาดปุ่ม (ทุกขนาดสูงไม่ต่ำกว่า 48dp)
 enum PixelButtonSize { normal, large }
 
-(Color fill, Color text, Color depth) _colors(PixelButtonStyle s) =>
-    switch (s) {
-      PixelButtonStyle.gold => (
-        AquaColors.gold,
-        AquaColors.ink,
-        AquaColors.goldDark,
-      ),
-      PixelButtonStyle.green => (
-        AquaColors.grass,
-        Colors.white,
-        AquaColors.grassDark,
-      ),
-      PixelButtonStyle.water => (
-        AquaColors.water,
-        Colors.white,
-        AquaColors.waterDeep,
-      ),
-      PixelButtonStyle.wood => (
-        AquaColors.woodLight,
-        AquaColors.paper,
-        AquaColors.woodDark,
-      ),
-      PixelButtonStyle.danger => (
-        AquaColors.red,
-        Colors.white,
-        AquaColors.redDark,
-      ),
-    };
+(Color fill, Color text, Color edge) _colors(PixelButtonStyle s) => switch (s) {
+  PixelButtonStyle.gold => (
+    DsColors.accent,
+    DsColors.onAccent,
+    DsColors.accentDark,
+  ),
+  PixelButtonStyle.green => (
+    DsColors.primary,
+    DsColors.onPrimary,
+    DsColors.primaryDark,
+  ),
+  PixelButtonStyle.water => (
+    DsColors.primarySoft,
+    DsColors.primaryDark,
+    DsColors.primarySoft,
+  ),
+  PixelButtonStyle.wood => (
+    DsColors.surface,
+    DsColors.primaryDark,
+    DsColors.primary,
+  ),
+  PixelButtonStyle.danger => (
+    DsColors.danger,
+    DsColors.onPrimary,
+    DsColors.danger,
+  ),
+};
+
+/// สีตัวอักษร/ไอคอนของปุ่มที่ครอบอยู่ — ไอคอนที่ตั้งสีเป็น [AquaColors.paper]
+/// (หมายถึง "สีบนปุ่ม") จะใช้สีนี้แทน
+class ButtonForeground extends InheritedWidget {
+  const ButtonForeground({
+    super.key,
+    required this.color,
+    required super.child,
+  });
+  final Color color;
+
+  static Color? of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<ButtonForeground>()?.color;
+
+  @override
+  bool updateShouldNotify(ButtonForeground old) => old.color != color;
+}
 
 /// ปุ่มพิกเซล: มีเงาด้านล่าง กดแล้วยุบลง ปล่อยแล้วเด้ง
 class PixelButton extends StatefulWidget {
@@ -72,8 +93,6 @@ class PixelButton extends StatefulWidget {
   State<PixelButton> createState() => _PixelButtonState();
 }
 
-const double _kDepth = 5;
-
 class _PixelButtonState extends State<PixelButton>
     with SingleTickerProviderStateMixin {
   bool _down = false;
@@ -100,16 +119,17 @@ class _PixelButtonState extends State<PixelButton>
   @override
   Widget build(BuildContext context) {
     final enabled = widget.onPressed != null;
-    final (fill, fg, depthColor) = _colors(widget.style);
+    final (fill, fg, edge) = _colors(widget.style);
     final large = widget.size == PixelButtonSize.large;
-    final depth = _down ? 1.0 : _kDepth;
-    final minH = (large ? 64.0 : 52.0);
+    final minH = (large ? 60.0 : 50.0);
+    final primary = widget.style == PixelButtonStyle.gold;
 
     Widget content = DefaultTextStyle.merge(
       style: TextStyle(
         color: fg,
         fontWeight: FontWeight.w700,
-        fontSize: large ? 22 : FontSize.label,
+        fontSize: large ? 20 : FontSize.label,
+        fontFamily: kFont,
         height: 1.2,
       ),
       child: Row(
@@ -144,29 +164,42 @@ class _PixelButtonState extends State<PixelButton>
 
     Widget btn = ConstrainedBox(
       constraints: BoxConstraints(minHeight: minH, minWidth: kMinTap),
-      child: Padding(
-        // กดแล้วตัวปุ่มเลื่อนลงแทนที่เงา
-        padding: EdgeInsets.only(top: _kDepth - depth),
-        child: CustomPaint(
-          painter: PixelBoxPainter(
-            fill: fill,
-            border: AquaColors.ink,
-            px: 3,
-            depth: depth,
-            depthColor: depthColor,
-          ),
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(
-              large ? 18 : 12,
-              large ? 10 : 7,
-              large ? 18 : 12,
-              (large ? 10 : 7) + depth,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 90),
+        decoration: BoxDecoration(
+          color: _down ? Color.lerp(fill, edge, .25) : fill,
+          borderRadius: BorderRadius.circular(DsRadius.card),
+          // ปุ่มแบบเกม: ขอบเข้มหนา + เงาทึบด้านล่าง (กดแล้วยุบลง)
+          border: Border.all(color: DsColors.ink, width: 2.5),
+          boxShadow: _down
+              ? null
+              : [
+                  BoxShadow(
+                    color: DsColors.ink,
+                    offset: Offset(0, primary ? 4 : 3),
+                  ),
+                ],
+        ),
+        padding: EdgeInsets.symmetric(
+          horizontal: large ? 18 : 12,
+          vertical: large ? 10 : 7,
+        ),
+        child: Center(
+          widthFactor: 1,
+          heightFactor: 1,
+          child: ButtonForeground(
+            color: fg,
+            child: IconTheme.merge(
+              data: IconThemeData(color: fg),
+              child: content,
             ),
-            child: Center(widthFactor: 1, heightFactor: 1, child: content),
           ),
         ),
       ),
     );
+    if (_down) {
+      btn = Transform.translate(offset: Offset(0, primary ? 4 : 3), child: btn);
+    }
 
     btn = ScaleTransition(scale: _scale, child: btn);
     if (!enabled) btn = Opacity(opacity: .45, child: btn);

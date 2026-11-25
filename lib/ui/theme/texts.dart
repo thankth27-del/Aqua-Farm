@@ -2,10 +2,12 @@ import 'package:material_ui/material_ui.dart';
 
 import 'app_theme.dart';
 import 'colors.dart';
-import 'frames.dart';
+import '../design/design_system.dart';
 import 'pixel_icon.dart';
 
-/// ตัวอักษรมีขอบ + เงาพิกเซล (หัวข้อ โลโก้ ตัวเลขเด่น)
+/// ตัวอักษรเด่น (หัวข้อ โลโก้ ตัวเลขเด่น)
+/// - สีเน้น (ค่าเริ่มต้น) = หัวข้อบนพื้นสว่าง: ตัวหนาสีเข้ม ไม่มีขอบ
+/// - สีอื่น (เช่นขาวบนภาพฉาก) = มีขอบบางให้อ่านออกบนภาพ
 class OutlinedText extends StatelessWidget {
   const OutlinedText(
     this.text, {
@@ -32,7 +34,22 @@ class OutlinedText extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final sw = stroke ?? (size / 7).clamp(3.0, 9.0);
+    if (color == AquaColors.gold) {
+      return Text(
+        text,
+        textAlign: align,
+        maxLines: maxLines,
+        overflow: maxLines == null ? null : TextOverflow.ellipsis,
+        style: TextStyle(
+          fontFamily: kFont,
+          fontSize: size,
+          fontWeight: weight,
+          height: 1.25,
+          color: AquaColors.text,
+        ),
+      );
+    }
+    final sw = stroke ?? (size / 9).clamp(2.0, 5.0);
     final base = TextStyle(
       fontFamily: kFont,
       fontSize: size,
@@ -57,14 +74,6 @@ class OutlinedText extends StatelessWidget {
                   ..strokeWidth = sw
                   ..strokeJoin = StrokeJoin.miter
                   ..color = outline,
-                shadows: shadow
-                    ? [
-                        Shadow(
-                          offset: Offset(0, (size / 10).clamp(2, 5)),
-                          color: outline,
-                        ),
-                      ]
-                    : null,
               ),
             ),
           ),
@@ -144,7 +153,7 @@ class Bold extends StatelessWidget {
   );
 }
 
-/// ป้ายไม้แขวน มีชื่อหน้าสีทอง
+/// ป้ายชื่อหน้า (หัวข้อ 1 บรรทัด) ซ้อนใต้ภาพฉาก
 class WoodSign extends StatelessWidget {
   const WoodSign(this.text, {super.key, this.icon, this.size = FontSize.title});
   final String text;
@@ -153,18 +162,29 @@ class WoodSign extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return PixelBox(
-      fill: AquaColors.woodLight,
-      grain: AquaColors.wood,
-      depth: 4,
-      px: 3,
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 6),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (icon != null) ...[icon!, const SizedBox(width: 8)],
-          Flexible(child: OutlinedText(text, size: size, maxLines: 1)),
-        ],
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: DsColors.surface,
+        borderRadius: BorderRadius.circular(DsRadius.pill),
+        border: Border.all(color: DsColors.border),
+        boxShadow: DsShadow.card,
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(18, 4, 18, 6),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (icon != null) ...[icon!, const SizedBox(width: 8)],
+            Flexible(
+              child: Text(
+                text,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: DsText.title.copyWith(fontSize: size * .85),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -263,28 +283,30 @@ class Tag extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return PixelBox(
-      fill: color,
-      border: AquaColors.ink,
-      px: 2,
-      bevel: false,
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (icon != null) ...[icon!, const SizedBox(width: 4)],
-          Flexible(
-            child: Text(
-              text,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: textColor,
-                fontWeight: FontWeight.w700,
-                fontSize: size,
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(DsRadius.pill),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 2),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (icon != null) ...[icon!, const SizedBox(width: 4)],
+            Flexible(
+              child: Text(
+                text,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: textColor,
+                  fontWeight: FontWeight.w700,
+                  fontSize: size,
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

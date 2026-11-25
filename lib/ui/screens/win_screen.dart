@@ -58,7 +58,6 @@ class WinScreen extends ConsumerWidget {
                           PixelButton(
                             label: 'กลับเมนูหลัก',
                             icon: const PixelIcon('house', size: 24),
-                            style: PixelButtonStyle.green,
                             expand: true,
                             onPressed: ctl.close,
                           ),

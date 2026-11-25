@@ -63,7 +63,11 @@ void expectNoScroll(WidgetTester tester, Finder f, String what) {
   final r = tester.getRect(f);
   final screen = tester.view.physicalSize.height;
   final nav = find.byType(GameNavBar);
-  final bottom = nav.evaluate().isEmpty ? screen : tester.getRect(nav).top;
+  // แผ่นรายละเอียดเปิดอยู่ → เมนูล่างอยู่ใต้แผ่น ใช้ทั้งความสูงจอได้
+  final sheet = find.byKey(const ValueKey('sheet-close')).evaluate().isNotEmpty;
+  final bottom = nav.evaluate().isEmpty || sheet
+      ? screen
+      : tester.getRect(nav).top;
   expect(
     r.top >= 0 && r.bottom <= bottom + .5,
     isTrue,
@@ -102,9 +106,26 @@ Future<void> pressIn(
   }
 }
 
+/// ปุ่มในถาดเปิดแผ่นรายละเอียด: ถ้ายังไม่เห็นปุ่มที่กะพริบ ให้กดปุ่มเปิดแผ่น [opener]
+Future<void> openSheetFor(
+  WidgetTester tester,
+  String gate,
+  String opener,
+) async {
+  if (lit(gate).evaluate().isNotEmpty) return;
+  await tester.tap(find.byKey(ValueKey(opener)));
+  await settle(tester);
+}
+
 /// ทำสิ่งที่เนื้อเรื่องชี้ 1 อย่างผ่าน UI (ตรวจว่าเห็นปุ่มโดยไม่ต้องเลื่อน)
 Future<void> step(WidgetTester tester) async {
   final t = nextTarget;
+  // แผ่นรายละเอียดจากขั้นก่อนยังเปิดอยู่ → ปิดกลับไปที่ฉากก่อน
+  final close = find.byKey(const ValueKey('sheet-close'));
+  if (close.evaluate().isNotEmpty) {
+    await tester.tap(close.last);
+    await settle(tester);
+  }
   switch (t) {
     case StoryTarget.next:
       final b = find.byKey(const ValueKey('story-next'));
@@ -114,7 +135,7 @@ Future<void> step(WidgetTester tester) async {
     case StoryTarget.buyFish:
       await openTab(tester, 'ปลา');
       if (lit('buyFish').evaluate().isEmpty) {
-        await tester.tap(find.widgetWithText(PixelButton, 'ร้านปลา'));
+        await tester.tap(find.text('ร้านปลา').first);
         await settle(tester);
       }
       expectNoScroll(tester, lit('buyFish'), 'การ์ดปลานิล');
@@ -130,7 +151,7 @@ Future<void> step(WidgetTester tester) async {
       await settle(tester);
     case StoryTarget.feed || StoryTarget.catchFish:
       await openTab(tester, 'ปลา');
-      if (find.widgetWithText(PixelButton, 'พอดี').evaluate().isEmpty) {
+      if (find.byKey(const ValueKey('pond-water')).evaluate().isEmpty) {
         await tester.tap(find.widgetWithText(PixelButton, 'บ่อปลา'));
         await settle(tester);
       }
@@ -157,6 +178,7 @@ Future<void> step(WidgetTester tester) async {
       await settle(tester);
     case StoryTarget.sellFish:
       await openTab(tester, 'ตลาด');
+      await openSheetFor(tester, 'sellFish', 'market-sell');
       expectNoScroll(tester, lit('sellFish'), 'ขายปลา');
       await tester.tap(lit('sellFish'));
       await settle(tester);
@@ -164,6 +186,7 @@ Future<void> step(WidgetTester tester) async {
       await settle(tester);
     case StoryTarget.buyIngredient:
       await openTab(tester, 'ตลาด');
+      await openSheetFor(tester, 'buyIngredient', 'market-buy');
       expectNoScroll(tester, lit('buyIngredient'), 'ซื้อเครื่องปรุง');
       await tester.tap(lit('buyIngredient'));
       await settle(tester);
@@ -171,26 +194,30 @@ Future<void> step(WidgetTester tester) async {
       await settle(tester);
     case StoryTarget.buyTool:
       await openTab(tester, 'ตลาด');
+      await openSheetFor(tester, 'buyTool', 'market-tools');
       await pressIn(tester, 'buyTool', 'ซื้อ', confirm: 'ตกลง');
     case StoryTarget.cook:
       await openTab(tester, 'ครัว');
-      if (lit('cook').evaluate().isEmpty) {
-        await tester.tap(find.widgetWithText(PixelButton, 'ทำอาหาร').first);
-        await settle(tester);
-      }
+      await openSheetFor(tester, 'cook', 'kitchen-cook');
       await pressIn(tester, 'cook', 'ทำอาหาร');
     case StoryTarget.preserve:
       await openTab(tester, 'ครัว');
-      if (lit('preserve').evaluate().isEmpty) {
-        await tester.tap(find.widgetWithText(PixelButton, 'ถนอมอาหาร'));
-        await settle(tester);
-      }
+      await openSheetFor(tester, 'preserve', 'kitchen-preserve');
       await pressIn(tester, 'preserve', 'เริ่มถนอม');
     case StoryTarget.buyEquipment:
       await openTab(tester, 'ฟาร์ม');
+      // อุปกรณ์อยู่ในแผ่น "ป้องกัน" (ปุ่มกลมในถาดกะพริบชี้)
+      if (lit('buyEquipment').evaluate().isEmpty) {
+        await tester.tap(find.byKey(const ValueKey('farm-prepare')));
+        await settle(tester);
+      }
       await pressIn(tester, 'buyEquipment', 'ซื้อ', confirm: 'ตกลง');
+      // ซื้อแล้วปิดแผ่นกลับไปที่ฉาก
+      await tester.tap(find.byKey(const ValueKey('sheet-close')));
+      await settle(tester);
     case StoryTarget.eat:
       await openTab(tester, 'คลัง');
+      await openSheetFor(tester, 'eat', 'storage-food');
       await pressIn(tester, 'eat', 'กิน', confirm: 'กิน');
     default:
       fail('บท ${progress.chapter}: ไม่มีสิ่งที่ต้องทำต่อ ($t)');

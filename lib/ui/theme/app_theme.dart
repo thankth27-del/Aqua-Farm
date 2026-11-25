@@ -1,29 +1,30 @@
 import 'package:material_ui/material_ui.dart';
 
+import '../design/design_system.dart';
 import 'colors.dart';
 
-/// ฟอนต์ไทยกลมมน ฝังไว้ใน assets/fonts (ไม่ดึงจากเน็ต)
-const String kFont = 'Mali';
+/// ฟอนต์ไทยเดียวทั้งแอป (Sarabun ฝังไว้ใน assets/fonts ไม่ดึงจากเน็ต)
+const String kFont = DsText.font;
 
 /// ขนาดปุ่มกดขั้นต่ำตามกติกาโปรเจกต์
 const double kMinTap = 48;
 
-/// ระยะห่างมาตรฐาน
+/// ระยะห่างมาตรฐาน (ตามระบบดีไซน์ 4 / 8 / 16 / 24)
 abstract final class Gap {
-  static const xs = 4.0;
-  static const s = 8.0;
-  static const m = 14.0;
-  static const l = 20.0;
-  static const xl = 28.0;
+  static const xs = DsSpace.xs;
+  static const s = DsSpace.s;
+  static const m = DsSpace.m;
+  static const l = DsSpace.l;
+  static const xl = 32.0;
 }
 
-/// ขนาดตัวอักษร (ใหญ่ขึ้นจากเดิม อ่านง่ายบนมือถือ)
+/// ขนาดตัวอักษร: คำอธิบายเล็ก / เนื้อหา / ป้ายปุ่ม / หัวข้อ / ตัวเลขใหญ่
 abstract final class FontSize {
   static const small = 14.0;
-  static const body = 17.0;
-  static const label = 18.0;
-  static const title = 24.0;
-  static const big = 30.0;
+  static const body = 16.0;
+  static const label = 17.0;
+  static const title = 22.0;
+  static const big = 28.0;
 }
 
 ThemeData buildAquaTheme() {
@@ -31,12 +32,12 @@ ThemeData buildAquaTheme() {
     brightness: Brightness.light,
     fontFamily: kFont,
     colorScheme: const ColorScheme.light(
-      primary: AquaColors.gold,
-      secondary: AquaColors.water,
-      surface: AquaColors.cream,
-      error: AquaColors.red,
-      onPrimary: AquaColors.ink,
-      onSecondary: Colors.white,
+      primary: DsColors.primary,
+      secondary: DsColors.accent,
+      surface: DsColors.surface,
+      error: DsColors.danger,
+      onPrimary: DsColors.onPrimary,
+      onSecondary: DsColors.onAccent,
       onSurface: AquaColors.text,
     ),
     scaffoldBackgroundColor: AquaColors.bgGreen,
@@ -65,10 +66,13 @@ ThemeData buildAquaTheme() {
       insetPadding: EdgeInsets.symmetric(horizontal: 18, vertical: 24),
     ),
     tooltipTheme: const TooltipThemeData(
-      decoration: BoxDecoration(color: AquaColors.ink),
+      decoration: BoxDecoration(
+        color: DsColors.text,
+        borderRadius: BorderRadius.all(Radius.circular(DsRadius.small)),
+      ),
       textStyle: TextStyle(
         fontFamily: kFont,
-        color: AquaColors.cream,
+        color: DsColors.surface,
         fontSize: FontSize.small,
       ),
     ),
@@ -80,22 +84,24 @@ ThemeData buildAquaTheme() {
       filled: true,
       fillColor: AquaColors.paper,
       contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-      border: OutlineInputBorder(borderRadius: BorderRadius.zero),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.all(Radius.circular(DsRadius.small)),
+      ),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.zero,
-        borderSide: BorderSide(color: AquaColors.ink, width: 3),
+        borderRadius: BorderRadius.all(Radius.circular(DsRadius.small)),
+        borderSide: BorderSide(color: DsColors.border, width: 2),
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.zero,
-        borderSide: BorderSide(color: AquaColors.goldDark, width: 3),
+        borderRadius: BorderRadius.all(Radius.circular(DsRadius.small)),
+        borderSide: BorderSide(color: DsColors.primary, width: 2),
       ),
       errorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.zero,
-        borderSide: BorderSide(color: AquaColors.red, width: 3),
+        borderRadius: BorderRadius.all(Radius.circular(DsRadius.small)),
+        borderSide: BorderSide(color: AquaColors.red, width: 2),
       ),
       focusedErrorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.zero,
-        borderSide: BorderSide(color: AquaColors.red, width: 3),
+        borderRadius: BorderRadius.all(Radius.circular(DsRadius.small)),
+        borderSide: BorderSide(color: AquaColors.red, width: 2),
       ),
     ),
   );

@@ -1,6 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 
 import 'app_theme.dart';
+import '../design/design_system.dart';
 import 'colors.dart';
 
 /// แถบสถานะพิกเซล: แบ่งเป็นช่อง ๆ มีไฮไลต์ด้านบน เลื่อนค่าแบบนุ่ม
@@ -9,7 +10,7 @@ class PixelBar extends StatelessWidget {
     super.key,
     required this.value,
     required this.color,
-    this.height = 18,
+    this.height = 12,
   });
 
   /// 0-100
@@ -41,36 +42,21 @@ class _BarPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final p = Paint()..isAntiAlias = false;
-    const b = 3.0;
-    // ขอบมุมบาก
-    p.color = AquaColors.ink;
-    canvas
-      ..drawRect(Rect.fromLTRB(b, 0, size.width - b, size.height), p)
-      ..drawRect(Rect.fromLTRB(0, b, size.width, size.height - b), p);
-    final inner = Rect.fromLTRB(b, b, size.width - b, size.height - b);
-    p.color = AquaColors.inkSoft;
-    canvas.drawRect(inner, p);
-    final w = (inner.width * f).floorToDouble();
-    if (w <= 0) return;
-    final fill = Rect.fromLTWH(inner.left, inner.top, w, inner.height);
-    p.color = color;
-    canvas.drawRect(fill, p);
-    p.color = Color.lerp(color, Colors.white, .45)!;
-    canvas.drawRect(
-      Rect.fromLTWH(
-        fill.left,
-        fill.top,
-        fill.width,
-        (inner.height / 4).ceilToDouble(),
-      ),
-      p,
+    // แถบมุมมน: รางสีอ่อน + ส่วนที่เต็มเป็นสีของค่านั้น
+    final r = Radius.circular(size.height / 2);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(Offset.zero & size, r),
+      Paint()..color = DsColors.border,
     );
-    // ช่องแบ่ง (แบบ .bar ของต้นแบบ)
-    p.color = Color.lerp(color, AquaColors.ink, .35)!;
-    for (var x = inner.left + 10; x < fill.right - 1; x += 12) {
-      canvas.drawRect(Rect.fromLTWH(x, fill.top, 2, fill.height), p);
-    }
+    final w = size.width * f;
+    if (w <= 0) return;
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(0, 0, w.clamp(size.height, size.width), size.height),
+        r,
+      ),
+      Paint()..color = color,
+    );
   }
 
   @override

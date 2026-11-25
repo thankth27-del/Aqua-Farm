@@ -45,6 +45,9 @@ class SwimFish {
   final bool sick;
 }
 
+/// ขนาดเฟรมภาพปลา (เท่าของหน่วยปลา) ในฉากบ่อ
+const double kFishFrameUnits = 20;
+
 /// ขนาด 1 พิกเซลของตัวปลาตามการเติบโต (2 ตอนเพิ่งซื้อ → 3 ตอนโตเต็มที่ เหมือนต้นแบบ)
 double fishUnit(int growth) => 2 + growth.clamp(0, 100) / 100;
 
@@ -69,11 +72,14 @@ class Swimmer {
   /// เฟสการแกว่งขึ้นลง
   final double phase;
 
+  /// เฟรมเริ่มของแอนิเมชันว่าย (ปลาแต่ละตัวไม่ขยับครีบพร้อมกัน)
+  int frameStart = 0;
+
   /// เป้าหมาย
   double tx, ty;
   int _retarget = 0;
 
-  /// หันหัวไปทางซ้าย (ภาพต้นฉบับหัวอยู่ซ้าย)
+  /// หันหัวไปทางซ้าย (ภาพปลาต้นฉบับหัวไปทางขวา จึงกลับด้านเมื่อเป็นจริง)
   bool faceLeft = true;
   int _sinceFlip = 99;
 
@@ -94,10 +100,13 @@ class Swimmer {
   /// ความเร็วสูงสุดที่เป็นไปได้ (ใช้ตรวจว่าไม่วาร์ป)
   double get maxSpeed => base * 1.15 * 1.3;
 
-  double get minX => 6 * unit + 2;
-  double get maxX => kSwimSceneW - 6 * unit - 2;
-  double get minY => kSwimSurfaceY + 2 + 3.5 * unit;
-  double get maxY => kSwimFloorY - 2.5 * unit;
+  // ขอบเขตตามภาพปลาชุดใหม่ (เฟรม [kFishFrameUnits] หน่วย ตัวปลากินพื้นที่ x 6-107, y 24-101 จาก 128)
+  // ห่างจากจุดกลาง: หาง/หัว ≤ 45% ของเฟรม, บน 31%, ล่าง 29%
+  double get frame => kFishFrameUnits * unit;
+  double get minX => .46 * frame + 1;
+  double get maxX => kSwimSceneW - .46 * frame - 1;
+  double get minY => kSwimSurfaceY + 1 + .32 * frame;
+  double get maxY => kSwimFloorY - .3 * frame;
 
   /// ตำแหน่ง y ที่ใช้วาด (รวมการแกว่งขึ้นลง) — ยังอยู่ในน้ำเสมอ
   double drawY(int t) =>
@@ -171,6 +180,7 @@ class PondSwim {
     s.faceLeft = math.cos(s.heading) < 0;
     s.speed = s.cruise * .5;
     _pickTarget(s);
+    s.frameStart = _rng.nextInt(8);
     return s;
   }
 

@@ -38,7 +38,7 @@ class SubTabs extends StatelessWidget {
                       icon: PixelIcon(items[i].$3, size: 24),
                       expand: true,
                       style: i == selected
-                          ? PixelButtonStyle.gold
+                          ? PixelButtonStyle.green
                           : PixelButtonStyle.wood,
                       onPressed: () => onSelect(i),
                     ),

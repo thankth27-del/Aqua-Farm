@@ -1,5 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart';
+
+import '../design/design_system.dart' show DsColors;
 
 import '../../save/save_repository.dart';
 import '../dialogs.dart';
@@ -8,6 +11,7 @@ import '../providers.dart';
 import '../story_provider.dart';
 import '../scenes/pixel_scene.dart';
 import '../theme/theme.dart';
+import 'design_preview_screen.dart';
 import 'slots_screen.dart';
 
 /// โลโก้เกม AQUA FARM (ใช้หน้าเมนูหลักและช่องบันทึก)
@@ -139,7 +143,7 @@ class MainMenuScreen extends ConsumerWidget {
   ) => showModalBottomSheet<String>(
     context: context,
     backgroundColor: Colors.transparent,
-    barrierColor: const Color(0xAA1B120B),
+    barrierColor: DsColors.scrim,
     // จอกว้าง: แผงเลือกไม่ยืดเต็มจอ
     constraints: const BoxConstraints(maxWidth: Responsive.maxPanel),
     // จอเตี้ย (มือถือแนวนอน): แผงสูงเกินจอได้ จึงเลื่อนได้
@@ -243,9 +247,24 @@ class MainMenuScreen extends ConsumerWidget {
               'AQUA FARM: From Farm to Food',
               'โปรเจกต์ต้นแบบเกมจำลองฟาร์มปลา',
               'ค่าน้ำ ปลา และโภชนาการเป็นแบบจำลองเพื่อการเรียนรู้',
-              'ฟอนต์ Mali (SIL Open Font License)',
+              'ฟอนต์ Mali และ Sarabun (SIL Open Font License)',
             ], icon: const PixelIcon('f_nila', size: 72)),
           ),
+          // หน้า debug ระบบดีไซน์: เฉพาะโหมด debug หรือเว็บที่มี ?ds ใน URL
+          if (kDebugMode || Uri.base.queryParameters.containsKey('ds')) ...[
+            const SizedBox(height: Gap.m),
+            PixelButton(
+              key: const ValueKey('menu-design'),
+              label: 'ตัวอย่างระบบดีไซน์',
+              style: PixelButtonStyle.wood,
+              expand: true,
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const DesignPreviewScreen(),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );

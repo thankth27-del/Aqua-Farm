@@ -1,12 +1,14 @@
 import 'package:material_ui/material_ui.dart';
 
+import 'buttons.dart';
 import 'colors.dart';
+import 'fish_sprite.dart';
 
 /// ภาพพิกเซลจาก assets/pixel/ — ขยายแบบไม่เบลอ
 class PixelIcon extends StatelessWidget {
   const PixelIcon(this.name, {super.key, this.size = 28, this.semanticLabel});
 
-  /// ชื่อไฟล์ (ไม่รวม .png) เช่น 'coin', 'f_nila'
+  /// ชื่อไฟล์ (ไม่รวม .png) เช่น 'coin' — `f_<id>` คือปลาชุดใหม่ ([FishIcon])
   final String name;
 
   /// ความกว้าง (ความสูงคำนวณตามสัดส่วนภาพ)
@@ -16,11 +18,17 @@ class PixelIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fish = name.startsWith('f_');
+    if (name.startsWith('f_')) {
+      return FishIcon(
+        name.substring(2),
+        size: size,
+        semanticLabel: semanticLabel,
+      );
+    }
     return Image.asset(
       'assets/pixel/$name.png',
       width: size,
-      height: fish ? size * 7 / 12 : size,
+      height: size,
       filterQuality: FilterQuality.none,
       isAntiAlias: false,
       fit: BoxFit.contain,
@@ -204,6 +212,10 @@ class PixelGlyph extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final rows = glyph.rows;
+    // สี paper = "สีบนปุ่ม": อยู่ในปุ่มให้ใช้สีตัวอักษรของปุ่ม
+    final color = this.color == AquaColors.paper
+        ? (ButtonForeground.of(context) ?? this.color)
+        : this.color;
     final h = rows.length, w = rows.first.length;
     final px = (size / h).floorToDouble().clamp(1.0, 40.0);
     final painted = CustomPaint(

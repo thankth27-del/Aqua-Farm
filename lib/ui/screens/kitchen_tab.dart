@@ -8,108 +8,172 @@ import '../../data/ingredients.dart';
 import '../../game/game_engine.dart';
 import '../../game/story.dart';
 import '../../game/tutorial.dart';
+import '../design/design_system.dart' show DsColors;
 import '../dialogs.dart';
-import '../layout/responsive.dart';
 import '../providers.dart';
-import '../story_provider.dart';
 import '../scenes/pixel_scene.dart';
+import '../scenes/room_scenes.dart';
 import '../theme/theme.dart';
+import '../widgets/game_hud.dart';
 import '../widgets/story_gate.dart';
 import '../widgets/guide_bars.dart';
 
+/// ฉากครัวเต็มจอ (พื้นหลังของหน้าครัว) — อุปกรณ์ถนอมที่ซื้อแล้วปรากฏในฉาก
+class KitchenBackdrop extends ConsumerWidget {
+  const KitchenBackdrop({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = ref.watch(gameProvider)!.state;
+    final equipment = {
+      for (final id in kKitchenEquipmentOrder) id: s.equipmentCount(id),
+    };
+    final cooking = s.processing.length;
+    return PixelScene(
+      key: const ValueKey('kitchen-backdrop'),
+      backdrop: true,
+      framed: false,
+      focus: const Offset(.45, .55),
+      painterBuilder: (t) =>
+          KitchenPainter(t, equipment: equipment, cooking: cooking),
+    );
+  }
+}
+
+/// แผ่นรายละเอียดของครัว: สูตรอาหาร · ถนอมอาหาร · เลือกปลา
+enum KitchenSheet { cook, preserve, fish }
+
+Future<void> showKitchenSheet(
+  BuildContext context,
+  KitchenSheet kind, {
+  ValueChanged<int>? onOpenTab,
+}) {
+  final (title, icon) = switch (kind) {
+    KitchenSheet.cook => ('ทำอาหาร', 'tomyum'),
+    KitchenSheet.preserve => ('ถนอมอาหาร', 'jar'),
+    KitchenSheet.fish => ('ปลาที่ใช้ทำอาหาร', 'f_nila'),
+  };
+  return showDetailSheet<void>(
+    context,
+    title: title,
+    icon: PixelIcon(icon, size: 32),
+    builder: (sheet) => _KitchenView(
+      kind: kind,
+      // ไปแท็บอื่น: ปิดแผ่นก่อน
+      onOpenTab: onOpenTab == null
+          ? null
+          : (i) {
+              Navigator.of(sheet).pop();
+              onOpenTab(i);
+            },
+    ),
+  );
+}
+
 /// แท็บ "ครัว" (cook ในต้นแบบ): ทำอาหาร 5 เมนู และถนอมอาหาร 4 วิธี
 /// ใช้ปลาจากคลัง 1 ตัว + วัตถุดิบ ได้อาหารเท่ากับจำนวนจานของปลาตัวนั้น
-class KitchenTab extends ConsumerStatefulWidget {
+/// หน้าหลักเป็นฉากครัว + ถาดปุ่ม · สูตร/วิธีถนอมเปิดเป็นแผ่นด้านล่าง
+class KitchenTab extends ConsumerWidget {
   const KitchenTab({super.key, this.onOpenTab});
 
   /// เปิดแท็บอื่น (1 = ปลา, 2 = ตลาด) จากปุ่มบอกทางเมื่อของไม่พอ
   final ValueChanged<int>? onOpenTab;
 
   @override
-  ConsumerState<KitchenTab> createState() => _KitchenTabState();
-}
-
-class _KitchenTabState extends ConsumerState<KitchenTab> {
-  bool _preserve = false;
-
-  @override
-  void initState() {
-    super.initState();
-    // เนื้อเรื่องบทถนอมอาหาร: เปิดหน้าถนอมเลย
-    final story = ref.read(gameProvider.notifier).isStory
-        ? ref.read(storyProvider)
-        : null;
-    if (story != null && story.chapter == 4) _preserve = true;
-  }
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final session = ref.watch(gameProvider)!;
+    final e = session.engine;
+    final s = session.state;
     final story = watchStory(ref);
     final next = story == null ? null : Story.nextTarget(story.$1, story.$2);
-    // ปุ่มสลับ ทำอาหาร | ถนอมอาหาร
-    final tabs = Padding(
-      padding: const EdgeInsets.fromLTRB(Gap.m, Gap.m, Gap.m, 0),
-      child: Row(
-        children: [
-          Expanded(
-            child: Spotlight(
-              on: _preserve && next == StoryTarget.cook,
-              child: PixelButton(
-                label: 'ทำอาหาร',
-                icon: const PixelIcon('fry', size: 26),
-                style: _preserve
-                    ? PixelButtonStyle.wood
-                    : PixelButtonStyle.gold,
-                onPressed: () => setState(() => _preserve = false),
-              ),
+    final tut = e.tutorialStep?.target;
+    bool allows(StoryTarget t) =>
+        story == null || Story.allows(story.$1, story.$2, t);
+    void open(KitchenSheet k) =>
+        showKitchenSheet(context, k, onOpenTab: onOpenTab);
+
+    final fish = e.fishForCooking;
+    final chips = <Widget>[
+      SceneChip(
+        key: const ValueKey('kitchen-fish-chip'),
+        color: fish.isEmpty ? const Color(0xE6B42318) : DsColors.glass,
+        icon: PixelIcon(fish.isEmpty ? 'f_nila' : 'f_$fish', size: 32),
+        text: 'ปลาในคลัง ${e.fishTotal} ตัว',
+        below: Text(
+          fish.isEmpty
+              ? 'ไปจับปลาที่บ่อก่อน'
+              : 'ใช้${kFish[fish]!.name} ได้ ${kFish[fish]!.yieldDishes} จาน',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: glassText(color: const Color(0xFFFFE7A8)),
+        ),
+        onTap: () => open(KitchenSheet.fish),
+      ),
+      if (s.processing.isNotEmpty)
+        SceneChip(
+          key: const ValueKey('kitchen-jobs-chip'),
+          icon: const PixelIcon('jar', size: 32),
+          text: 'กำลังถนอม ${s.processing.length} ชุด',
+          below: Text(
+            'เสร็จใน ${s.processing.map((j) => j.daysLeft).reduce((a, b) => a < b ? a : b)} วัน',
+            style: glassText(color: const Color(0xFFFFE7A8)),
+          ),
+          onTap: () => open(KitchenSheet.preserve),
+        ),
+    ];
+
+    final round = ScenePage.round(context);
+    final tray = ActionTray(
+      leading: RoundAction(
+        key: const ValueKey('kitchen-fish'),
+        icon: const PixelIcon('f_nila', size: 32),
+        label: 'ปลา',
+        labelOnScene: true,
+        diameter: round,
+        color: DsColors.primarySoft,
+        tooltip: 'เลือกปลาที่ใช้ทำอาหาร',
+        onPressed: () => open(KitchenSheet.fish),
+      ),
+      primary: TipSpot(
+        screen: GameScreen.kitchen,
+        child: Spotlight(
+          on: next == StoryTarget.cook || tut == TutorialTarget.kitchen,
+          child: KeyedSubtree(
+            key: const ValueKey('primary-kitchen'),
+            child: TrayPrimary(
+              key: const ValueKey('kitchen-cook'),
+              label: 'ทำอาหาร',
+              icon: const PixelIcon('fry', size: 32),
+              note: 'เลือกเมนู',
+              onPressed: allows(StoryTarget.cook)
+                  ? () => open(KitchenSheet.cook)
+                  : null,
             ),
           ),
-          const SizedBox(width: Gap.s),
-          Expanded(
-            child: StoryGate(
-              target: StoryTarget.preserve,
-              point: false,
-              child: Spotlight(
-                on: !_preserve && next == StoryTarget.preserve,
-                child: PixelButton(
-                  label: 'ถนอมอาหาร',
-                  icon: const PixelIcon('jar', size: 26),
-                  style: _preserve
-                      ? PixelButtonStyle.gold
-                      : PixelButtonStyle.wood,
-                  onPressed: () => setState(() => _preserve = true),
-                ),
-              ),
-            ),
-          ),
-        ],
+        ),
+      ),
+      trailing: Spotlight(
+        on: next == StoryTarget.preserve,
+        child: RoundAction(
+          key: const ValueKey('kitchen-preserve'),
+          icon: const PixelIcon('jar', size: 32),
+          label: 'ถนอม',
+          labelOnScene: true,
+          diameter: round,
+          tooltip: 'ถนอมอาหาร เก็บได้นานขึ้น',
+          onPressed: allows(StoryTarget.preserve)
+              ? () => open(KitchenSheet.preserve)
+              : null,
+        ),
       ),
     );
-    // แนวนอน: ปุ่มสลับอยู่ฝั่งซ้าย ให้สูตรอาหารเริ่มบนสุดของฝั่งขวา
-    if (context.rs.useSplit) {
-      return _KitchenView(
-        preserve: _preserve,
-        onOpenTab: widget.onOpenTab,
-        tabs: tabs,
-      );
-    }
-    return Column(
-      children: [
-        tabs,
-        Expanded(
-          child: _KitchenView(preserve: _preserve, onOpenTab: widget.onOpenTab),
-        ),
-      ],
-    );
+    return ScenePage(chips: chips, tray: tray);
   }
 }
 
 class _KitchenView extends ConsumerWidget {
-  const _KitchenView({required this.preserve, this.onOpenTab, this.tabs});
-  final bool preserve;
-
-  /// ปุ่มสลับ ทำอาหาร | ถนอม (แนวนอน: วางในคอลัมน์ซ้าย)
-  final Widget? tabs;
+  const _KitchenView({required this.kind, this.onOpenTab});
+  final KitchenSheet kind;
   final ValueChanged<int>? onOpenTab;
 
   /// เหตุผลที่ยังทำไม่ได้ (null = ทำได้)
@@ -216,77 +280,53 @@ class _KitchenView extends ConsumerWidget {
         ],
       ),
     );
+    if (kind == KitchenSheet.fish) return fishPanel;
 
-    // ไม่มีปลา หรือจอแนวนอน (แผงปลาอยู่ฝั่งซ้าย) → แผงปลาขึ้นก่อน
-    final fishFirst = story == null && (fish.isEmpty || tabs != null);
-    return TabScroll(
-      listKey: PageStorageKey(preserve ? 'kitchen-pres' : 'kitchen-cook'),
-      header:
-          (tabs != null ? 1 : 0) + (story == null ? (tabs != null ? 2 : 1) : 0),
-      decorative: true,
+    // ไม่มีปลา: แผงปลาขึ้นก่อน (บอกเหตุผล + ปุ่มไปบ่อ)
+    final fishFirst = story == null && fish.isEmpty;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        ?tabs,
-        if (story == null)
-          PageHeader(
-            scene: PixelScene(painterBuilder: RoomPainter.new),
-            title: preserve ? 'ถนอมอาหาร' : 'ครัวและสูตรอาหาร',
-            icon: PixelIcon(preserve ? 'jar' : 'tomyum', size: 30),
-            titleSize: 21,
-          ),
-
-        // ---------- ปลาที่ใช้ ----------
-        // ไม่มีปลา: แผงนี้ขึ้นก่อน (บอกเหตุผล + ปุ่มไปบ่อ)
-        // มีปลา: ไว้ท้าย ให้ปุ่ม "ทำอาหาร" อยู่บนจอ (การ์ดสูตรบอกปลาที่ใช้อยู่แล้ว)
         if (fishFirst) fishPanel,
 
-        if (!preserve)
+        if (kind == KitchenSheet.cook)
           // ---------- สูตรอาหาร ----------
           WoodPanel(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // แนวนอน: ปุ่มสลับฝั่งซ้ายบอกหน้าอยู่แล้ว ไม่ต้องมีหัวข้อ (ปุ่มทำอาหารขึ้นมาบนจอ)
-                if (tabs == null)
-                  const SectionTitle(
-                    'สูตรอาหาร',
-                    icon: PixelIcon('tomyum', size: 28),
-                  ),
                 for (final r in kRecipes.values)
                   Padding(
                     padding: const EdgeInsets.only(bottom: Gap.s),
                     child: pick(
                       r.id == 'fry',
                       StoryTarget.cook,
-                      TipSpot(
-                        screen: GameScreen.kitchen,
-                        enabled: r.id == kRecipes.keys.first,
-                        child: _RecipeCard(
-                          key: ValueKey('recipe-${r.id}'),
-                          food: kFoods[r.id]!,
-                          details: [
-                            'อิ่ม +${kFoods[r.id]!.hunger}',
-                            'เก็บได้ ${kFoods[r.id]!.shelfDays} วัน',
-                            'ขาย ${e.foodSellPrice(r.id)} บาท',
-                          ],
-                          more: [
-                            'พลังงาน +${kFoods[r.id]!.energy}',
-                            '${kFoods[r.id]!.kcal} kcal',
-                            'โปรตีน ${kFoods[r.id]!.protein} g',
-                            'ปรุง ${r.minutes} นาที',
-                          ].join(' · '),
-                          reason: _reason(e, r.need),
-                          onMarket: onOpenTab != null && _needsMarket(e, r.need)
-                              ? () => onOpenTab!(2)
-                              : null,
-                          chips: [
-                            _fishChip(fish),
-                            ..._ingredientChips(r.need, s.inventory),
-                          ],
-                          action: 'ทำอาหาร',
-                          enabled: e.canCook(r.id),
-                          onPressed: () =>
-                              showResult(context, ctl.run((e) => e.cook(r.id))),
-                        ),
+                      _RecipeCard(
+                        key: ValueKey('recipe-${r.id}'),
+                        food: kFoods[r.id]!,
+                        details: [
+                          'อิ่ม +${kFoods[r.id]!.hunger}',
+                          'เก็บได้ ${kFoods[r.id]!.shelfDays} วัน',
+                          'ขาย ${e.foodSellPrice(r.id)} บาท',
+                        ],
+                        more: [
+                          'พลังงาน +${kFoods[r.id]!.energy}',
+                          '${kFoods[r.id]!.kcal} kcal',
+                          'โปรตีน ${kFoods[r.id]!.protein} g',
+                          'ปรุง ${r.minutes} นาที',
+                        ].join(' · '),
+                        reason: _reason(e, r.need),
+                        onMarket: onOpenTab != null && _needsMarket(e, r.need)
+                            ? () => onOpenTab!(2)
+                            : null,
+                        chips: [
+                          _fishChip(fish),
+                          ..._ingredientChips(r.need, s.inventory),
+                        ],
+                        action: 'ทำอาหาร',
+                        enabled: e.canCook(r.id),
+                        onPressed: () =>
+                            showResult(context, ctl.run((e) => e.cook(r.id))),
                       ),
                     ),
                   ),
@@ -299,11 +339,6 @@ class _KitchenView extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                if (tabs == null)
-                  const SectionTitle(
-                    'วิธีถนอมอาหาร',
-                    icon: PixelIcon('jar', size: 28),
-                  ),
                 for (final p in kPreserveMethods.values)
                   Padding(
                     padding: const EdgeInsets.only(bottom: Gap.s),
@@ -475,7 +510,7 @@ class _FishChoice extends StatelessWidget {
         child: PaperCard(
           fill: selected ? AquaColors.goldPale : AquaColors.paper,
           border: selected ? AquaColors.goldDark : AquaColors.woodDark,
-          padding: const EdgeInsets.fromLTRB(6, 4, 10, 4),
+          padding: const EdgeInsets.fromLTRB(6, 6, 10, 6),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [

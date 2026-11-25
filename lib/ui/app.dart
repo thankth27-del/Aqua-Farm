@@ -29,7 +29,7 @@ class AquaFarmApp extends ConsumerWidget {
         child: AppFrame(
           background: const ColoredBox(
             color: AquaColors.bgGreenDeep,
-            child: GrassBackground(child: SizedBox.expand()),
+            child: GrassBackground(deep: true, child: SizedBox.expand()),
           ),
           child: ScaledApp(child: ToastHost(child: child!)),
         ),

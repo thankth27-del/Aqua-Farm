@@ -166,9 +166,7 @@ void main() {
       tester.view.reset();
     });
 
-    testWidgets('AppFrame จำกัดความกว้างเนื้อหาที่ 1100 จัดกลาง', (
-      tester,
-    ) async {
+    testWidgets('AppFrame: หน้าเกมเต็มจอ ไม่มีคอลัมน์กลางแคบ', (tester) async {
       tester.view.physicalSize = const Size(1920, 1080);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
@@ -181,8 +179,9 @@ void main() {
           ),
         ),
       );
+      // ฉากเต็มจอ: ไม่มีคอลัมน์กลางแคบ
       final r = tester.getRect(find.byKey(const Key('content')));
-      expect(r.width, Breakpoints.maxContent);
+      expect(r.width, 1920);
       expect(r.center.dx, 960);
     });
 
@@ -217,7 +216,7 @@ void main() {
 
   group('ตัวคูณกลาง (ScaledApp)', () {
     testWidgets(
-      'จอ 1920x1080: เนื้อหาเต็มกรอบ 1100 และวางในพื้นที่ logical ที่หารตัวคูณแล้ว',
+      'จอ 1920x1080: เนื้อหาเต็มจอ และวางในพื้นที่ logical ที่หารตัวคูณแล้ว',
       (tester) async {
         tester.view.physicalSize = const Size(1920, 1080);
         tester.view.devicePixelRatio = 1;
@@ -244,9 +243,9 @@ void main() {
         final s = Responsive.fromSize(const Size(1920, 1080)).scale;
         expect(s, greaterThan(1.3));
         final rect = tester.getRect(find.byKey(const Key('content')));
-        expect(rect.width, closeTo(Breakpoints.maxContent, .5));
+        expect(rect.width, closeTo(1920, .5));
         expect(rect.height, closeTo(1080, .5));
-        expect(inner!.width, closeTo(Breakpoints.maxContent / s, .01));
+        expect(inner!.width, closeTo(1920 / s, .01));
         expect(r!.applied, isTrue);
         expect(r!.isExpanded, isTrue);
         // ฟังก์ชันขนาดไม่คูณซ้ำเมื่อขยายที่รากแล้ว

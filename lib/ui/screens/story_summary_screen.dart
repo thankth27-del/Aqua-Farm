@@ -153,7 +153,6 @@ class StorySummaryScreen extends ConsumerWidget {
                             key: const ValueKey('story-finish'),
                             label: 'กลับเมนูหลัก',
                             icon: const PixelIcon('house', size: 24),
-                            style: PixelButtonStyle.green,
                             expand: true,
                             onPressed: () =>
                                 ref.read(storyProvider.notifier).finish(),

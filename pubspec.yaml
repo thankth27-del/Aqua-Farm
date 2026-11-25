@@ -64,6 +64,8 @@ flutter:
   # ภาพพิกเซลที่ส่งออกจาก reference/index.html (node tool/export_sprites.mjs)
   assets:
     - assets/pixel/
+    # ปลาชุดใหม่: แถบ 8 เฟรม เฟรมละ 128x128 หันหัวไปทางขวา (ดู lib/ui/theme/fish_sprite.dart)
+    - assets/fish/
 
   # ฟอนต์ไทยกลมมน Mali (SIL OFL 1.1 — ดู assets/fonts/Mali-OFL.txt) ฝังในแอป ไม่ดึงจากเน็ต
   fonts:
@@ -73,6 +75,14 @@ flutter:
         - asset: assets/fonts/Mali-SemiBold.ttf
           weight: 600
         - asset: assets/fonts/Mali-Bold.ttf
+          weight: 700
+    # ฟอนต์ของระบบดีไซน์ใหม่ (SIL OFL — assets/fonts/Sarabun-OFL.txt)
+    - family: Sarabun
+      fonts:
+        - asset: assets/fonts/Sarabun-Regular.ttf
+        - asset: assets/fonts/Sarabun-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Sarabun-Bold.ttf
           weight: 700
 
   # An image asset can refer to one or more resolution-specific "variants", see

@@ -4,19 +4,51 @@ import 'package:material_ui/material_ui.dart';
 import '../../data/constants.dart';
 import '../../data/fish_data.dart';
 import '../../game/tutorial.dart';
+import '../design/design_system.dart' show DsColors;
 import '../dialogs.dart';
 import '../../game/story.dart';
 import '../layout/responsive.dart';
-import '../widgets/action_dock.dart';
 import '../providers.dart';
 import '../../game/game_engine.dart';
 import '../../game/game_state.dart';
 import '../scenes/fish_swim.dart';
 import '../scenes/pixel_scene.dart';
 import '../theme/theme.dart';
+import '../widgets/game_hud.dart';
 import '../widgets/story_gate.dart';
 import '../widgets/guide_bars.dart';
 import 'fish_detail_screen.dart';
+
+/// ฉากบ่อใต้น้ำเต็มจอ (พื้นหลังของหน้าบ่อ) — ปลาว่ายจำตำแหน่งตัวเองไว้ตลอดอายุฉาก
+class PondBackdrop extends ConsumerStatefulWidget {
+  const PondBackdrop({super.key});
+
+  @override
+  ConsumerState<PondBackdrop> createState() => _PondBackdropState();
+}
+
+class _PondBackdropState extends ConsumerState<PondBackdrop> {
+  final _swim = PondSwim();
+
+  @override
+  Widget build(BuildContext context) {
+    final scene = PondSceneData.fromState(ref.watch(gameProvider)!.state);
+    return PixelScene(
+      key: const ValueKey('pond-backdrop'),
+      backdrop: true,
+      framed: false,
+      focus: const Offset(.5, .58),
+      painterBuilder: (t) => PondPainter(t, scene, _swim),
+    );
+  }
+}
+
+/// คุณภาพน้ำแบบคำเดียวสำหรับหน้าหลัก: ดี / เริ่มแย่ / อันตราย
+String waterWord(WaterStatus ws) => switch (ws) {
+  WaterStatus.excellent || WaterStatus.good => 'ดี',
+  WaterStatus.warning => 'เริ่มแย่',
+  WaterStatus.critical => 'อันตราย',
+};
 
 /// แท็บ "ปลา": บ่อปลา และร้านปลา
 class FishTab extends ConsumerStatefulWidget {
@@ -48,405 +80,557 @@ class _FishTabState extends ConsumerState<FishTab> {
     final next = story == null ? null : Story.nextTarget(story.$1, story.$2);
     final storyShop = next == StoryTarget.buyFish;
     final storyPond = next != null && !storyShop && storyTabOf(next) == 1;
+    final toggle = Row(
+      children: [
+        Expanded(
+          child: Spotlight(
+            on: _shop && (target == TutorialTarget.pond || storyPond),
+            child: PixelButton(
+              label: 'บ่อปลา',
+              icon: const PixelIcon('drop', size: 24),
+              style: _shop ? PixelButtonStyle.wood : PixelButtonStyle.green,
+              onPressed: () => _set(false),
+            ),
+          ),
+        ),
+        const SizedBox(width: Gap.s),
+        Expanded(
+          child: Spotlight(
+            on: !_shop && (target == TutorialTarget.shop || storyShop),
+            child: PixelButton(
+              label: 'ร้านปลา',
+              icon: const PixelIcon('f_nila', size: 30),
+              style: _shop ? PixelButtonStyle.green : PixelButtonStyle.wood,
+              onPressed: () => _set(true),
+            ),
+          ),
+        ),
+      ],
+    );
+    if (!_shop) {
+      // หน้าบ่อ: ไม่มีแถบสลับเต็มกว้าง (ให้เห็นฉาก) → ปุ่มกลม "ร้านปลา" ในถาดล่าง
+      final shopButton = Spotlight(
+        on: target == TutorialTarget.shop || storyShop,
+        child: RoundAction(
+          key: const ValueKey('open-shop'),
+          icon: const PixelIcon('f_nila', size: 32),
+          label: 'ร้านปลา',
+          labelOnScene: true,
+          diameter: ScenePage.round(context),
+          color: DsColors.primarySoft,
+          onPressed: () => _set(true),
+        ),
+      );
+      return _PondView(shopButton: shopButton, onShop: () => _set(true));
+    }
     return Column(
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(Gap.m, Gap.m, Gap.m, 0),
-          child: Row(
-            children: [
-              Expanded(
-                child: Spotlight(
-                  on: _shop && (target == TutorialTarget.pond || storyPond),
-                  child: PixelButton(
-                    label: 'บ่อปลา',
-                    icon: const PixelIcon('drop', size: 24),
-                    style: _shop
-                        ? PixelButtonStyle.wood
-                        : PixelButtonStyle.gold,
-                    onPressed: () => _set(false),
-                  ),
-                ),
-              ),
-              const SizedBox(width: Gap.s),
-              Expanded(
-                child: Spotlight(
-                  on: !_shop && (target == TutorialTarget.shop || storyShop),
-                  child: PixelButton(
-                    label: 'ร้านปลา',
-                    icon: const PixelIcon('f_nila', size: 30),
-                    style: _shop
-                        ? PixelButtonStyle.gold
-                        : PixelButtonStyle.wood,
-                    onPressed: () => _set(true),
-                  ),
-                ),
-              ),
-            ],
-          ),
+          child: toggle,
         ),
-        Expanded(
-          child: _shop
-              ? const _FishShop()
-              : _PondView(onShop: () => _set(true)),
-        ),
+        const Expanded(child: _FishShop()),
       ],
     );
   }
 }
 
-class _PondView extends ConsumerStatefulWidget {
-  const _PondView({required this.onShop});
+/// แผ่นรายละเอียด: ดูแลบ่อ (ค่าน้ำทุกค่า + ปริมาณอาหาร + เปลี่ยนน้ำ/เติมอากาศ)
+Future<void> showPondCareSheet(BuildContext context) {
+  return showDetailSheet<void>(
+    context,
+    title: 'ดูแลบ่อ',
+    icon: const PixelIcon('drop', size: 32),
+    builder: (_) => Consumer(
+      builder: (context, ref, _) {
+        final session = ref.watch(gameProvider)!;
+        final e = session.engine;
+        final s = session.state;
+        final ctl = ref.read(gameProvider.notifier);
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _waterPanel(e, s),
+            WoodPanel(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  SectionTitle(
+                    'ให้อาหาร',
+                    icon: const PixelIcon('fry', size: 28),
+                    trailing: s.fed > 0
+                        ? Tag(
+                            'ให้แล้ว',
+                            color: AquaColors.leafLight,
+                            icon: passGlyph(true, size: 12),
+                          )
+                        : Tag('${e.feedUnit} หน่วย/วัน'),
+                  ),
+                  StoryGate(
+                    target: StoryTarget.feed,
+                    child: Row(
+                      children: [
+                        for (final (lv, name) in const [
+                          (1, 'น้อย'),
+                          (2, 'พอดี'),
+                          (3, 'มาก'),
+                        ]) ...[
+                          Expanded(
+                            child: PixelButton(
+                              key: ValueKey('feed-$lv'),
+                              label: name,
+                              style: lv == 2
+                                  ? PixelButtonStyle.gold
+                                  : PixelButtonStyle.water,
+                              below: CoinTag(
+                                e.feedCost(lv),
+                                boxed: true,
+                                size: FontSize.small,
+                              ),
+                              onPressed: s.fed > 0
+                                  ? null
+                                  : () => showResult(
+                                      context,
+                                      ctl.run((e) => e.feed(lv)),
+                                    ),
+                            ),
+                          ),
+                          if (lv < 3) const SizedBox(width: Gap.s),
+                        ],
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: Gap.m),
+                  StoryGate(
+                    target: StoryTarget.water,
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: PixelButton(
+                            key: const ValueKey('change-water'),
+                            label: 'เปลี่ยนน้ำ',
+                            icon: const PixelIcon('drop', size: 22),
+                            style: PixelButtonStyle.water,
+                            below: const CoinTag(
+                              kChangeWaterCost,
+                              boxed: true,
+                              size: FontSize.small,
+                            ),
+                            onPressed: () => showResult(
+                              context,
+                              ctl.run((e) => e.changeWater()),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: Gap.s),
+                        Expanded(
+                          child: PixelButton(
+                            key: const ValueKey('aerate'),
+                            label: 'เติมอากาศ',
+                            icon: const PixelIcon('bub', size: 22),
+                            style: PixelButtonStyle.water,
+                            below: const CoinTag(
+                              kAerateCost,
+                              boxed: true,
+                              size: FontSize.small,
+                            ),
+                            onPressed: () =>
+                                showResult(context, ctl.run((e) => e.aerate())),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
+    ),
+  );
+}
+
+/// แผ่นรายละเอียด: ปลาในบ่อทีละตัว + เหตุผลว่าจับได้หรือยัง
+Future<void> showPondFishSheet(
+  BuildContext context, {
+  required VoidCallback onShop,
+}) {
+  return showDetailSheet<void>(
+    context,
+    title: 'ปลาในบ่อ',
+    icon: const PixelIcon('f_nila', size: 32),
+    builder: (_) => Consumer(
+      builder: (context, ref, _) {
+        final session = ref.watch(gameProvider)!;
+        final e = session.engine;
+        final s = session.state;
+        return WoodPanel(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SectionTitle(
+                'ปลา ${s.pond.length}/$kPondCapacity ตัว',
+                icon: const PixelIcon('f_nila', size: 30),
+              ),
+              Muted(
+                s.pond.isEmpty
+                    ? 'บ่อยังว่าง ซื้อปลาที่ "ร้านปลา" ก่อน'
+                    : e.matureCount == 0
+                    ? 'ยังจับไม่ได้: ปลาโตสุด ${e.maxPondGrowth}% (จับได้เมื่อโตครบ 100%)'
+                    : 'จับปลาที่โตครบ ${e.matureCount} ตัว ไปเก็บในคลังเพื่อทำอาหาร',
+                key: const ValueKey('catch-info'),
+                size: FontSize.body,
+              ),
+              const SizedBox(height: Gap.s),
+              if (s.pond.isEmpty)
+                PixelButton(
+                  key: const ValueKey('go-shop'),
+                  label: 'ไปร้านปลา',
+                  icon: const PixelIcon('f_nila', size: 28),
+                  expand: true,
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    onShop();
+                  },
+                )
+              else
+                _FishCards(fish: s.pond, fed: s.fed),
+            ],
+          ),
+        );
+      },
+    ),
+  );
+}
+
+/// ค่าน้ำทุกค่า (ใช้ในแผ่น "ดูแลบ่อ")
+Widget _waterPanel(GameEngine e, GameState s) {
+  final ws = e.pondStatus;
+  final wc = Color(ws.color);
+  final advice = e.waterAdvice;
+  return WoodPanel(
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SectionTitle(
+          'คุณภาพน้ำ',
+          icon: const PixelIcon('drop', size: 28),
+          trailing: Tag(
+            '${ws.label} ${s.water}%',
+            color: wc,
+            textColor: AquaColors.ink,
+          ),
+        ),
+        PixelBar(value: s.water, color: wc, height: 22),
+        const SizedBox(height: Gap.m),
+        GridView.count(
+          crossAxisCount: 3,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          mainAxisSpacing: Gap.s,
+          crossAxisSpacing: Gap.s,
+          childAspectRatio: 1.25,
+          children: [
+            _Gauge(
+              'แอมโมเนีย',
+              s.ammonia.toStringAsFixed(2),
+              'ppm',
+              level: e.ammoniaLevel,
+              help: 'ของเสียจากปลาและเศษอาหาร (NH3) ยิ่งต่ำยิ่งดี',
+            ),
+            _Gauge(
+              'ไนไตรต์',
+              s.nitrite.toStringAsFixed(2),
+              'ppm',
+              level: e.nitriteLevel,
+              help: 'ของเสียที่ตัวกรองย่อยมาครึ่งทาง (NO2) ยิ่งต่ำยิ่งดี',
+            ),
+            _Gauge(
+              'ไนเตรต',
+              s.nitrate.toStringAsFixed(1),
+              'ppm',
+              level: e.nitrateLevel,
+              help: 'ของเสียที่ย่อยแล้ว (NO3) อันตรายน้อย แต่สะสมได้ เปลี่ยนน้ำเพื่อลด',
+            ),
+            _Gauge(
+              'อุณหภูมิ',
+              s.temp.toStringAsFixed(1),
+              '°C',
+              level: e.tempLevel,
+              help: 'น้ำเกิน 31°C ปลาเริ่มเครียด',
+              icon: const PixelGlyph(
+                Glyph.sun,
+                size: 14,
+                color: AquaColors.gold,
+              ),
+            ),
+            _Gauge(
+              'ออกซิเจน',
+              _num(s.o2),
+              '%',
+              level: e.o2Level,
+              help: s.pond.isEmpty
+                  ? 'ออกซิเจนในน้ำ ลดลงทุกคืนตามจำนวนปลา'
+                  : 'ปลาในบ่อต้องการอย่างน้อย ${e.pondO2Need}% ต่ำกว่านี้ปลาเสียสุขภาพ',
+              icon: const PixelIcon('bub', size: 16),
+            ),
+            _Gauge(
+              'ตัวกรอง',
+              '${s.bio}',
+              '%',
+              help: 'ตัวกรองชีวภาพ: แบคทีเรียช่วยย่อยของเสีย โตขึ้นเองทุกวันที่มีปลา',
+              icon: const PixelIcon('filt', size: 16),
+            ),
+          ],
+        ),
+        if (advice != null) ...[
+          const SizedBox(height: Gap.s),
+          PaperCard(
+            key: const ValueKey('water-advice'),
+            fill: AquaColors.goldPale,
+            padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
+            child: Text(
+              advice,
+              style: const TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: FontSize.body,
+                color: AquaColors.text,
+              ),
+            ),
+          ),
+        ],
+        const SizedBox(height: Gap.xs),
+        const Muted(
+          'แตะค้างที่การ์ดเพื่อดูคำอธิบาย · สีเหลือง = เริ่มแย่ · สีแดง = อันตราย',
+          size: 13,
+          align: TextAlign.center,
+        ),
+        const SizedBox(height: Gap.xs),
+        const Muted(
+          'ค่าน้ำเป็นแบบจำลองเพื่อการเรียนรู้ ไม่ใช่คำแนะนำการเลี้ยงจริง',
+          size: 13,
+          align: TextAlign.center,
+        ),
+      ],
+    ),
+  );
+}
+
+/// หน้า "บ่อปลา": ฉากบ่อเต็มจอ (วาดเป็นพื้นหลังของหน้าเกม) + ป้ายน้ำ/ปลา + ถาดปุ่ม
+/// รายละเอียดค่าน้ำและการ์ดปลาเปิดเป็นแผ่นด้านล่าง
+class _PondView extends ConsumerWidget {
+  const _PondView({required this.shopButton, required this.onShop});
+
+  /// ปุ่มไปร้านปลา
+  final Widget shopButton;
 
   /// ไปหน้าร้านปลา (ตอนบ่อว่าง)
   final VoidCallback onShop;
 
   @override
-  ConsumerState<_PondView> createState() => _PondViewState();
-}
-
-class _PondViewState extends ConsumerState<_PondView> {
-  /// สถานะการว่ายของปลา — อยู่ตลอดอายุหน้าบ่อ (ปลาจำตำแหน่งตัวเองไว้)
-  final _swim = PondSwim();
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final session = ref.watch(gameProvider)!;
     final e = session.engine;
     final s = session.state;
     final ctl = ref.read(gameProvider.notifier);
+    final target = e.tutorialStep?.target;
+    final story = watchStory(ref);
+    final storyNext = story == null
+        ? null
+        : Story.nextTarget(story.$1, story.$2);
     final ws = e.pondStatus;
     final wc = Color(ws.color);
-    final fu = e.feedUnit;
-    final scene = PondSceneData.fromState(s);
-    final advice = e.waterAdvice;
+    final danger = ws == WaterStatus.critical;
+    final empty = s.pond.isEmpty;
+    // จอเตี้ย (มือถือแนวนอน): ป้ายเป็นปุ่มกลมเล็ก ให้ฉากเหลือมากพอ
+    final short = ScenePage.short(context);
+    final sick = s.pond.where(fishSick).length;
 
-    final isStory = watchStory(ref) != null;
-    // ฉากบ่อใต้น้ำ + ป้ายจำนวนปลา/คุณภาพน้ำ
-    final sceneView = Padding(
-      padding: const EdgeInsets.only(bottom: Gap.m),
-      child: PixelScene(
-        painterBuilder: (t) => PondPainter(t, scene, _swim),
-        overlay: Padding(
-          padding: const EdgeInsets.all(8),
-          child: Align(
-            alignment: Alignment.topLeft,
-            child: Tag(
-              '${s.pond.length}/$kPondCapacity',
-              color: AquaColors.paper,
-              icon: const PixelIcon('f_nila', size: 22),
+    final water = Spotlight(
+      // บทเรียน "ดูการ์ดค่าน้ำ" (หลังให้อาหารแล้ว) · เนื้อเรื่อง "ดูแลน้ำ"
+      on:
+          (target == TutorialTarget.pond && s.fed > 0) ||
+          storyNext == StoryTarget.water,
+      child: short
+          ? RoundAction(
+              key: const ValueKey('pond-water'),
+              icon: const PixelIcon('drop', size: 30),
+              label: 'น้ำ${waterWord(ws)}',
+              labelOnScene: true,
+              diameter: 52,
+              color: wc,
+              tooltip: 'คุณภาพน้ำ ${waterWord(ws)} แตะเพื่อดูค่าน้ำ',
+              onPressed: () => showPondCareSheet(context),
+            )
+          : SceneChip(
+              key: const ValueKey('pond-water'),
+              color: danger ? const Color(0xE6B42318) : DsColors.glass,
+              icon: const PixelIcon('drop', size: 32),
+              text: 'น้ำ${waterWord(ws)}',
+              semanticLabel: 'คุณภาพน้ำ ${waterWord(ws)} แตะเพื่อดูค่าน้ำ',
+              below: Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: PixelBar(value: s.water, color: wc, height: 10),
+              ),
+              onTap: () => showPondCareSheet(context),
             ),
+    );
+
+    final note = [
+      if (sick > 0) 'ป่วย $sick',
+      if (!empty && s.fed == 0) 'หิว',
+      if (e.matureCount > 0) 'พร้อมจับ ${e.matureCount}',
+    ].join(' · ');
+    final Widget fish = short
+        ? RoundAction(
+            key: const ValueKey('pond-fish'),
+            icon: const PixelIcon('f_nila', size: 32),
+            label: 'ปลา ${s.pond.length}/$kPondCapacity',
+            labelOnScene: true,
+            diameter: 52,
+            color: sick > 0 ? const Color(0xFFFFB4A8) : DsColors.surface,
+            tooltip: 'ปลาในบ่อ ${s.pond.length} ตัว $note แตะเพื่อดูปลา',
+            onPressed: () => showPondFishSheet(context, onShop: onShop),
+          )
+        : SceneChip(
+            key: const ValueKey('pond-fish'),
+            color: sick > 0 ? const Color(0xE6B42318) : DsColors.glass,
+            icon: const PixelIcon('f_nila', size: 32),
+            text: 'ปลา ${s.pond.length}/$kPondCapacity',
+            semanticLabel: 'ปลาในบ่อ ${s.pond.length} ตัว $note แตะเพื่อดูปลา',
+            below: note.isEmpty
+                ? null
+                : Text(
+                    note,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: glassText(color: const Color(0xFFFFE7A8)),
+                  ),
+            onTap: () => showPondFishSheet(context, onShop: onShop),
+          );
+
+    // ปุ่มหลัก: บ่อว่าง → ไปร้านปลา · มีปลา → ให้อาหาร "พอดี" (เลือกปริมาณอื่นในแผ่นดูแลบ่อ)
+    final Widget primary;
+    if (empty) {
+      primary = PixelButton(
+        key: const ValueKey('go-shop'),
+        label: 'ไปร้านปลา',
+        size: short ? PixelButtonSize.normal : PixelButtonSize.large,
+        icon: const PixelIcon('f_nila', size: 32),
+        below: short ? null : _belowText('บ่อยังว่าง'),
+        expand: true,
+        onPressed: onShop,
+      );
+    } else {
+      final fed = s.fed > 0;
+      primary = Spotlight(
+        on: target == TutorialTarget.pond && !fed,
+        child: StoryGate(
+          target: StoryTarget.feed,
+          child: PixelButton(
+            key: const ValueKey('feed-main'),
+            label: fed ? 'ให้อาหารแล้ว' : (short ? 'ให้อาหารพอดี' : 'ให้อาหาร'),
+            size: short ? PixelButtonSize.normal : PixelButtonSize.large,
+            icon: const PixelIcon('fry', size: 32),
+            // จอเตี้ย: ราคาอยู่ท้ายปุ่มบรรทัดเดียว (ปุ่มเตี้ยลง เห็นฉากมากขึ้น)
+            trailing: short && !fed
+                ? CoinTag(e.feedCost(2), boxed: true, size: FontSize.small)
+                : null,
+            below: short
+                ? null
+                : fed
+                ? _belowText('พรุ่งนี้ให้อีกครั้ง')
+                : Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _belowText('พอดี'),
+                      const SizedBox(width: 6),
+                      CoinTag(e.feedCost(2), boxed: true, size: FontSize.small),
+                    ],
+                  ),
+            tooltip: 'ให้อาหารปลาปริมาณพอดี',
+            expand: true,
+            onPressed: fed
+                ? null
+                : () => showResult(context, ctl.run((e) => e.feed(2))),
           ),
         ),
-      ),
-    );
-    final waterPanel = WoodPanel(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          SectionTitle(
-            'คุณภาพน้ำ',
-            icon: const PixelIcon('drop', size: 28),
-            trailing: Tag(
-              '${ws.label} ${s.water}%',
-              color: wc,
-              textColor: AquaColors.ink,
-            ),
-          ),
-          PixelBar(value: s.water, color: wc, height: 22),
-          const SizedBox(height: Gap.m),
-          GridView.count(
-            crossAxisCount: 3,
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            mainAxisSpacing: Gap.s,
-            crossAxisSpacing: Gap.s,
-            childAspectRatio: 1.25,
-            children: [
-              _Gauge(
-                'แอมโมเนีย',
-                s.ammonia.toStringAsFixed(2),
-                'ppm',
-                level: e.ammoniaLevel,
-                help: 'ของเสียจากปลาและเศษอาหาร (NH3) ยิ่งต่ำยิ่งดี',
-              ),
-              _Gauge(
-                'ไนไตรต์',
-                s.nitrite.toStringAsFixed(2),
-                'ppm',
-                level: e.nitriteLevel,
-                help: 'ของเสียที่ตัวกรองย่อยมาครึ่งทาง (NO2) ยิ่งต่ำยิ่งดี',
-              ),
-              _Gauge(
-                'ไนเตรต',
-                s.nitrate.toStringAsFixed(1),
-                'ppm',
-                level: e.nitrateLevel,
-                help: 'ของเสียที่ย่อยแล้ว (NO3) อันตรายน้อย แต่สะสมได้ เปลี่ยนน้ำเพื่อลด',
-              ),
-              _Gauge(
-                'อุณหภูมิ',
-                s.temp.toStringAsFixed(1),
-                '°C',
-                level: e.tempLevel,
-                help: 'น้ำเกิน 31°C ปลาเริ่มเครียด',
-                icon: const PixelGlyph(
-                  Glyph.sun,
-                  size: 14,
-                  color: AquaColors.gold,
-                ),
-              ),
-              _Gauge(
-                'ออกซิเจน',
-                _num(s.o2),
-                '%',
-                level: e.o2Level,
-                help: s.pond.isEmpty
-                    ? 'ออกซิเจนในน้ำ ลดลงทุกคืนตามจำนวนปลา'
-                    : 'ปลาในบ่อต้องการอย่างน้อย ${e.pondO2Need}% ต่ำกว่านี้ปลาเสียสุขภาพ',
-                icon: const PixelIcon('bub', size: 16),
-              ),
-              _Gauge(
-                'ตัวกรอง',
-                '${s.bio}',
-                '%',
-                help: 'ตัวกรองชีวภาพ: แบคทีเรียช่วยย่อยของเสีย โตขึ้นเองทุกวันที่มีปลา',
-                icon: const PixelIcon('filt', size: 16),
-              ),
-            ],
-          ),
-          if (advice != null) ...[
-            const SizedBox(height: Gap.s),
-            PaperCard(
-              key: const ValueKey('water-advice'),
-              fill: AquaColors.goldPale,
-              padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
-              child: Text(
-                advice,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: FontSize.body,
-                  color: AquaColors.text,
-                ),
-              ),
-            ),
-          ],
-          const SizedBox(height: Gap.xs),
-          const Muted(
-            'แตะค้างที่การ์ดเพื่อดูคำอธิบาย · สีเหลือง = เริ่มแย่ · สีแดง = อันตราย',
-            size: 13,
-            align: TextAlign.center,
-          ),
-          const SizedBox(height: Gap.xs),
-          const Muted(
-            'ค่าน้ำเป็นแบบจำลองเพื่อการเรียนรู้ ไม่ใช่คำแนะนำการเลี้ยงจริง',
-            size: 13,
-            align: TextAlign.center,
-          ),
-        ],
-      ),
-    );
-    // ---------- ให้อาหาร (งานหลักของบ่อ) ----------
-    final feedTitle = SectionTitle(
-      'ให้อาหาร',
-      icon: const PixelIcon('fry', size: 28),
-      trailing: s.fed > 0
-          ? Tag(
-              'ให้แล้ว',
-              color: AquaColors.leafLight,
-              icon: passGlyph(true, size: 12),
-            )
-          : Tag('$fu หน่วย/วัน'),
-    );
-    final feedRow = StoryGate(
-      target: StoryTarget.feed,
-      child: Row(
-        children: [
-          for (final (lv, name) in const [
-            (1, 'น้อย'),
-            (2, 'พอดี'),
-            (3, 'มาก'),
-          ]) ...[
-            Expanded(
-              child: PixelButton(
-                label: name,
-                style: lv == 2
-                    ? PixelButtonStyle.green
-                    : PixelButtonStyle.water,
-                below: CoinTag(
-                  e.feedCost(lv),
-                  boxed: true,
-                  size: FontSize.small,
-                ),
-                onPressed: s.fed > 0
-                    ? null
-                    : () => showResult(context, ctl.run((e) => e.feed(lv))),
-              ),
-            ),
-            if (lv < 3) const SizedBox(width: Gap.s),
-          ],
-        ],
-      ),
-    );
-    final carePanel = WoodPanel(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // โหมดเอาชีวิตรอด: ปุ่มให้อาหารปักไว้แถบล่าง (ไม่ต้องเลื่อนหา)
-          if (isStory) ...[
-            feedTitle,
-            feedRow,
-          ] else
-            const SectionTitle('ดูแลบ่อ', icon: PixelIcon('drop', size: 28)),
-          const SizedBox(height: Gap.m),
-          StoryGate(
-            target: StoryTarget.water,
-            child: Row(
-              children: [
-                Expanded(
-                  child: PixelButton(
-                    label: 'เปลี่ยนน้ำ',
-                    icon: const PixelIcon('drop', size: 22),
-                    style: PixelButtonStyle.water,
-                    below: const CoinTag(
-                      kChangeWaterCost,
-                      boxed: true,
-                      size: FontSize.small,
-                    ),
-                    onPressed: () =>
-                        showResult(context, ctl.run((e) => e.changeWater())),
-                  ),
-                ),
-                const SizedBox(width: Gap.s),
-                Expanded(
-                  child: PixelButton(
-                    label: 'เติมอากาศ',
-                    icon: const PixelIcon('bub', size: 22),
-                    style: PixelButtonStyle.water,
-                    below: const CoinTag(
-                      kAerateCost,
-                      boxed: true,
-                      size: FontSize.small,
-                    ),
-                    onPressed: () =>
-                        showResult(context, ctl.run((e) => e.aerate())),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          StoryGate(
-            target: StoryTarget.catchFish,
-            hide: true,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const SizedBox(height: Gap.m),
-                PixelButton(
-                  label: 'จับปลา',
-                  icon: const PixelIcon('net', size: 28),
-                  trailing: Tag(
-                    '${e.matureCount}',
-                    color: AquaColors.paper,
-                    icon: const PixelIcon('f_nila', size: 20),
-                  ),
-                  tooltip: 'ปลาที่โตพอจับ ${e.matureCount} ตัว',
-                  expand: true,
-                  onPressed: () =>
-                      showResult(context, ctl.run((e) => e.catchFish())),
-                ),
-                const SizedBox(height: Gap.xs),
-                Muted(
-                  s.pond.isEmpty
-                      ? 'บ่อยังว่าง ซื้อปลาที่ "ร้านปลา" ก่อน'
-                      : e.matureCount == 0
-                      ? 'ยังจับไม่ได้: ปลาโตสุด ${e.maxPondGrowth}% (จับได้เมื่อโตครบ 100%)'
-                      : 'จับปลาที่โตครบ ${e.matureCount} ตัว ไปเก็บในคลังเพื่อทำอาหาร',
-                  key: const ValueKey('catch-info'),
-                  size: 13,
-                  align: TextAlign.center,
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-    final fishPanel = WoodPanel(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          SectionTitle(
-            'ปลาในบ่อ',
-            icon: const PixelIcon('f_nila', size: 30),
-            trailing: Tag('${s.pond.length}/$kPondCapacity'),
-          ),
-          if (s.pond.isEmpty) ...[
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: Gap.s),
-              child: Muted(
-                'ยังไม่มีปลา ไปซื้อที่ร้านปลา',
-                size: FontSize.body,
-                align: TextAlign.center,
-              ),
-            ),
-            PixelButton(
-              key: const ValueKey('go-shop'),
-              label: 'ไปร้านปลา',
-              icon: const PixelIcon('f_nila', size: 28),
-              expand: true,
-              onPressed: widget.onShop,
-            ),
-          ],
-          if (s.pond.isNotEmpty) _FishCards(fish: s.pond, fed: s.fed),
-        ],
-      ),
-    );
-
-    final list = TabScroll(
-      header: isStory ? 0 : 1,
-      // เนื้อเรื่อง: ปุ่มดูแลบ่ออยู่บนสุด ไม่ต้องเลื่อนหา
-      children: isStory
-          ? [carePanel, waterPanel, sceneView, fishPanel]
-          : [sceneView, waterPanel, carePanel, fishPanel],
-    );
-    if (isStory) return list;
-    // แนวนอน (ฉาก | แผงควบคุม): จอเตี้ย ปักแถบล่างแล้วรายการแทบไม่เหลือที่
-    // → ให้อาหารอยู่บนสุดของฝั่งขวาแทน (เห็นทันทีโดยไม่ต้องเลื่อน)
-    if (context.rs.useSplit) {
-      return TabScroll(
-        header: 1,
-        children: [
-          sceneView,
-          TipSpot(
-            screen: GameScreen.pond,
-            child: WoodPanel(
-              key: const ValueKey('primary-pond'),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [feedTitle, feedRow],
-              ),
-            ),
-          ),
-          waterPanel,
-          carePanel,
-          fishPanel,
-        ],
       );
     }
-    return Column(
-      children: [
-        Expanded(child: list),
-        TipSpot(
-          screen: GameScreen.pond,
-          child: ActionDock(
-            key: const ValueKey('primary-pond'),
-            children: [feedTitle, feedRow],
-          ),
+
+    final tray = ActionTray(
+      leading: shopButton,
+      primary: TipSpot(
+        screen: GameScreen.pond,
+        child: KeyedSubtree(
+          key: const ValueKey('primary-pond'),
+          child: primary,
         ),
-      ],
+      ),
+      trailing: StoryGate(
+        target: StoryTarget.catchFish,
+        hide: true,
+        child: RoundAction(
+          key: const ValueKey('pond-catch'),
+          icon: const PixelIcon('net', size: 32),
+          label: 'จับปลา',
+          labelOnScene: true,
+          diameter: short ? 52 : 60,
+          color: e.matureCount > 0 ? DsColors.accent : DsColors.surface,
+          tooltip: 'ปลาที่โตพอจับ ${e.matureCount} ตัว',
+          onPressed: () => showResult(context, ctl.run((e) => e.catchFish())),
+        ),
+      ),
+    );
+
+    final column = Padding(
+      padding: const EdgeInsets.all(Gap.s),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (short)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                water,
+                const SizedBox(width: Gap.s),
+                fish,
+              ],
+            )
+          else
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: water),
+                const SizedBox(width: Gap.s),
+                Expanded(child: fish),
+              ],
+            ),
+          const Spacer(),
+          tray,
+        ],
+      ),
+    );
+    if (!context.rs.useSideNav) return column;
+    return Align(
+      alignment: Alignment.centerRight,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 460),
+        child: column,
+      ),
     );
   }
 }
+
+Widget _belowText(String t) => Text(
+  t,
+  style: TextStyle(
+    fontSize: 15,
+    fontWeight: FontWeight.w700,
+    color: DsColors.onAccent.withValues(alpha: .85),
+  ),
+);
 
 String _num(double v) =>
     v == v.roundToDouble() ? v.toInt().toString() : v.toStringAsFixed(1);
@@ -507,7 +691,7 @@ class _Gauge extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
-                          fontSize: 12,
+                          fontSize: 13,
                           color: AquaColors.textSoft,
                           fontWeight: FontWeight.w700,
                         ),
@@ -531,7 +715,7 @@ class _Gauge extends StatelessWidget {
                         TextSpan(
                           text: ' $unit',
                           style: const TextStyle(
-                            fontSize: 12,
+                            fontSize: 13,
                             color: AquaColors.textSoft,
                           ),
                         ),
@@ -544,7 +728,7 @@ class _Gauge extends StatelessWidget {
                     status,
                     maxLines: 1,
                     style: TextStyle(
-                      fontSize: 11,
+                      fontSize: 13,
                       height: 1.1,
                       color: color,
                       fontWeight: FontWeight.w700,
@@ -783,7 +967,7 @@ class _Meter extends StatelessWidget {
                 text,
                 maxLines: 1,
                 style: TextStyle(
-                  fontSize: 12,
+                  fontSize: 13,
                   fontWeight: FontWeight.w700,
                   color: bad ? AquaColors.bad : AquaColors.text,
                 ),

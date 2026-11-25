@@ -1,59 +1,66 @@
 import 'package:material_ui/material_ui.dart';
 
-/// ชุดสีกลาง: ฟาร์มพิกเซลโทนธรรมชาติ (เขียว ฟ้าน้ำ ไม้ ครีม) และสีทองเป็นจุดเด่น
-/// สีไม้/ทอง/น้ำ ส่วนใหญ่มาจากฉากในต้นแบบ (reference/index.html)
+import '../design/design_system.dart';
+
+/// ชื่อสีเดิมของเกม ผูกกับโทเคนของระบบดีไซน์กลาง ([DsColors]) ทั้งหมด
+/// สีมีความหมายเดียวกันทั้งแอป: หลัก (ฟ้า-เขียวน้ำทะเล) / เน้น (เหลืองส้ม) / เตือน (แดง) / สำเร็จ (เขียว)
+///
+/// - [paper] = สีตัวอักษร/ไอคอน "บนพื้นสีเข้ม" (แถบบน เมนู ปุ่มสีทึบ) และพื้นการ์ดสีขาว
+/// - [wood]… = พื้นแถบหลัก (สีหลักเข้ม) ไม่ใช่ลายไม้แล้ว
 abstract final class AquaColors {
-  // เส้นขอบและตัวอักษรเข้ม (น้ำตาลเข้ม ไม่ใช่ดำล้วน ให้ภาพนุ่มตา)
-  static const ink = Color(0xFF2A1C12);
-  static const inkSoft = Color(0xFF4A3322);
+  // ตัวอักษรเข้ม / เส้นขอบ
+  static const ink = DsColors.text;
+  static const inkSoft = DsColors.textMuted;
 
-  // ไม้
-  static const woodDark = Color(0xFF5E3B26);
-  static const wood = Color(0xFF8A5A3A);
-  static const woodLight = Color(0xFFA8714A);
-  static const woodHi = Color(0xFFC9985E);
+  // แถบหลัก (เดิมเป็นไม้)
+  static const woodDark = DsColors.primaryDark;
+  static const wood = DsColors.primary;
+  static const woodLight = DsColors.primary;
+  static const woodHi = DsColors.primarySoft;
 
-  // ครีม / กระดาษ
-  static const cream = Color(0xFFF6E8C6);
-  static const creamDark = Color(0xFFE2CB98);
-  static const paper = Color(0xFFFFF7E2);
+  // พื้นการ์ด
+  static const cream = DsColors.surface;
+  static const creamDark = DsColors.primarySoft;
+  static const paper = DsColors.surface;
 
-  // เขียว
-  static const grass = Color(0xFF65A30D);
-  static const grassLight = Color(0xFF8BC34A);
-  static const grassDark = Color(0xFF3D6B22);
-  static const leaf = Color(0xFF2F7D3A);
-  static const leafLight = Color(0xFF5DB857);
-  static const bgGreen = Color(0xFF34603A);
-  static const bgGreenDot = Color(0xFF3B6B40);
-  static const bgGreenDeep = Color(0xFF244A2C);
+  // เขียว = สำเร็จ
+  static const grass = DsColors.success;
+  static const grassLight = Color(0xFF6CC48F);
+  static const grassDark = Color(0xFF1F7A45);
+  static const leaf = DsColors.success;
+  static const leafLight = Color(0xFF6CC48F);
 
-  // ฟ้าน้ำ
-  static const water = Color(0xFF0E7490);
-  static const waterLight = Color(0xFF38BDF8);
-  static const waterDeep = Color(0xFF164E63);
-  static const foam = Color(0xFFA5DDF5);
+  // พื้นหลังหน้า
+  static const bgGreen = DsColors.background;
+  static const bgGreenDot = DsColors.border;
+  static const bgGreenDeep = DsColors.background;
 
-  // ทอง (จุดเด่น)
-  static const gold = Color(0xFFE9B949);
-  static const goldLight = Color(0xFFFFE08A);
-  static const goldPale = Color(0xFFFFF3C4);
-  static const goldDark = Color(0xFFB98A25);
+  // ฟ้าน้ำ = สีหลัก
+  static const water = DsColors.primary;
+  static const waterLight = Color(0xFF5FB8AF);
+  static const waterDeep = DsColors.primaryDark;
+  static const foam = DsColors.primarySoft;
 
-  // แดง (เตือนภัย / ลบ)
-  static const red = Color(0xFFE0584D);
-  static const redDark = Color(0xFF9A3027);
-  static const redPale = Color(0xFFFFE1DC);
+  // เน้น (เหลืองส้ม)
+  static const gold = DsColors.accent;
+  static const goldLight = Color(0xFFFCD27A);
+  static const goldPale = DsColors.accentSoft;
+  static const goldDark = DsColors.accentDark;
 
-  // ตัวอักษรบนพื้นครีม
-  static const text = Color(0xFF3B2614);
-  static const textSoft = Color(0xFF7A5A3E);
-  static const ok = Color(0xFF2F7D3A);
-  static const bad = Color(0xFFC0392B);
+  // เตือน
+  static const red = DsColors.danger;
+  static const redDark = Color(0xFFA83232);
+  static const redPale = DsColors.dangerSoft;
 
-  // ค่าสถานะ
-  static const hunger = Color(0xFFE9B949);
-  static const energy = Color(0xFF65A30D);
-  static const health = Color(0xFFE0584D);
-  static const joy = Color(0xFF38BDF8);
+  // ตัวอักษรบนพื้นสว่าง
+  static const text = DsColors.text;
+  static const textSoft = DsColors.textMuted;
+  static const ok = DsColors.success;
+  static const bad = DsColors.danger;
+
+  // ค่าสถานะ (ไอคอนในแถบบนกำกับความหมายอยู่แล้ว ใช้สีชุดเดียวกัน)
+  static const hunger = DsColors.accent;
+  static const energy = DsColors.success;
+  static const health = DsColors.danger;
+  static const joy = DsColors.primary;
 }

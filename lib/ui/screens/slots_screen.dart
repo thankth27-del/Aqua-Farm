@@ -218,7 +218,7 @@ class _SlotCard extends StatelessWidget {
                 size: 20,
                 color: AquaColors.paper,
               ),
-              style: PixelButtonStyle.green,
+              style: PixelButtonStyle.water,
               expand: true,
               onPressed: onNew,
             )

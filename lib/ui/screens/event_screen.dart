@@ -88,7 +88,6 @@ class _EventScreenState extends ConsumerState<EventScreen>
               const SizedBox(height: Gap.m),
               PixelButton(
                 label: 'ดูรายงานทันที',
-                style: PixelButtonStyle.green,
                 size: PixelButtonSize.large,
                 expand: true,
                 onPressed: _toReport,

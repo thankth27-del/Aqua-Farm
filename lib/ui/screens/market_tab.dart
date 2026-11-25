@@ -9,36 +9,190 @@ import '../../data/ingredients.dart';
 import '../../game/game_engine.dart';
 import '../../game/story.dart';
 import '../../game/tutorial.dart';
+import '../design/design_system.dart' show DsColors;
 import '../dialogs.dart';
-import '../layout/responsive.dart';
 import '../providers.dart';
 import '../scenes/pixel_scene.dart';
+import '../scenes/room_scenes.dart';
 import '../theme/theme.dart';
 import '../widgets/equipment_row.dart';
+import '../widgets/game_hud.dart';
 import '../widgets/story_gate.dart';
-import '../widgets/sub_tabs.dart';
 import '../widgets/guide_bars.dart';
 
-/// แท็บ "ตลาด" (market ในต้นแบบ): ซื้อวัตถุดิบ ขายปลาในคลัง ขายอาหาร ซื้ออุปกรณ์ครัว
-/// ทุกการซื้อขายต้องผ่านหน้ายืนยัน · ตลาดปิดตอนเกิดภัย (ซื้อขายไม่ได้)
-class MarketTab extends ConsumerStatefulWidget {
-  const MarketTab({super.key});
+/// ฉากตลาดเต็มจอ (พื้นหลังของหน้าตลาด) — ตลาดปิดแล้วแผงลอยลงม่านเหล็ก
+class MarketBackdrop extends ConsumerWidget {
+  const MarketBackdrop({super.key});
 
   @override
-  ConsumerState<MarketTab> createState() => _MarketTabState();
+  Widget build(BuildContext context, WidgetRef ref) {
+    final closed = ref.watch(gameProvider)!.state.marketClosed;
+    return PixelScene(
+      key: const ValueKey('market-backdrop'),
+      backdrop: true,
+      framed: false,
+      focus: const Offset(.5, .55),
+      painterBuilder: (t) => MarketPainter(t, closed: closed),
+    );
+  }
+}
+
+/// แผ่นรายละเอียดของตลาด: ซื้อวัตถุดิบ · ขาย (ปลา อาหาร) · อุปกรณ์ครัว
+enum MarketSheet { buy, sell, tools }
+
+Future<void> showMarketSheet(BuildContext context, MarketSheet kind) {
+  final (title, icon) = switch (kind) {
+    MarketSheet.buy => ('ซื้อวัตถุดิบ', 'veg'),
+    MarketSheet.sell => ('ขายของ', 'coin'),
+    MarketSheet.tools => ('อุปกรณ์ครัว', 'fridge'),
+  };
+  return showDetailSheet<void>(
+    context,
+    title: title,
+    icon: PixelIcon(icon, size: 32),
+    builder: (_) => _MarketSheetBody(kind),
+  );
+}
+
+/// แท็บ "ตลาด" (market ในต้นแบบ): ซื้อวัตถุดิบ ขายปลาในคลัง ขายอาหาร ซื้ออุปกรณ์ครัว
+/// หน้าหลักเป็นฉากตลาด + ถาดปุ่ม · รายการซื้อขายเปิดเป็นแผ่นด้านล่าง
+/// ทุกการซื้อขายต้องผ่านหน้ายืนยัน · ตลาดปิดตอนเกิดภัย (ซื้อขายไม่ได้)
+class MarketTab extends ConsumerWidget {
+  const MarketTab({super.key});
 
   /// อุปกรณ์ครัวที่ขายในตลาด (ตามต้นแบบ: rack, jar, fridge, canner)
   static final kitchenEquipment = [
     for (final id in kKitchenEquipmentOrder) kEquipment[id]!,
   ];
-}
-
-class _MarketTabState extends ConsumerState<MarketTab> {
-  /// แท็บย่อย: false = ซื้อ (วัตถุดิบ อุปกรณ์) · true = ขาย (ปลา อาหาร)
-  bool _sell = false;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final session = ref.watch(gameProvider)!;
+    final e = session.engine;
+    final s = session.state;
+    final closed = s.marketClosed;
+    final story = watchStory(ref);
+    final next = story == null ? null : Story.nextTarget(story.$1, story.$2);
+    bool allows(StoryTarget t) =>
+        story == null || Story.allows(story.$1, story.$2, t);
+    final canSell =
+        allows(StoryTarget.sellFish) || allows(StoryTarget.sellFood);
+
+    final food = s.stock.fold<int>(0, (n, b) => n + b.qty);
+    final sellable = e.fishTotal + food;
+    // ราคาวันนี้เทียบเมื่อวาน (ไม่มีตัวเลขราคา บอกแค่ทิศทาง)
+    var cheaper = 0, dearer = 0;
+    for (final g in kIngredients.values) {
+      final p = s.prices[g.id] ?? g.basePrice;
+      final y = s.prevPrices[g.id] ?? p;
+      if (p < y) cheaper++;
+      if (p > y) dearer++;
+    }
+
+    final chips = <Widget>[
+      if (closed)
+        SceneChip(
+          key: const ValueKey('market-closed-chip'),
+          color: const Color(0xE6B42318),
+          icon: const PixelIcon('warn', size: 32),
+          text: 'ตลาดปิดชั่วคราว',
+          below: Text('ซื้อขายไม่ได้', style: glassText()),
+          onTap: () => showMarketSheet(context, MarketSheet.buy),
+        )
+      else
+        SceneChip(
+          key: const ValueKey('market-prices'),
+          icon: const PixelIcon('veg', size: 32),
+          text: 'ราคาวันนี้',
+          below: Text(
+            cheaper + dearer == 0
+                ? 'เท่าเมื่อวาน'
+                : 'ถูกลง $cheaper · แพงขึ้น $dearer',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: glassText(color: const Color(0xFFFFE7A8)),
+          ),
+          onTap: () => showMarketSheet(context, MarketSheet.buy),
+        ),
+      if (sellable > 0 && canSell)
+        SceneChip(
+          key: const ValueKey('market-sellable'),
+          icon: const PixelIcon('coin', size: 32),
+          text: 'ขายได้',
+          below: Text(
+            [
+              if (e.fishTotal > 0) 'ปลา ${e.fishTotal}',
+              if (food > 0) 'อาหาร $food',
+            ].join(' · '),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: glassText(color: const Color(0xFFFFE7A8)),
+          ),
+          onTap: () => showMarketSheet(context, MarketSheet.sell),
+        ),
+    ];
+
+    final round = ScenePage.round(context);
+    final tray = ActionTray(
+      leading: Spotlight(
+        on: next == StoryTarget.sellFish || next == StoryTarget.sellFood,
+        child: RoundAction(
+          key: const ValueKey('market-sell'),
+          icon: const PixelIcon('coin', size: 32),
+          label: 'ขาย',
+          labelOnScene: true,
+          diameter: round,
+          color: sellable > 0 ? DsColors.accent : DsColors.surface,
+          tooltip: 'ขายปลาและอาหาร',
+          onPressed: canSell
+              ? () => showMarketSheet(context, MarketSheet.sell)
+              : null,
+        ),
+      ),
+      primary: TipSpot(
+        screen: GameScreen.market,
+        child: Spotlight(
+          on: next == StoryTarget.buyIngredient,
+          child: KeyedSubtree(
+            key: const ValueKey('primary-market'),
+            child: TrayPrimary(
+              key: const ValueKey('market-buy'),
+              label: closed ? 'ตลาดปิด' : 'ซื้อวัตถุดิบ',
+              icon: const PixelIcon('garlic', size: 32),
+              note: closed ? 'ใช้เสบียงที่เตรียมไว้' : 'ราคาเปลี่ยนทุกวัน',
+              onPressed: allows(StoryTarget.buyIngredient)
+                  ? () => showMarketSheet(context, MarketSheet.buy)
+                  : null,
+            ),
+          ),
+        ),
+      ),
+      trailing: Spotlight(
+        on: next == StoryTarget.buyTool,
+        child: RoundAction(
+          key: const ValueKey('market-tools'),
+          icon: const PixelIcon('fridge', size: 32),
+          label: 'อุปกรณ์',
+          labelOnScene: true,
+          diameter: round,
+          tooltip: 'อุปกรณ์ครัว (ราวตาก โหล ตู้เย็น หม้อบรรจุ)',
+          onPressed: allows(StoryTarget.buyTool)
+              ? () => showMarketSheet(context, MarketSheet.tools)
+              : null,
+        ),
+      ),
+    );
+    return ScenePage(chips: chips, tray: tray);
+  }
+}
+
+/// เนื้อในแผ่นของตลาด: รายการเดิม (การ์ดวัตถุดิบ ขายปลา ขายอาหาร อุปกรณ์)
+class _MarketSheetBody extends ConsumerWidget {
+  const _MarketSheetBody(this.kind);
+  final MarketSheet kind;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
     final session = ref.watch(gameProvider)!;
     final e = session.engine;
     final s = session.state;
@@ -84,7 +238,7 @@ class _MarketTabState extends ConsumerState<MarketTab> {
         on && next == target ? StoryGate(target: target, child: child) : child;
 
     // ---------- วัตถุดิบ ----------
-    final ingredientPanel = WoodPanel(
+    Widget ingredientPanel() => WoodPanel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -125,7 +279,7 @@ class _MarketTabState extends ConsumerState<MarketTab> {
     );
 
     // ---------- ขายปลาในคลัง ----------
-    final sellFishPanel = WoodPanel(
+    Widget sellFishPanel() => WoodPanel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -161,7 +315,7 @@ class _MarketTabState extends ConsumerState<MarketTab> {
     );
 
     // ---------- ขายอาหาร ----------
-    final sellFoodPanel = WoodPanel(
+    Widget sellFoodPanel() => WoodPanel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -207,14 +361,10 @@ class _MarketTabState extends ConsumerState<MarketTab> {
     );
 
     // ---------- อุปกรณ์ครัว ----------
-    final toolPanel = WoodPanel(
+    Widget toolPanel() => WoodPanel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const SectionTitle(
-            'อุปกรณ์ครัว',
-            icon: PixelIcon('fridge', size: 28),
-          ),
           for (final eq in MarketTab.kitchenEquipment)
             Padding(
               padding: const EdgeInsets.only(bottom: Gap.s),
@@ -240,12 +390,14 @@ class _MarketTabState extends ConsumerState<MarketTab> {
       ),
     );
 
-    var sections = [
-      (StoryTarget.buyIngredient, ingredientPanel),
-      (StoryTarget.sellFish, sellFishPanel),
-      (StoryTarget.sellFood, sellFoodPanel),
-      (StoryTarget.buyTool, toolPanel),
-    ];
+    var sections = switch (kind) {
+      MarketSheet.buy => [(StoryTarget.buyIngredient, ingredientPanel)],
+      MarketSheet.sell => [
+        (StoryTarget.sellFish, sellFishPanel),
+        (StoryTarget.sellFood, sellFoodPanel),
+      ],
+      MarketSheet.tools => [(StoryTarget.buyTool, toolPanel)],
+    };
     if (story != null) {
       // เนื้อเรื่อง: แสดงเฉพาะส่วนที่บทนี้ใช้ ส่วนที่ต้องกดต่อไปอยู่บนสุด
       final (p, ge) = story;
@@ -253,60 +405,12 @@ class _MarketTabState extends ConsumerState<MarketTab> {
         for (final x in sections)
           if (Story.allows(p, ge, x.$1)) x,
       ]..sort((a, b) => (a.$1 == next ? 0 : 1) - (b.$1 == next ? 0 : 1));
-    } else {
-      // โหมดเอาชีวิตรอด: แยกแท็บย่อย ซื้อ | ขาย แทนหน้ายาว
-      bool selling(StoryTarget t) =>
-          t == StoryTarget.sellFish || t == StoryTarget.sellFood;
-      sections = [
-        for (final x in sections)
-          if (selling(x.$1) == _sell) x,
-      ];
     }
-
-    final food = s.stock.fold<int>(0, (n, b) => n + b.qty);
-    // แท็บย่อย ซื้อ | ขาย (โหมดเอาชีวิตรอด)
-    final tabs = story != null
-        ? null
-        : TipSpot(
-            screen: GameScreen.market,
-            child: SubTabs(
-              key: const ValueKey('primary-market'),
-              selected: _sell ? 1 : 0,
-              onSelect: (i) => setState(() => _sell = i == 1),
-              items: [
-                ('market-buy', 'ซื้อ', 'garlic', null),
-                (
-                  'market-sell',
-                  'ขาย',
-                  'coin',
-                  e.fishTotal + food > 0 ? e.fishTotal + food : null,
-                ),
-              ],
-            ),
-          );
-    // แนวนอน: แท็บย่อยอยู่ฝั่งซ้าย ให้รายการซื้อขายเริ่มบนสุดฝั่งขวา
-    final splitTabs = tabs != null && context.rs.useSplit;
-    final list = TabScroll(
-      header: (story == null ? 1 : 0) + (splitTabs ? 1 : 0),
-      decorative: true,
-      listKey: PageStorageKey(_sell ? 'market-sell-list' : 'market-buy-list'),
-      children: [
-        if (splitTabs) tabs,
-        if (story == null)
-          PageHeader(
-            scene: PixelScene(painterBuilder: RoomPainter.new),
-            title: 'ตลาด',
-            icon: const PixelIcon('garlic', size: 30),
-          ),
-        if (closed) _ClosedBanner(engine: e),
-        for (final x in sections) x.$2,
-      ],
-    );
-    if (tabs == null || splitTabs) return list;
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        tabs,
-        Expanded(child: list),
+        if (closed) _ClosedBanner(engine: e),
+        for (final x in sections) x.$2(),
       ],
     );
   }
@@ -437,7 +541,9 @@ class _IngredientCard extends StatelessWidget {
           child: _CardFrame(
             badge: _Count(owned),
             footer: closed ? 'ปิด' : 'ซื้อ',
-            footerStyle: closed ? PixelButtonStyle.wood : PixelButtonStyle.gold,
+            footerStyle: closed
+                ? PixelButtonStyle.wood
+                : PixelButtonStyle.green,
             children: [
               PixelIcon(spec.icon, size: 40),
               const SizedBox(height: 2),
@@ -453,7 +559,7 @@ class _IngredientCard extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                        fontSize: 12,
+                        fontSize: 13,
                         color: AquaColors.textSoft,
                         fontWeight: FontWeight.w700,
                       ),
@@ -463,7 +569,7 @@ class _IngredientCard extends StatelessWidget {
                   Text(
                     arrow,
                     style: TextStyle(
-                      fontSize: 12,
+                      fontSize: 13,
                       color: color,
                       fontWeight: FontWeight.w700,
                     ),
@@ -541,9 +647,8 @@ class _CardFrame extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (fill, fg) = switch (footerStyle) {
-      PixelButtonStyle.gold => (AquaColors.gold, AquaColors.ink),
-      PixelButtonStyle.green => (AquaColors.grass, Colors.white),
-      _ => (AquaColors.woodLight, AquaColors.paper),
+      PixelButtonStyle.green => (AquaColors.water, AquaColors.paper),
+      _ => (AquaColors.creamDark, AquaColors.textSoft),
     };
     return Stack(
       children: [

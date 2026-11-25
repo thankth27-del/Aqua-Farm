@@ -37,11 +37,13 @@ void main() {
         for (var t = 0; t < 3000; t++) {
           p.step();
           for (final s in p.swimmers) {
-            final u = s.unit;
-            expect(s.x - 6 * u, greaterThanOrEqualTo(0));
-            expect(s.x + 6 * u, lessThanOrEqualTo(kSwimSceneW));
-            expect(s.drawY(t) - 3.5 * u, greaterThanOrEqualTo(kSwimSurfaceY));
-            expect(s.drawY(t) + 2.5 * u, lessThanOrEqualTo(kSwimFloorY));
+            expect(s.x - .453 * s.frame, greaterThanOrEqualTo(0));
+            expect(s.x + .453 * s.frame, lessThanOrEqualTo(kSwimSceneW));
+            expect(
+              s.drawY(t) - .3125 * s.frame,
+              greaterThanOrEqualTo(kSwimSurfaceY),
+            );
+            expect(s.drawY(t) + .29 * s.frame, lessThanOrEqualTo(kSwimFloorY));
             final moved = math.sqrt(s.lastDx * s.lastDx + s.lastDy * s.lastDy);
             expect(moved, lessThanOrEqualTo(s.maxSpeed + 1e-9));
           }

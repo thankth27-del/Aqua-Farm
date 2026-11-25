@@ -4,9 +4,9 @@ import 'package:material_ui/material_ui.dart';
 import '../../data/difficulty.dart';
 import '../../data/disaster_data.dart';
 import '../../data/equipment_data.dart';
-import '../../game/hints.dart';
 import '../../game/story.dart';
 import '../../game/tutorial.dart';
+import '../design/design_system.dart' show DsColors;
 import '../dialogs.dart';
 import '../layout/responsive.dart';
 import '../providers.dart';
@@ -14,13 +14,72 @@ import '../scenes/pixel_scene.dart';
 import '../theme/theme.dart';
 import '../widgets/disaster_icon.dart';
 import '../widgets/equipment_row.dart';
+import '../widgets/game_hud.dart';
 import '../widgets/story_gate.dart';
 import 'profile_screen.dart';
 
 /// ตำแหน่งแผง "เตรียมภัย" สำหรับปุ่มลัดจากการ์ดข่าวเตือนภัย
 final _prepareKey = GlobalKey();
 
-/// หน้า "ฟาร์ม": ฉากฟาร์ม คำแนะนำ สถานะตัวละคร (พักผ่อน) และข่าวเตือนภัย
+/// ฉากฟาร์มเต็มจอ (พื้นหลังของหน้าฟาร์ม)
+class FarmBackdrop extends ConsumerWidget {
+  const FarmBackdrop({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final session = ref.watch(gameProvider)!;
+    final scene = FarmSceneData.fromState(
+      session.state,
+      session.engine.warnDays,
+    );
+    return PixelScene(
+      key: const ValueKey('farm-backdrop'),
+      backdrop: true,
+      framed: false,
+      // บ้าน + บ่ออยู่กลางจอ
+      focus: const Offset(.6, .62),
+      painterBuilder: (t) => FarmPainter(t, scene),
+    );
+  }
+}
+
+/// แผ่นรายละเอียด: ภัยพิบัติ + อุปกรณ์ป้องกัน (เนื้อเรื่อง: อุปกรณ์อยู่บนสุด)
+Future<void> showDisasterSheet(BuildContext context, {required bool story}) {
+  return showDetailSheet<void>(
+    context,
+    title: 'ภัยพิบัติและการป้องกัน',
+    icon: const PixelIcon('shield', size: 32),
+    builder: (c) => Consumer(
+      builder: (context, ref, _) {
+        final ctl = ref.read(gameProvider.notifier);
+        final disaster = _DisasterCard(
+          onRepair: () => showResult(context, ctl.run((e) => e.repair())),
+        );
+        final prepare = KeyedSubtree(
+          key: _prepareKey,
+          child: const _PreparePanel(),
+        );
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: story ? [prepare, disaster] : [disaster, prepare],
+        );
+      },
+    ),
+  );
+}
+
+/// แผ่นรายละเอียด: สถานะตัวละคร
+Future<void> showCharacterSheet(BuildContext context, String name) {
+  return showDetailSheet<void>(
+    context,
+    title: name,
+    icon: const PixelIcon('face', size: 32),
+    builder: (_) => const _CharacterCard(),
+  );
+}
+
+/// หน้า "ฟาร์ม": ฉากฟาร์มเต็มจอ + ป้ายสถานะตัวละคร + ป้ายภัย + ถาดปุ่ม
+/// (รายละเอียดเปิดเป็นแผ่นด้านล่าง ไม่วางบนหน้าหลัก)
 class FarmTab extends ConsumerWidget {
   const FarmTab({super.key, required this.onOpenTab});
 
@@ -32,124 +91,208 @@ class FarmTab extends ConsumerWidget {
     final e = session.engine;
     final s = session.state;
     final ctl = ref.read(gameProvider.notifier);
-    final scene = FarmSceneData.fromState(s, e.warnDays);
-    final hint = farmHint(e);
     final target = e.tutorialStep?.target;
-    final isStory = watchStory(ref) != null;
+    final story = watchStory(ref);
+    final isStory = story != null;
+    final storyNext = story == null
+        ? null
+        : Story.nextTarget(story.$1, story.$2);
+    final r = context.rs;
 
-    final character = Spotlight(
+    final status = Spotlight(
       on: target == TutorialTarget.status,
-      child: _CharacterCard(
-        restSpotlight: target == TutorialTarget.home,
-        onRest: () => showResult(context, ctl.run((e) => e.rest())),
-        onPond: () => onOpenTab(1),
+      child: _StatusChip(onTap: () => showCharacterSheet(context, s.character)),
+    );
+    final disaster = _DisasterChip(
+      onTap: () => showDisasterSheet(context, story: isStory),
+    );
+
+    final tray = ActionTray(
+      leading: RoundAction(
+        key: const ValueKey('farm-pond'),
+        icon: const PixelIcon('drop', size: 32),
+        label: 'บ่อปลา',
+        color: DsColors.primarySoft,
+        labelOnScene: true,
+        onPressed: () => onOpenTab(1),
       ),
-    );
-    final disaster = _DisasterCard(
-      onRepair: () => showResult(context, ctl.run((e) => e.repair())),
-    );
-    final prepare = KeyedSubtree(
-      key: _prepareKey,
-      child: Spotlight(
-        on: target == TutorialTarget.prepare,
-        child: const _PreparePanel(),
-      ),
-    );
-
-    // เนื้อเรื่อง: อุปกรณ์ที่ต้องซื้ออยู่บนสุด ไม่ต้องเลื่อนหา
-    if (isStory) {
-      return TabScroll(lazy: false, children: [prepare, disaster, character]);
-    }
-
-    // Column ใน SingleChildScrollView: ทุกแผงถูกสร้างไว้ ปุ่มลัดเลื่อนไปหาได้เสมอ
-    return TabScroll(
-      lazy: false,
-      // แนวนอน: ฉาก + คำแนะนำอยู่ซ้าย แผงควบคุมอยู่ขวา
-      header: hint != null ? 3 : 1,
-      children: [
-        PageHeader(
-          scene: PixelScene(painterBuilder: (t) => FarmPainter(t, scene)),
-          title: 'ฟาร์ม',
-          icon: const PixelIcon('house', size: 30),
-        ),
-        if (hint != null) ...[_HintBubble(hint), const SizedBox(height: Gap.m)],
-        character,
-        disaster,
-        prepare,
-      ],
-    );
-  }
-}
-
-/// คำแนะนำเป็นคำพูดของตัวละคร
-class _HintBubble extends StatelessWidget {
-  const _HintBubble(this.text);
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        const Bob(
-          dy: 2,
-          period: Duration(milliseconds: 1800),
-          child: PixelIcon('face', size: 52),
-        ),
-        // หางของกล่องคำพูด
-        CustomPaint(size: const Size(12, 20), painter: _TailPainter()),
-        Expanded(
-          child: PixelBox(
-            fill: AquaColors.paper,
-            depth: 4,
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            child: Text(
-              text,
-              style: const TextStyle(
-                color: AquaColors.text,
+      primary: Spotlight(
+        on: target == TutorialTarget.home,
+        child: StoryGate(
+          target: StoryTarget.rest,
+          child: PixelButton(
+            key: const ValueKey('farm-rest'),
+            label: 'พักผ่อน',
+            size: PixelButtonSize.large,
+            icon: const PixelIcon('house', size: 32),
+            below: Text(
+              '+40 พลังงาน',
+              style: TextStyle(
+                fontSize: 15,
                 fontWeight: FontWeight.w700,
-                fontSize: FontSize.body,
-                height: 1.35,
+                color: DsColors.onAccent.withValues(alpha: .85),
               ),
             ),
+            tooltip: 'พักผ่อน +40 พลังงาน',
+            expand: true,
+            onPressed: () => showResult(context, ctl.run((e) => e.rest())),
           ),
         ),
-      ],
+      ),
+      trailing: Spotlight(
+        on:
+            target == TutorialTarget.prepare ||
+            storyNext == StoryTarget.buyEquipment,
+        child: RoundAction(
+          key: const ValueKey('farm-prepare'),
+          icon: const PixelIcon('shield', size: 34),
+          label: 'ป้องกัน',
+          labelOnScene: true,
+          color: s.active != null || e.warnDays > 0
+              ? const Color(0xFFFFD9D2)
+              : DsColors.surface,
+          onPressed: () => showDisasterSheet(context, story: isStory),
+        ),
+      ),
+    );
+
+    // มือถือแนวตั้ง: ป้ายสองอันเรียงแถวบนสุด ถาดปุ่มล่างสุด ตรงกลางเห็นฉาก
+    // แนวนอน/คอม: คอลัมน์ควบคุมชิดขวา ฉากเห็นเต็มด้านซ้าย
+    final column = Padding(
+      padding: const EdgeInsets.fromLTRB(Gap.s, Gap.s, Gap.s, Gap.s),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(flex: 4, child: status),
+              const SizedBox(width: Gap.s),
+              Expanded(flex: 5, child: disaster),
+            ],
+          ),
+          const Spacer(),
+          tray,
+        ],
+      ),
+    );
+    if (!r.useSideNav) return column;
+    return Align(
+      alignment: Alignment.centerRight,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 460),
+        child: column,
+      ),
     );
   }
 }
 
-class _TailPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final p = Paint()..isAntiAlias = false;
-    for (var i = 0; i < 4; i++) {
-      final w = 3.0 * (i + 1);
-      p.color = AquaColors.ink;
-      canvas.drawRect(Rect.fromLTWH(size.width - w, 4 + i * 3.0, w + 1, 3), p);
-      if (i > 0) {
-        p.color = AquaColors.paper;
-        canvas.drawRect(
-          Rect.fromLTWH(size.width - w + 3, 4 + i * 3.0, w - 2, 3),
-          p,
-        );
-      }
-    }
-  }
+/// ป้ายสถานะตัวละครบนฉาก: หน้า + ชื่อ + แถบสั้น 4 ค่า (ไม่มีตัวเลข)
+class _StatusChip extends ConsumerWidget {
+  const _StatusChip({required this.onTap});
+  final VoidCallback onTap;
 
   @override
-  bool shouldRepaint(_TailPainter old) => false;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = ref.watch(gameProvider)!.state;
+    final low = [s.hunger, s.energy, s.health, s.joy].any((v) => v < 30);
+    Widget bar(int v, Color c) => Expanded(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 1.5),
+        child: PixelBar(value: v, color: c, height: 8),
+      ),
+    );
+    return SceneChip(
+      key: const ValueKey('farm-status'),
+      icon: const PixelIcon('face', size: 36),
+      text: low ? '${s.character} ต้องดูแล!' : s.character,
+      semanticLabel:
+          '${s.character}: อิ่ม ${s.hunger} พลังงาน ${s.energy} '
+          'สุขภาพ ${s.health} ความสุข ${s.joy}',
+      onTap: onTap,
+      below: Row(
+        children: [
+          bar(s.hunger, AquaColors.hunger),
+          bar(s.energy, AquaColors.energy),
+          bar(s.health, AquaColors.health),
+          bar(s.joy, const Color(0xFF7FD3F7)),
+        ],
+      ),
+    );
+  }
 }
 
+/// ป้ายภัยบนฉาก: ไม่มีภัย / เตือนอีกกี่วัน + ความพร้อม / กำลังเกิด
+class _DisasterChip extends ConsumerWidget {
+  const _DisasterChip({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final session = ref.watch(gameProvider)!;
+    final e = session.engine;
+    final s = session.state;
+    final a = s.active;
+    final dz = s.upcoming;
+    final w = e.warnDays;
+    if (a != null) {
+      return SceneChip(
+        key: const ValueKey('farm-disaster'),
+        color: const Color(0xE6B42318),
+        icon: disasterIcon(a.type, size: 34),
+        text: '${kDisasters[a.type]!.name}กำลังเกิด',
+        below: Text(
+          'วันที่ ${a.dayIndex + 1}/${a.duration}',
+          style: glassText(size: 16, color: const Color(0xFFFFE0DB)),
+        ),
+        onTap: onTap,
+      );
+    }
+    if (w > 0 && dz != null) {
+      final pct = e.readiness()!.pct;
+      final c = pct >= 70
+          ? AquaColors.grass
+          : (pct >= 40 ? AquaColors.gold : AquaColors.red);
+      return SceneChip(
+        key: const ValueKey('farm-disaster'),
+        color: const Color(0xE6A33A12),
+        icon: Blink(low: .6, child: disasterIcon(dz.type, size: 34)),
+        text: '${kDisasters[dz.type]!.name}อีก $w วัน',
+        // ความพร้อมรับภัย: ข้อความบน แถบล่าง (จอแคบไม่ล้น)
+        below: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text('พร้อม $pct%', style: glassText(size: 16)),
+            ),
+            const SizedBox(height: 3),
+            PixelBar(value: pct, color: c, height: 10),
+          ],
+        ),
+        onTap: onTap,
+      );
+    }
+    // ไม่มีภัย: ไม่ต้องมีป้าย (ปุ่ม "ป้องกัน" ในถาดเปิดรายละเอียดได้) ให้เห็นฉากเต็ม
+    if (!s.damaged) return const SizedBox.shrink();
+    return SceneChip(
+      key: const ValueKey('farm-disaster'),
+      color: const Color(0xE6B42318),
+      icon: const PixelIcon('wrench', size: 34),
+      text: 'ฟาร์มเสียหาย',
+      below: Text(
+        'แตะเพื่อซ่อม',
+        style: glassText(size: 16, color: const Color(0xFFFFE0DB)),
+      ),
+      onTap: onTap,
+    );
+  }
+}
+
+/// สถานะตัวละครแบบละเอียด (ในแผ่นด้านล่าง)
 class _CharacterCard extends ConsumerWidget {
-  const _CharacterCard({
-    required this.onRest,
-    required this.onPond,
-    this.restSpotlight = false,
-  });
-  final VoidCallback onRest;
-  final VoidCallback onPond;
-  final bool restSpotlight;
+  const _CharacterCard();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -205,37 +348,6 @@ class _CharacterCard extends ConsumerWidget {
             value: s.joy,
             color: AquaColors.joy,
             suffix: '%',
-          ),
-          const SizedBox(height: Gap.m),
-          Spotlight(
-            on: restSpotlight,
-            child: StoryGate(
-              target: StoryTarget.rest,
-              child: PixelButton(
-                label: 'พักผ่อน',
-                icon: const PixelIcon('house', size: 26),
-                trailing: const Tag(
-                  '+40',
-                  color: AquaColors.paper,
-                  icon: PixelGlyph(
-                    Glyph.bolt,
-                    size: 14,
-                    color: AquaColors.gold,
-                  ),
-                ),
-                tooltip: 'พักผ่อน +40 พลังงาน',
-                expand: true,
-                onPressed: onRest,
-              ),
-            ),
-          ),
-          const SizedBox(height: Gap.s),
-          PixelButton(
-            label: 'ไปบ่อปลา',
-            icon: const PixelIcon('drop', size: 24),
-            style: PixelButtonStyle.water,
-            expand: true,
-            onPressed: onPond,
           ),
         ],
       ),

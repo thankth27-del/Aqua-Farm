@@ -78,7 +78,7 @@ class EquipmentRow extends StatelessWidget {
           const SizedBox(width: Gap.s),
           PixelButton(
             label: closed ? 'ปิด' : 'ซื้อ',
-            style: closed ? PixelButtonStyle.wood : PixelButtonStyle.gold,
+            style: closed ? PixelButtonStyle.wood : PixelButtonStyle.green,
             below: CoinTag(price, boxed: true, size: FontSize.small),
             onPressed: onBuy,
           ),

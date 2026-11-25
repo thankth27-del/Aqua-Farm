@@ -3,6 +3,8 @@ library;
 
 import 'package:material_ui/material_ui.dart';
 
+import '../design/design_system.dart' show DsColors;
+
 import '../../data/difficulty.dart';
 import '../theme/theme.dart';
 
@@ -24,7 +26,7 @@ Future<Difficulty?> modeDialog(BuildContext context) {
   return showDialog<Difficulty>(
     context: context,
     barrierDismissible: false,
-    barrierColor: const Color(0xAA1B120B),
+    barrierColor: DsColors.scrim,
     builder: (c) => PixelDialog(
       title: 'เลือกความยาก',
       icon: const PixelIcon('warn', size: 48),

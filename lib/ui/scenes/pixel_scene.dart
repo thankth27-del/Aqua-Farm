@@ -15,7 +15,8 @@ import '../../game/game_state.dart';
 import '../providers.dart';
 import '../layout/responsive.dart';
 import 'fish_swim.dart';
-import '../theme/colors.dart';
+import '../design/design_system.dart' show DsColors, DsRadius;
+import '../theme/fish_sprite.dart';
 
 const double kSceneW = 320;
 const double kSceneH = 180;
@@ -58,51 +59,11 @@ abstract class PixelPainter extends CustomPainter {
     }
   }
 
-  /// spr(x,t,px,py,s) ปลา 1 ตัว (หัวอยู่ซ้าย)
-  void fish(String type, num px, num py, int s) =>
-      fishSprite(type, px, py, s.toDouble());
-
-  /// ปลา 1 ตัว ขนาดพิกเซล [u] (ทศนิยมได้ ขอบยังคม) — [faceRight] กลับด้านภาพให้หัวไปทางขวา
-  void fishSprite(
-    String type,
-    num px,
-    num py,
-    double u, {
-    bool faceRight = false,
-  }) {
-    final f = kFish[type]!;
-    final fin = Color(f.finColor), body = Color(f.bodyColor);
-    // ช่อง (cx,cy,cw,ch) บนกริดปลา 10x5 → สี่เหลี่ยมที่ขอบปัดเป็นพิกเซลเต็ม
-    void cell(num cx, num cy, num cw, num ch, Color c) {
-      final gx = faceRight ? 10 - cx - cw : cx;
-      final x0 = _r(px + gx * u), x1 = _r(px + (gx + cw) * u);
-      final y0 = _r(py + cy * u), y1 = _r(py + (cy + ch) * u);
-      _p.color = c;
-      _c.drawRect(
-        Rect.fromLTRB(
-          x0.toDouble(),
-          y0.toDouble(),
-          x1.toDouble(),
-          y1.toDouble(),
-        ),
-        _p,
-      );
-    }
-
-    cell(8, 1, 1, 3, fin);
-    cell(9, 0, 1, 5, fin);
-    cell(1, 0, 6, 5, body);
-    cell(0, 1, 8, 3, body);
-    if (f.stripe) cell(1, 2, 7, 1, const Color(0xFF2F3A18));
-    if (f.hump) cell(3, -1, 3, 1, body);
-    if (f.whiskers) {
-      cell(-1, 2, 1, 1, const Color(0xFF0A2229));
-      cell(-1, 4, 1, 1, const Color(0xFF0A2229));
-    }
-    cell(1, 1, 1, 1, Colors.black);
-  }
-
   void draw(int t);
+
+  /// ปลาที่ต้องวาดทับฉาก (ใช้ภาพแถบเฟรมปลาชุดใหม่ ดู [SceneFishLayer])
+  bool get hasFish => false;
+  List<SceneFish> fishAt(int t) => const [];
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -164,6 +125,27 @@ class FarmSceneData {
 
 class FarmPainter extends PixelPainter {
   FarmPainter(super.tick, this.data);
+
+  @override
+  bool get hasFish => data.pond.isNotEmpty;
+
+  /// ปลาในบ่อเล็กของฟาร์ม ว่ายไปทางซ้ายวนในบ่อ (สูงสุด 8 ตัว)
+  @override
+  List<SceneFish> fishAt(int t) {
+    final pond = data.pond.take(8).toList();
+    return [
+      for (var i = 0; i < pond.length; i++)
+        SceneFish(
+          type: pond[i],
+          x: 267 - ((i * 31 + t * .3 * (1 + i % 3)) % 62),
+          y: 133.5 + (i % 3) * 7,
+          size: 16,
+          frame: fishFrameAt(t, i * 3),
+          flipX: true,
+        ),
+    ];
+  }
+
   final FarmSceneData data;
 
   int q(String k) => data.equipment[k] ?? 0;
@@ -416,16 +398,6 @@ class FarmPainter extends PixelPainter {
     for (var i = 0; i < 4; i++) {
       rect(187 + i * 4, 136, 1, 10, const Color(0xFF5E3B26));
     }
-    final pond = data.pond.take(8).toList();
-    for (var i = 0; i < pond.length; i++) {
-      // ปลาหันหัวไปทางซ้าย จึงว่ายไปทางซ้าย
-      fish(
-        pond[i],
-        262 - ((i * 31 + t * .3 * (1 + i % 3)) % 62),
-        131 + (i % 3) * 7,
-        1,
-      );
-    }
     const flowers = [
       (70, 140),
       (88, 150),
@@ -628,16 +600,26 @@ class PondPainter extends PixelPainter {
     }
     // ปลาแต่ละตัวว่ายตามเป้าหมายของตัวเอง (ดู fish_swim.dart)
     swim.advanceTo(t);
-    for (final s in swim.swimmers) {
-      final u = s.unit;
-      fishSprite(
-        s.fish.type,
-        s.x - 5 * u,
-        s.drawY(t) - 2.5 * u,
-        u,
-        faceRight: !s.faceLeft,
-      );
-    }
+  }
+
+  @override
+  bool get hasFish => true;
+
+  /// ขนาดเฟรมตาม [Swimmer.frame]: ขอบเขตการว่ายคิดจากขนาดเดียวกัน ปลาจึงไม่ล้นบ่อ
+  @override
+  List<SceneFish> fishAt(int t) {
+    swim.advanceTo(t);
+    return [
+      for (final s in swim.swimmers)
+        SceneFish(
+          type: s.fish.type,
+          x: s.x,
+          y: s.drawY(t),
+          size: s.frame.roundToDouble(),
+          frame: fishFrameAt(t, s.frameStart),
+          flipX: s.faceLeft,
+        ),
+    ];
   }
 }
 
@@ -710,6 +692,8 @@ class PixelScene extends ConsumerStatefulWidget {
     this.cover = false,
     this.alignment = Alignment.center,
     this.framed = true,
+    this.backdrop = false,
+    this.focus = const Offset(.5, .6),
   });
 
   final PixelPainter Function(ValueListenable<int> tick) painterBuilder;
@@ -723,6 +707,13 @@ class PixelScene extends ConsumerStatefulWidget {
 
   /// มีกรอบเข้มรอบฉาก
   final bool framed;
+
+  /// ฉากเต็มจอเป็นพื้นหลังของหน้า (จำนวนเต็มเท่า ไม่เบลอ ไม่มีกรอบ)
+  /// จอแนวตั้งต่อท้องฟ้า/พื้นด้านบน-ล่างจากแถวขอบของฉากจนเต็มจอ
+  final bool backdrop;
+
+  /// จุดในฉาก (0..1) ที่ให้อยู่กลางจอเมื่อฉากใหญ่กว่าจอ
+  final Offset focus;
 
   @override
   ConsumerState<PixelScene> createState() => _PixelSceneState();
@@ -752,9 +743,18 @@ class _PixelSceneState extends ConsumerState<PixelScene> {
 
   @override
   Widget build(BuildContext context) {
-    Widget paint = RepaintBoundary(
-      child: CustomPaint(painter: widget.painterBuilder(_tick)),
-    );
+    final painter = widget.painterBuilder(_tick);
+    Widget paint = RepaintBoundary(child: CustomPaint(painter: painter));
+    if (widget.backdrop) return _backdrop(painter, paint);
+    if (painter.hasFish) {
+      paint = Stack(
+        fit: StackFit.expand,
+        children: [
+          paint,
+          SceneFishLayer(tick: _tick, fishAt: painter.fishAt),
+        ],
+      );
+    }
     if (widget.cover) {
       paint = ClipRect(
         child: FittedBox(
@@ -769,12 +769,17 @@ class _PixelSceneState extends ConsumerState<PixelScene> {
       children: [paint, ?widget.overlay],
     );
     if (widget.framed) {
+      // ภาพฉากมุมมนเข้ากับการ์ด ขอบบางสีอ่อน
       scene = DecoratedBox(
         position: DecorationPosition.foreground,
         decoration: BoxDecoration(
-          border: Border.all(color: AquaColors.ink, width: 3),
+          borderRadius: BorderRadius.circular(DsRadius.card),
+          border: Border.all(color: DsColors.border, width: 2),
         ),
-        child: scene,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(DsRadius.card),
+          child: scene,
+        ),
       );
     }
     scene = ExcludeSemantics(child: scene);
@@ -818,6 +823,168 @@ class _PixelSceneState extends ConsumerState<PixelScene> {
           ),
         );
       },
+    );
+  }
+
+  Widget _backdrop(PixelPainter painter, Widget paint) {
+    if (painter.hasFish) {
+      paint = Stack(
+        fit: StackFit.expand,
+        children: [
+          paint,
+          SceneFishLayer(tick: _tick, fishAt: painter.fishAt),
+        ],
+      );
+    }
+    return ExcludeSemantics(
+      child: LayoutBuilder(
+        builder: (context, box) {
+          final dpr = MediaQuery.devicePixelRatioOf(context);
+          final ppl = context.rs.physicalPerLogical(dpr);
+          final w = box.maxWidth, h = box.maxHeight;
+          final s = integerBackdropSize(
+            Size(w, h),
+            ppl,
+            const Size(kSceneW, kSceneH),
+          );
+          double snap(double v) => (v * ppl).roundToDouble() / ppl;
+          double place(double view, double size, double f) => size <= view
+              ? (view - size) / 2
+              : (view / 2 - f * size).clamp(view - size, 0).toDouble();
+          final left = snap(place(w, s.width, widget.focus.dx));
+          final top = snap(place(h, s.height, widget.focus.dy));
+          final bottom = top + s.height;
+          return ClipRect(
+            child: Stack(
+              children: [
+                if (top > 0)
+                  Positioned(
+                    left: left,
+                    top: 0,
+                    width: s.width,
+                    height: top + 1,
+                    child: CustomPaint(
+                      painter: _RowStretchPainter(
+                        widget.painterBuilder(_tick),
+                        0,
+                        s.width,
+                      ),
+                    ),
+                  ),
+                if (bottom < h)
+                  Positioned(
+                    left: left,
+                    top: bottom - 1,
+                    width: s.width,
+                    height: h - bottom + 1,
+                    child: CustomPaint(
+                      painter: _RowStretchPainter(
+                        widget.painterBuilder(_tick),
+                        kSceneH.toInt() - 1,
+                        s.width,
+                      ),
+                    ),
+                  ),
+                Positioned(
+                  left: left,
+                  top: top,
+                  width: s.width,
+                  height: s.height,
+                  child: paint,
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// วาดแถวพิกเซลเดียวของฉาก ([row]) ยืดเต็มกล่อง — ต่อท้องฟ้า/พื้นให้ฉากเต็มจอแนวตั้ง
+class _RowStretchPainter extends CustomPainter {
+  _RowStretchPainter(this.base, this.row, this.sceneWidth)
+    : super(repaint: base.tick);
+  final PixelPainter base;
+  final int row;
+  final double sceneWidth;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas
+      ..save()
+      ..clipRect(Offset.zero & size)
+      ..translate(0, -row * size.height);
+    base.paint(canvas, Size(sceneWidth, kSceneH * size.height));
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
+}
+
+/// ปลา 1 ตัวในฉาก (พิกัดฉาก 320x180, จุดกลางเฟรม)
+class SceneFish {
+  const SceneFish({
+    required this.type,
+    required this.x,
+    required this.y,
+    required this.size,
+    required this.frame,
+    required this.flipX,
+  });
+  final String type;
+  final double x, y;
+
+  /// ขนาดเฟรม (พิกเซลฉาก)
+  final double size;
+  final int frame;
+
+  /// หัวไปทางซ้าย
+  final bool flipX;
+}
+
+/// ชั้นปลาทับฉากพิกเซล: ใช้ [FishSprite] (ภาพแถบเฟรม) ตามตำแหน่งที่ฉากคำนวณ
+/// ตำแหน่งและขนาดปัดเป็นพิกเซลจริงทุกครั้ง ภาพจึงคม
+class SceneFishLayer extends StatelessWidget {
+  const SceneFishLayer({super.key, required this.tick, required this.fishAt});
+  final ValueListenable<int> tick;
+  final List<SceneFish> Function(int t) fishAt;
+
+  @override
+  Widget build(BuildContext context) {
+    final dpr = MediaQuery.devicePixelRatioOf(context);
+    double snap(double v) => (v * dpr).roundToDouble() / dpr;
+    return IgnorePointer(
+      child: ClipRect(
+        child: LayoutBuilder(
+          builder: (context, box) {
+            final k = box.maxWidth / kSceneW;
+            return ValueListenableBuilder<int>(
+              valueListenable: tick,
+              builder: (context, t, _) {
+                final fish = fishAt(t);
+                return Stack(
+                  children: [
+                    for (var i = 0; i < fish.length; i++)
+                      Positioned(
+                        key: ValueKey(i),
+                        left: snap((fish[i].x - fish[i].size / 2) * k),
+                        top: snap((fish[i].y - fish[i].size / 2) * k),
+                        child: FishSprite(
+                          fish[i].type,
+                          size: snap(fish[i].size * k),
+                          frame: fish[i].frame,
+                          flipX: fish[i].flipX,
+                        ),
+                      ),
+                  ],
+                );
+              },
+            );
+          },
+        ),
+      ),
     );
   }
 }

@@ -1,8 +1,22 @@
+import 'dart:ui' show PointMode;
+
 import 'package:material_ui/material_ui.dart';
 
+import '../design/design_system.dart';
 import 'colors.dart';
 
-/// วาดกล่องพิกเซล: มุมบาก, ขอบเข้ม, เส้นไฮไลต์บน/ซ้าย, เงาล่าง/ขวา และ "ความหนา" ด้านล่าง
+/// เส้นขอบ "ปกติ" ของการ์ด (ขอบเข้มเดิมของธีมพิกเซล) → เส้นบางสีอ่อน
+/// สีขอบอื่น (เน้น/เตือน/เลือกอยู่) ยังแสดงเป็นขอบหนาสีนั้น
+Color _edge(Color border) =>
+    border == AquaColors.ink || border == AquaColors.woodDark
+    ? DsColors.border
+    : border;
+
+double _edgeWidth(Color border) =>
+    border == AquaColors.ink || border == AquaColors.woodDark ? 1 : 2;
+
+/// วาดกล่องมุมมนของระบบดีไซน์: พื้น ขอบบาง และเงาบางเมื่อมี [depth]
+/// (ชื่อเดิมคงไว้ให้หน้าเดิมใช้ต่อได้ — ไม่มีลายไม้/มุมบากแล้ว)
 class PixelBoxPainter extends CustomPainter {
   const PixelBoxPainter({
     required this.fill,
@@ -17,76 +31,40 @@ class PixelBoxPainter extends CustomPainter {
   final Color fill;
   final Color border;
 
-  /// ความหนาเส้นขอบ (พิกเซลจอ)
+  /// ขนาดขอบเดิม: 2 = ป้ายเล็ก (มุมมนเล็ก) / 3 = การ์ด
   final double px;
 
-  /// ความหนาส่วนล่าง (ทำให้ดูนูน กดแล้วยุบ)
+  /// มีเงา (การ์ดลอย)
   final double depth;
   final Color depthColor;
-
-  /// วาดไฮไลต์/เงาด้านใน
   final bool bevel;
-
-  /// ลายไม้ (เส้นแนวนอนสีเข้มกว่า) — null = ไม่มี
   final Color? grain;
 
-  static void notched(Canvas c, Rect r, double n, Paint p) {
-    if (r.width <= 2 * n || r.height <= 2 * n) {
-      c.drawRect(r, p);
-      return;
-    }
-    c
-      ..drawRect(Rect.fromLTRB(r.left + n, r.top, r.right - n, r.bottom), p)
-      ..drawRect(Rect.fromLTRB(r.left, r.top + n, r.right, r.bottom - n), p);
-  }
+  double get radius => px <= 2 ? DsRadius.small : DsRadius.small + 2;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final p = Paint()..isAntiAlias = false;
-    final body = Rect.fromLTWH(0, 0, size.width, size.height - depth);
+    final r = RRect.fromRectAndRadius(
+      Offset.zero & size,
+      Radius.circular(radius),
+    );
     if (depth > 0) {
-      p.color = depthColor;
-      notched(
-        canvas,
-        Rect.fromLTWH(0, depth, size.width, size.height - depth),
-        px,
-        p,
+      canvas.drawRRect(
+        r.shift(const Offset(0, 2)),
+        Paint()
+          ..color = const Color(0x1A0F3D36)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3),
       );
     }
-    p.color = border;
-    notched(canvas, body, px, p);
-    final inner = body.deflate(px);
-    if (inner.isEmpty) return;
-    p.color = fill;
-    canvas.drawRect(inner, p);
-    if (grain != null) {
-      p.color = grain!;
-      var i = 0;
-      for (var y = inner.top + 9; y < inner.bottom - 2; y += 10) {
-        canvas.drawRect(Rect.fromLTWH(inner.left, y, inner.width, 2), p);
-        // รอยต่อแผ่นไม้สลับตำแหน่ง
-        final x = inner.left + (i * 67) % inner.width;
-        canvas.drawRect(Rect.fromLTWH(x, y - 8, 2, 8), p);
-        i++;
-      }
-    }
-    if (bevel) {
-      final b = (px * .7).roundToDouble().clamp(2.0, 4.0);
-      p.color = Color.lerp(fill, Colors.white, .32)!;
-      canvas
-        ..drawRect(Rect.fromLTWH(inner.left, inner.top, inner.width, b), p)
-        ..drawRect(Rect.fromLTWH(inner.left, inner.top, b, inner.height), p);
-      p.color = Color.lerp(fill, AquaColors.ink, .25)!;
-      canvas
-        ..drawRect(
-          Rect.fromLTWH(inner.left, inner.bottom - b, inner.width, b),
-          p,
-        )
-        ..drawRect(
-          Rect.fromLTWH(inner.right - b, inner.top, b, inner.height),
-          p,
-        );
-    }
+    canvas.drawRRect(r, Paint()..color = fill);
+    final w = _edgeWidth(border);
+    canvas.drawRRect(
+      r.deflate(w / 2),
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = w
+        ..color = _edge(border),
+    );
   }
 
   @override
@@ -94,12 +72,10 @@ class PixelBoxPainter extends CustomPainter {
       old.fill != fill ||
       old.border != border ||
       old.depth != depth ||
-      old.px != px ||
-      old.grain != grain ||
-      old.bevel != bevel;
+      old.px != px;
 }
 
-/// กล่องพิกเซลทั่วไป
+/// กล่องมุมมนทั่วไป
 class PixelBox extends StatelessWidget {
   const PixelBox({
     super.key,
@@ -126,31 +102,26 @@ class PixelBox extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return CustomPaint(
-      painter: PixelBoxPainter(
-        fill: fill,
-        border: border,
-        px: px,
-        depth: depth,
-        depthColor: depthColor,
-        bevel: bevel,
-        grain: grain,
+    final radius = px <= 2 ? DsRadius.small : DsRadius.small + 2;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: fill,
+        borderRadius: BorderRadius.circular(radius),
+        border: Border.all(color: _edge(border), width: _edgeWidth(border)),
+        boxShadow: depth > 0 ? DsShadow.card : null,
       ),
-      child: Padding(
-        padding: EdgeInsets.only(bottom: depth),
-        child: Padding(padding: padding, child: child),
-      ),
+      child: Padding(padding: padding, child: child),
     );
   }
 }
 
-/// แผงกรอบไม้ ตอกตะปูที่มุม ข้างในเป็นกระดาษครีม — การ์ดหลักของเกม
+/// การ์ดหลักของเกม: พื้นขาว มุมมน เงาบาง (เดิมเป็นกรอบไม้)
 class WoodPanel extends StatelessWidget {
   const WoodPanel({
     super.key,
     required this.child,
-    this.padding = const EdgeInsets.all(14),
-    this.margin = const EdgeInsets.only(bottom: 16),
+    this.padding = const EdgeInsets.all(DsSpace.m),
+    this.margin = const EdgeInsets.only(bottom: DsSpace.m),
     this.inner = AquaColors.cream,
   });
 
@@ -163,51 +134,20 @@ class WoodPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: margin,
-      child: CustomPaint(
-        foregroundPainter: const _NailsPainter(),
-        child: PixelBox(
-          fill: AquaColors.wood,
-          grain: AquaColors.woodDark,
-          depth: 5,
-          padding: const EdgeInsets.all(7),
-          child: PixelBox(
-            fill: inner,
-            border: AquaColors.woodDark,
-            px: 3,
-            padding: padding,
-            child: child,
-          ),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: inner,
+          borderRadius: BorderRadius.circular(DsRadius.card),
+          border: Border.all(color: DsColors.border),
+          boxShadow: DsShadow.card,
         ),
+        child: Padding(padding: padding, child: child),
       ),
     );
   }
 }
 
-class _NailsPainter extends CustomPainter {
-  const _NailsPainter();
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final p = Paint()..isAntiAlias = false;
-    final h = size.height - 5;
-    for (final o in [
-      const Offset(6, 6),
-      Offset(size.width - 10, 6),
-      Offset(6, h - 10),
-      Offset(size.width - 10, h - 10),
-    ]) {
-      p.color = AquaColors.woodHi;
-      canvas.drawRect(Rect.fromLTWH(o.dx, o.dy, 4, 4), p);
-      p.color = AquaColors.goldPale;
-      canvas.drawRect(Rect.fromLTWH(o.dx, o.dy, 2, 2), p);
-    }
-  }
-
-  @override
-  bool shouldRepaint(_NailsPainter old) => false;
-}
-
-/// การ์ดกระดาษเรียบ (ใช้ซ้อนในแผงไม้ หรือเป็นช่องไอคอน)
+/// การ์ดย่อย (ซ้อนในการ์ดหลัก หรือเป็นช่องไอคอน)
 class PaperCard extends StatelessWidget {
   const PaperCard({
     super.key,
@@ -224,16 +164,15 @@ class PaperCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => PixelBox(
-    fill: fill,
+    fill: fill == AquaColors.paper ? DsColors.surfaceAlt : fill,
     border: border,
     px: 3,
-    depth: 3,
     padding: padding,
     child: child,
   );
 }
 
-/// แผ่นไม้ยาว (แถบบน / เมนูล่าง)
+/// แถบหลักสีเข้ม (แถบบน / เมนู) — ตัวอักษรบนแถบใช้ [AquaColors.paper]
 class WoodPlank extends StatelessWidget {
   const WoodPlank({
     super.key,
@@ -246,73 +185,227 @@ class WoodPlank extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return CustomPaint(
-      painter: const _PlankPainter(),
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        color: DsColors.primaryDark,
+        boxShadow: DsShadow.card,
+      ),
       child: Padding(padding: padding, child: child),
     );
   }
 }
 
-class _PlankPainter extends CustomPainter {
-  const _PlankPainter();
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final p = Paint()..isAntiAlias = false;
-    p.color = AquaColors.wood;
-    canvas.drawRect(Offset.zero & size, p);
-    p.color = AquaColors.woodDark;
-    var i = 0;
-    for (var y = 12.0; y < size.height; y += 14) {
-      canvas.drawRect(Rect.fromLTWH(0, y, size.width, 2), p);
-      for (var x = (i * 53) % 90 + 20.0; x < size.width; x += 140) {
-        canvas.drawRect(Rect.fromLTWH(x, y - 12, 2, 12), p);
-      }
-      i++;
-    }
-    p.color = AquaColors.woodHi;
-    canvas.drawRect(Rect.fromLTWH(0, 0, size.width, 3), p);
-    p.color = AquaColors.ink;
-    canvas.drawRect(Rect.fromLTWH(0, size.height - 3, size.width, 3), p);
-  }
-
-  @override
-  bool shouldRepaint(_PlankPainter old) => false;
-}
-
-/// พื้นหลังหญ้าลายจุดพิกเซล (พื้นของทุกหน้าในเกม)
+/// พื้นหลังของทุกหน้า: ใต้น้ำของบ่อแบบพิกเซล (น้ำไล่สีเป็นขั้น ระลอกน้ำ ฟองอากาศ
+/// เงาปลาไกล ๆ และพื้นทรายกับสาหร่ายด้านล่าง) — สีอ่อน ไม่แย่งสายตาจากการ์ด
+/// [deep] = โทนเข้มกว่า ใช้นอกพื้นที่เนื้อหาบนจอกว้าง
 class GrassBackground extends StatelessWidget {
-  const GrassBackground({super.key, required this.child});
+  const GrassBackground({super.key, required this.child, this.deep = false});
   final Widget child;
+  final bool deep;
 
   @override
   Widget build(BuildContext context) {
-    return CustomPaint(painter: const _GrassPainter(), child: child);
+    return Stack(
+      fit: StackFit.passthrough,
+      children: [
+        Positioned.fill(
+          child: RepaintBoundary(
+            child: CustomPaint(painter: PondBackdropPainter(deep: deep)),
+          ),
+        ),
+        child,
+      ],
+    );
   }
 }
 
-class _GrassPainter extends CustomPainter {
-  const _GrassPainter();
+/// วาดฉากใต้น้ำ (ภาพนิ่ง ไม่มีแอนิเมชัน) — ตำแหน่งสุ่มแบบคงที่ตามพิกัด
+class PondBackdropPainter extends CustomPainter {
+  const PondBackdropPainter({this.deep = false});
+  final bool deep;
+
+  /// ขนาด 1 พิกเซลของภาพ (หน่วย logical)
+  static const double u = 3;
+
+  static const _light = [
+    Color(0xFFE3F4F0),
+    Color(0xFFD8EFEA),
+    Color(0xFFCDE9E3),
+    Color(0xFFC2E3DC),
+    Color(0xFFB7DCD4),
+    Color(0xFFACD5CC),
+  ];
+  static const _dark = [
+    Color(0xFF9CCBC2),
+    Color(0xFF8DC2B8),
+    Color(0xFF7FB8AE),
+    Color(0xFF71AEA4),
+    Color(0xFF64A49A),
+    Color(0xFF589A90),
+  ];
+
+  static const _fish = [
+    '..##....',
+    '.#####.#',
+    '########',
+    '.#####.#',
+    '..##....',
+  ];
+
+  static int _h(int a, int b) =>
+      ((a * 73856093) ^ (b * 19349663) ^ 0x5bd1e995) & 0x7fffffff;
+
+  static double _snap(double v) => (v / u).floorToDouble() * u;
 
   @override
   void paint(Canvas canvas, Size size) {
+    if (size.isEmpty) return;
     final p = Paint()..isAntiAlias = false;
-    p.color = AquaColors.bgGreen;
-    canvas.drawRect(Offset.zero & size, p);
-    for (var y = 0.0, row = 0; y < size.height; y += 18, row++) {
-      for (var x = (row.isOdd ? 9.0 : 0.0); x < size.width; x += 18) {
-        p.color = AquaColors.bgGreenDot;
-        canvas.drawRect(Rect.fromLTWH(x, y, 4, 4), p);
-        if ((x ~/ 18 + row) % 7 == 0) {
-          p.color = AquaColors.grassDark;
-          canvas
-            ..drawRect(Rect.fromLTWH(x + 6, y + 8, 2, 4), p)
-            ..drawRect(Rect.fromLTWH(x + 9, y + 6, 2, 6), p);
+    final w = size.width, h = size.height;
+    final bands = deep ? _dark : _light;
+
+    // 1) น้ำไล่สีเป็นขั้น + จุดสลับตรงรอยต่อ (แบบเกมพิกเซล)
+    final bh = _snap(h / bands.length) + u;
+    for (var i = 0; i < bands.length; i++) {
+      p.color = bands[i];
+      canvas.drawRect(Rect.fromLTWH(0, i * bh, w, bh + u), p);
+    }
+    final dots = Paint()
+      ..isAntiAlias = false
+      ..strokeWidth = u
+      ..strokeCap = StrokeCap.square;
+    for (var i = 1; i < bands.length; i++) {
+      final y0 = i * bh;
+      dots.color = bands[i];
+      final pts = <Offset>[];
+      for (var x = 0.0; x < w; x += u * 2) {
+        pts
+          ..add(Offset(x + u / 2, y0 - u * 1.5))
+          ..add(Offset(x + u * 1.5, y0 - u * 2.5));
+      }
+      canvas.drawPoints(PointMode.points, pts, dots);
+    }
+
+    // 2) ระลอกน้ำ: เส้นคลื่นสั้น ๆ กระจายเป็นแถว
+    p.color = deep ? const Color(0x33FFFFFF) : const Color(0x8CFFFFFF);
+    for (var row = 0, y = 30.0; y < h * .8; row++, y += 84) {
+      for (var col = 0, x = -40.0; x < w; col++) {
+        final k = _h(row, col);
+        x += 70 + (k % 90);
+        if (k % 3 == 0) continue;
+        final cx = _snap(x), cy = _snap(y + (k >> 4) % 30);
+        final len = (3 + (k >> 8) % 4) * u;
+        canvas
+          ..drawRect(Rect.fromLTWH(cx, cy, len, u), p)
+          ..drawRect(Rect.fromLTWH(cx + len, cy - u, _snap(len * .7), u), p)
+          ..drawRect(
+            Rect.fromLTWH(cx + len + _snap(len * .7), cy, u * 2, u),
+            p,
+          );
+      }
+    }
+
+    // 3) เงาปลาไกล ๆ (สีจาง)
+    p.color = deep ? const Color(0x22000000) : const Color(0x2E0F766E);
+    for (var gy = 0; gy * 230.0 < h * .78; gy++) {
+      for (var gx = 0; gx * 260.0 < w; gx++) {
+        final k = _h(gx + 101, gy + 37);
+        if (k % 100 > 38) continue;
+        final ox = _snap(gx * 260.0 + 30 + k % 180);
+        final oy = _snap(gy * 230.0 + 50 + (k >> 6) % 140);
+        final flip = (k >> 3).isOdd;
+        final s = (k >> 9).isOdd ? u : u * 2;
+        for (var r = 0; r < _fish.length; r++) {
+          final line = _fish[r];
+          for (var c = 0; c < line.length; c++) {
+            if (line[c] != '#') continue;
+            final cc = flip ? line.length - 1 - c : c;
+            canvas.drawRect(Rect.fromLTWH(ox + cc * s, oy + r * s, s, s), p);
+          }
         }
+      }
+    }
+
+    // 4) ฟองอากาศ
+    final ring = Paint()
+      ..isAntiAlias = false
+      ..color = deep ? const Color(0x40FFFFFF) : const Color(0xB3FFFFFF);
+    final shine = Paint()
+      ..isAntiAlias = false
+      ..color = deep ? const Color(0x66FFFFFF) : const Color(0xFFFFFFFF);
+    for (var gy = 0; gy * 96.0 < h * .85; gy++) {
+      for (var gx = 0; gx * 96.0 < w; gx++) {
+        final k = _h(gx + 7, gy + 913);
+        if (k % 100 > 34) continue;
+        final x = _snap(gx * 96.0 + k % 80);
+        final y = _snap(gy * 96.0 + (k >> 7) % 80);
+        if ((k >> 5) % 3 == 0) {
+          canvas.drawRect(Rect.fromLTWH(x, y, u * 2, u * 2), ring);
+        } else {
+          canvas
+            ..drawRect(Rect.fromLTWH(x + u, y, u * 2, u), ring)
+            ..drawRect(Rect.fromLTWH(x, y + u, u, u * 2), ring)
+            ..drawRect(Rect.fromLTWH(x + u * 3, y + u, u, u * 2), ring)
+            ..drawRect(Rect.fromLTWH(x + u, y + u * 3, u * 2, u), ring)
+            ..drawRect(Rect.fromLTWH(x + u, y + u, u, u), shine)
+            // ฟองเล็กลอยตามขึ้นไป
+            ..drawRect(Rect.fromLTWH(x + u * 4, y - u * 3, u, u), ring);
+        }
+      }
+    }
+
+    // 5) พื้นทราย สาหร่าย และก้อนหิน (เฉพาะจอที่สูงพอ)
+    if (h < 320) return;
+    final sandTop = _snap(h - 30);
+    final weed = deep ? const Color(0xFF3F8A68) : const Color(0xFF6DB58C);
+    final weedDark = deep ? const Color(0xFF2F7056) : const Color(0xFF4E9A70);
+    for (var i = 0, x = 6.0; x < w; i++) {
+      final k = _h(i, 4242);
+      x += 34 + k % 70;
+      final bx = _snap(x);
+      final tall = (12 + k % 18) * u;
+      for (var s = 0.0; s < tall; s += u) {
+        final step = (s / u).round();
+        final sway = (step ~/ 4).isOdd ? u : 0.0;
+        p.color = s < tall * .5 ? weedDark : weed;
+        canvas.drawRect(Rect.fromLTWH(bx + sway, sandTop - s - u, u * 2, u), p);
+        // ใบแตกข้าง
+        if (step % 7 == 3) {
+          p.color = weed;
+          canvas.drawRect(
+            Rect.fromLTWH(bx + sway + u * 2, sandTop - s - u * 2, u * 2, u),
+            p,
+          );
+        }
+      }
+    }
+    final sand = deep ? const Color(0xFFB8A57A) : const Color(0xFFEADBAF);
+    final sandDot = deep ? const Color(0xFF9C8A62) : const Color(0xFFD8C48E);
+    final sandHi = deep ? const Color(0xFFC8B68C) : const Color(0xFFF4E9C8);
+    final rock = deep ? const Color(0xFF6E7F7A) : const Color(0xFF9FB2AC);
+    for (var x = 0.0, i = 0; x < w; x += u * 4, i++) {
+      final bump = (_h(i, 77) % 3) * u;
+      p.color = sand;
+      canvas.drawRect(Rect.fromLTWH(x, sandTop - bump, u * 4, h), p);
+      p.color = sandHi;
+      canvas.drawRect(Rect.fromLTWH(x, sandTop - bump, u * 4, u), p);
+      final k = _h(i, 78);
+      if (k % 3 == 0) {
+        p.color = sandDot;
+        canvas.drawRect(
+          Rect.fromLTWH(x + (k >> 3) % 3 * u, sandTop + u * (2 + k % 5), u, u),
+          p,
+        );
+      }
+      if (k % 23 == 0) {
+        p.color = rock;
+        canvas
+          ..drawRect(Rect.fromLTWH(x, sandTop - bump - u * 2, u * 4, u * 3), p)
+          ..drawRect(Rect.fromLTWH(x + u, sandTop - bump - u * 3, u * 2, u), p);
       }
     }
   }
 
   @override
-  bool shouldRepaint(_GrassPainter old) => false;
+  bool shouldRepaint(PondBackdropPainter old) => old.deep != deep;
 }

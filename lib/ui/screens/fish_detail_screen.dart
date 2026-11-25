@@ -360,7 +360,7 @@ class _Stat extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                        fontSize: 12,
+                        fontSize: 13,
                         color: AquaColors.textSoft,
                         fontWeight: FontWeight.w700,
                       ),

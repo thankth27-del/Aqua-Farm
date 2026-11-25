@@ -2,6 +2,8 @@ import 'dart:math' as math;
 
 import 'package:material_ui/material_ui.dart';
 
+import '../design/design_system.dart';
+
 /// ระบบเลย์เอาต์กลางของทั้งเกม — ทุกหน้าใช้ไฟล์นี้ ห้ามกำหนดขนาดพิกเซลตายตัวเฉพาะหน้า
 ///
 /// ประเภทจอ (ตามความกว้างหน้าต่าง):
@@ -15,7 +17,7 @@ abstract final class Breakpoints {
   static const double medium = 600;
   static const double expanded = 1000;
 
-  /// เนื้อหากว้างสุดบนจอใหญ่ (จัดกลาง ไม่ยืดเต็มจอ)
+  /// แผง/รายการกว้างสุดบนจอใหญ่ (หน้าเกมใช้ฉากเต็มจอ แต่แผงข้อความไม่ยืดเกินนี้)
   static const double maxContent = 1100;
 
   /// จอเตี้ยกว่านี้ตอนแนวนอน = โทรศัพท์แนวนอน (แบ่งซ้าย-ขวา)
@@ -242,18 +244,9 @@ class AppFrame extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        background,
-        Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: Breakpoints.maxContent),
-            child: child,
-          ),
-        ),
-      ],
-    );
+    // หน้าเกมแบบเกมมือถือ: ฉากเต็มจอทุกขนาด (ไม่มีคอลัมน์กลางแคบ ไม่มีพื้นว่างสองข้าง)
+    // แผงข้อความ/รายการแต่ละชิ้นจำกัดความกว้างของตัวเอง (maxColumn / maxPanel)
+    return Stack(fit: StackFit.expand, children: [background, child]);
   }
 }
 
@@ -363,7 +356,7 @@ class _ScrollHintState extends State<ScrollHint> {
 
   @override
   Widget build(BuildContext context) {
-    final c = widget.color ?? const Color(0xFF244A2C);
+    final c = widget.color ?? DsColors.background;
     return NotificationListener<ScrollMetricsNotification>(
       onNotification: (n) => n.depth == 0 && _update(n.metrics),
       child: NotificationListener<ScrollNotification>(
@@ -419,13 +412,13 @@ class _DownArrow extends CustomPainter {
       ..lineTo(size.width, 0)
       ..lineTo(size.width / 2, size.height)
       ..close();
-    canvas.drawPath(p, Paint()..color = const Color(0xFFFFF3D6));
+    canvas.drawPath(p, Paint()..color = DsColors.surface);
     canvas.drawPath(
       p,
       Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = 2
-        ..color = const Color(0xFF1B120B),
+        ..color = DsColors.primary,
     );
   }
 
@@ -593,4 +586,19 @@ class PixelStage extends StatelessWidget {
       },
     );
   }
+}
+
+/// ขนาดฉากเต็มจอ (พื้นหลังหน้าเกม) แบบจำนวนเต็มเท่าของพิกเซลจริง
+///
+/// - จอแนวนอน/คอม: ครอบเต็มจอ (cover) ครอปขอบเล็กน้อย
+/// - จอแนวตั้ง: ถ้าครอบเต็มจะเหลือภาพไม่ถึงครึ่งความกว้าง → ขยายให้กว้างราว 1.6 เท่าจอ
+///   แล้วให้หน้าต่อขอบบน-ล่างของฉากจนเต็มจอแทน (ดู PixelScene.backdrop)
+Size integerBackdropSize(Size logical, double ppl, Size art) {
+  final pw = logical.width * ppl, ph = logical.height * ppl;
+  var k = math.max(pw / art.width, ph / art.height).ceil();
+  if (pw / (art.width * k) < .5) {
+    k = math.min((pw * 1.6 / art.width).round(), (ph / art.height).floor());
+  }
+  k = math.max(k, 1);
+  return Size(art.width * k / ppl, art.height * k / ppl);
 }

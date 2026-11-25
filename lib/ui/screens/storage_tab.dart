@@ -8,18 +8,68 @@ import '../../data/food_data.dart';
 import '../../data/ingredients.dart';
 import '../../game/game_engine.dart';
 import '../../game/game_state.dart';
+import '../design/design_system.dart' show DsColors;
 import '../dialogs.dart';
 import '../../game/story.dart';
 import '../../game/tutorial.dart';
-import '../layout/responsive.dart';
 import '../providers.dart';
 import '../scenes/pixel_scene.dart';
+import '../scenes/room_scenes.dart';
 import '../theme/theme.dart';
+import '../widgets/game_hud.dart';
 import '../widgets/story_gate.dart';
 import '../widgets/guide_bars.dart';
 
+/// ฉากคลังเต็มจอ (พื้นหลังของหน้าคลัง) — ของบนชั้นเพิ่ม/ลดตามเสบียงที่มีจริง
+class StorageBackdrop extends ConsumerWidget {
+  const StorageBackdrop({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = ref.watch(gameProvider)!.state;
+    var meals = 0, preserved = 0;
+    for (final b in s.stock) {
+      if (kFoods[b.food]!.kind == FoodKind.meal) {
+        meals += b.qty;
+      } else {
+        preserved += b.qty;
+      }
+    }
+    final raw =
+        s.fishStock.values.fold<int>(0, (n, v) => n + v) +
+        s.inventory.values.fold<int>(0, (n, v) => n + v);
+    return PixelScene(
+      key: const ValueKey('storage-backdrop'),
+      backdrop: true,
+      framed: false,
+      // ชั้นวางของอยู่ครึ่งบนของฉาก → จุดกลางอยู่สูง ให้ของบนชั้นลงมาพ้นแถบบนและคำแนะนำ
+      focus: const Offset(.5, .3),
+      painterBuilder: (t) =>
+          StoragePainter(t, meals: meals, preserved: preserved, raw: raw),
+    );
+  }
+}
+
+/// แผ่นรายละเอียดของคลัง: อาหาร (กิน ขาย ทิ้ง) · เสบียงฉุกเฉิน · ของสดและอุปกรณ์
+enum StorageSheet { food, supply, items }
+
+Future<void> showStorageSheet(BuildContext context, StorageSheet kind) {
+  final (title, icon) = switch (kind) {
+    StorageSheet.food => ('อาหารในคลัง', 'fry'),
+    StorageSheet.supply => ('เสบียงฉุกเฉิน', 'crate'),
+    StorageSheet.items => ('ของสดและอุปกรณ์', 'veg'),
+  };
+  return showDetailSheet<void>(
+    context,
+    title: title,
+    icon: PixelIcon(icon, size: 32),
+    builder: (_) => _StorageSheetBody(kind),
+  );
+}
+
 /// แท็บ "คลัง" (store ในต้นแบบ): เสบียงฉุกเฉิน เป้าหมายเสบียง อาหาร (กิน ขาย ทิ้ง)
 /// วัตถุดิบสด และอุปกรณ์ — กิน ขาย ทิ้ง ต้องผ่านหน้ายืนยัน
+/// หน้าหลักเป็นฉากคลัง + ถาดปุ่ม · รายการเปิดเป็นแผ่นด้านล่าง
 class StorageTab extends ConsumerWidget {
   const StorageTab({super.key});
 
@@ -28,8 +78,209 @@ class StorageTab extends ConsumerWidget {
     final session = ref.watch(gameProvider)!;
     final e = session.engine;
     final s = session.state;
-    final ctl = ref.read(gameProvider.notifier);
+    final story = watchStory(ref);
+    final next = story == null ? null : Story.nextTarget(story.$1, story.$2);
 
+    final need = e.supplyNeedDays;
+    final after = e.supplyAfterDisaster;
+    final short = need > 0 && after < 0;
+    final near = s.stock.where((b) => e.isNearExpiry(b) && !e.isExpired(b));
+    final expired = s.stock.where(e.isExpired);
+
+    final chips = <Widget>[
+      SceneChip(
+        key: const ValueKey('storage-supply'),
+        color: short ? const Color(0xE6B42318) : DsColors.glass,
+        icon: const PixelIcon('crate', size: 32),
+        text: 'พอกิน ${fmtNum(e.supplyDays)} วัน',
+        below: Text(
+          need <= 0
+              ? 'ยังไม่มีประกาศภัย'
+              : after >= 0
+              ? 'พอสำหรับภัย $need วัน'
+              : 'ขาดอีก ${fmtNum(-after)} วัน',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: glassText(color: const Color(0xFFFFE7A8)),
+        ),
+        onTap: () => showStorageSheet(context, StorageSheet.supply),
+      ),
+      SceneChip(
+        key: const ValueKey('storage-food-chip'),
+        color: expired.isNotEmpty ? const Color(0xE6B42318) : DsColors.glass,
+        icon: const PixelIcon('fry', size: 32),
+        text: 'อาหาร ${e.servings} จาน',
+        below: Text(
+          expired.isNotEmpty
+              ? 'หมดอายุ ${expired.length} ชุด'
+              : near.isNotEmpty
+              ? 'ใกล้เสีย ${near.length} ชุด'
+              : (s.stock.isEmpty ? 'ทำได้ที่ครัว' : 'ยังสดอยู่'),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: glassText(color: const Color(0xFFFFE7A8)),
+        ),
+        onTap: () => showStorageSheet(context, StorageSheet.food),
+      ),
+    ];
+
+    final round = ScenePage.round(context);
+    final tray = ActionTray(
+      leading: RoundAction(
+        key: const ValueKey('storage-supply-btn'),
+        icon: const PixelIcon('crate', size: 32),
+        label: 'เสบียง',
+        labelOnScene: true,
+        diameter: round,
+        color: short ? const Color(0xFFFFD9D2) : DsColors.primarySoft,
+        tooltip: 'อาหารพอกินกี่วัน และเป้าหมายเสบียง',
+        onPressed: () => showStorageSheet(context, StorageSheet.supply),
+      ),
+      primary: TipSpot(
+        screen: GameScreen.storage,
+        child: Spotlight(
+          on:
+              next == StoryTarget.eat ||
+              next == StoryTarget.sellFood ||
+              e.tutorialStep?.target == TutorialTarget.storage,
+          child: KeyedSubtree(
+            key: const ValueKey('primary-storage'),
+            child: TrayPrimary(
+              key: const ValueKey('storage-food'),
+              label: 'กินอาหาร',
+              icon: const PixelIcon('fry', size: 32),
+              note: 'อิ่ม ${s.hunger}',
+              onPressed: () => showStorageSheet(context, StorageSheet.food),
+            ),
+          ),
+        ),
+      ),
+      trailing: RoundAction(
+        key: const ValueKey('storage-items'),
+        icon: const PixelIcon('veg', size: 32),
+        label: 'ของสด',
+        labelOnScene: true,
+        diameter: round,
+        tooltip: 'ปลา วัตถุดิบ และอุปกรณ์ในคลัง',
+        onPressed: () => showStorageSheet(context, StorageSheet.items),
+      ),
+    );
+    return ScenePage(chips: chips, tray: tray);
+  }
+}
+
+/// เนื้อในแผ่นของคลัง (รายการเดิม)
+class _StorageSheetBody extends ConsumerWidget {
+  const _StorageSheetBody(this.kind);
+  final StorageSheet kind;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final session = ref.watch(gameProvider)!;
+    final e = session.engine;
+    final s = session.state;
+    final ctl = ref.read(gameProvider.notifier);
+    final isStory = watchStory(ref) != null;
+
+    Widget empty(String text) => Padding(
+      padding: const EdgeInsets.symmetric(vertical: Gap.s),
+      child: Muted(text, size: FontSize.body, align: TextAlign.center),
+    );
+
+    if (kind == StorageSheet.supply) {
+      return _SupplyPanel(
+        engine: e,
+        // เนื้อเรื่องใช้แค่ตัวคำนวณ "อาหารพอกิน" (ไม่ต้องเลื่อนผ่านเป้าหมายเอง)
+        showGoal: !isStory,
+        onGoal: (g) => ctl.run((e) => e.setGoal(g)),
+      );
+    }
+
+    if (kind == StorageSheet.items) {
+      final fish = [
+        for (final f in kFish.values)
+          if ((s.fishStock[f.id] ?? 0) > 0) f,
+      ];
+      final ingredients = [
+        for (final g in kIngredients.values)
+          if ((s.inventory[g.id] ?? 0) > 0) g,
+      ];
+      final equipment = [
+        for (final q in kEquipment.values)
+          if (s.equipmentCount(q.id) > 0) q,
+      ];
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          WoodPanel(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const SectionTitle(
+                  'วัตถุดิบสด',
+                  icon: PixelIcon('veg', size: 28),
+                ),
+                if (fish.isEmpty && ingredients.isEmpty)
+                  empty('ไม่มี')
+                else
+                  _SlotGrid(
+                    children: [
+                      for (final f in fish)
+                        _Slot(
+                          key: ValueKey('raw-${f.id}'),
+                          icon: 'f_${f.id}',
+                          name: f.name,
+                          count: s.fishStock[f.id]!,
+                          iconSize: 48,
+                        ),
+                      for (final g in ingredients)
+                        _Slot(
+                          key: ValueKey('raw-${g.id}'),
+                          icon: g.icon,
+                          name: g.name,
+                          count: s.inventory[g.id]!,
+                        ),
+                    ],
+                  ),
+                const SizedBox(height: Gap.xs),
+                const Muted(
+                  'วัตถุดิบและปลาสดในคลังไม่หมดอายุ',
+                  size: 13,
+                  align: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+          WoodPanel(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const SectionTitle(
+                  'อุปกรณ์',
+                  icon: PixelIcon('shield', size: 28),
+                ),
+                if (equipment.isEmpty)
+                  empty('ยังไม่มี')
+                else
+                  _SlotGrid(
+                    children: [
+                      for (final q in equipment)
+                        _Slot(
+                          key: ValueKey('equip-${q.id}'),
+                          icon: q.icon,
+                          name: q.name,
+                          count: s.equipmentCount(q.id),
+                        ),
+                    ],
+                  ),
+              ],
+            ),
+          ),
+        ],
+      );
+    }
+
+    // ---------- อาหาร: กิน / ขาย / ทิ้ง ----------
     final meals = <int>[];
     final preserved = <int>[];
     for (var i = 0; i < s.stock.length; i++) {
@@ -37,8 +288,6 @@ class StorageTab extends ConsumerWidget {
         i,
       );
     }
-
-    final isStory = watchStory(ref) != null;
     // เนื้อเรื่อง: ชี้ปุ่ม "กิน" ของจานแรกที่กินได้ตามลำดับบนจอ (อาหารสุกก่อน เพราะเสียเร็วกว่า)
     final firstEdible = [
       ...meals,
@@ -109,53 +358,9 @@ class StorageTab extends ConsumerWidget {
       ),
     );
 
-    Widget empty(String text) => Padding(
-      padding: const EdgeInsets.symmetric(vertical: Gap.s),
-      child: Muted(text, size: FontSize.body, align: TextAlign.center),
-    );
-
-    final fish = [
-      for (final f in kFish.values)
-        if ((s.fishStock[f.id] ?? 0) > 0) f,
-    ];
-    final ingredients = [
-      for (final g in kIngredients.values)
-        if ((s.inventory[g.id] ?? 0) > 0) g,
-    ];
-    final equipment = [
-      for (final q in kEquipment.values)
-        if (s.equipmentCount(q.id) > 0) q,
-    ];
-
-    final supply = _SupplyPanel(
-      engine: e,
-      // เนื้อเรื่องใช้แค่ตัวคำนวณ "อาหารพอกิน" (ไม่ต้องเลื่อนผ่านเป้าหมายเอง)
-      showGoal: !isStory,
-      onGoal: (g) => ctl.run((e) => e.setGoal(g)),
-    );
-    // เนื้อเรื่อง: ถึงเวลากิน → อาหารขึ้นก่อนตัวคำนวณเสบียง
-    final story = watchStory(ref);
-    // โหมดเอาชีวิตรอด: มีอาหาร → รายการอาหาร (ปุ่มกิน) ขึ้นก่อน
-    final eatFirst = story != null
-        ? Story.nextTarget(story.$1, story.$2) == StoryTarget.eat
-        : s.stock.isNotEmpty;
-
-    // แนวนอน: แผงเสบียงอยู่ฝั่งซ้ายใต้ภาพ ให้รายการอาหาร (ปุ่มกิน) เริ่มบนสุดฝั่งขวา
-    final split = context.rs.useSplit && !isStory;
-    return TabScroll(
-      header: isStory ? 0 : (split ? 2 : 1),
-      decorative: true,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (!isStory)
-          PageHeader(
-            scene: PixelScene(painterBuilder: RoomPainter.new),
-            title: 'คลังสินค้า',
-            icon: const PixelIcon('crate', size: 30),
-          ),
-
-        if (split) supply,
-        if (!eatFirst && !split) supply,
-
         // เนื้อเรื่อง: ซ่อนแผงอาหารที่ว่าง ให้จานที่ต้องกินขึ้นมาบนจอ
         // ไม่มีอาหารสุกแต่มีอาหารถนอม → ซ่อนแผงว่าง ให้ปุ่มกินขึ้นมาบนจอ
         if (meals.isNotEmpty || (!isStory && preserved.isEmpty))
@@ -173,7 +378,6 @@ class StorageTab extends ConsumerWidget {
               ],
             ),
           ),
-
         if (!isStory || preserved.isNotEmpty || s.processing.isNotEmpty)
           WoodPanel(
             child: Column(
@@ -195,74 +399,6 @@ class StorageTab extends ConsumerWidget {
               ],
             ),
           ),
-
-        if (eatFirst && !split) supply,
-
-        WoodPanel(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const SectionTitle(
-                'วัตถุดิบสด',
-                icon: PixelIcon('veg', size: 28),
-              ),
-              if (fish.isEmpty && ingredients.isEmpty)
-                empty('ไม่มี')
-              else
-                _SlotGrid(
-                  children: [
-                    for (final f in fish)
-                      _Slot(
-                        key: ValueKey('raw-${f.id}'),
-                        icon: 'f_${f.id}',
-                        name: f.name,
-                        count: s.fishStock[f.id]!,
-                        iconSize: 48,
-                      ),
-                    for (final g in ingredients)
-                      _Slot(
-                        key: ValueKey('raw-${g.id}'),
-                        icon: g.icon,
-                        name: g.name,
-                        count: s.inventory[g.id]!,
-                      ),
-                  ],
-                ),
-              const SizedBox(height: Gap.xs),
-              const Muted(
-                'วัตถุดิบและปลาสดในคลังไม่หมดอายุ',
-                size: 13,
-                align: TextAlign.center,
-              ),
-            ],
-          ),
-        ),
-
-        WoodPanel(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const SectionTitle(
-                'อุปกรณ์',
-                icon: PixelIcon('shield', size: 28),
-              ),
-              if (equipment.isEmpty)
-                empty('ยังไม่มี')
-              else
-                _SlotGrid(
-                  children: [
-                    for (final q in equipment)
-                      _Slot(
-                        key: ValueKey('equip-${q.id}'),
-                        icon: q.icon,
-                        name: q.name,
-                        count: s.equipmentCount(q.id),
-                      ),
-                  ],
-                ),
-            ],
-          ),
-        ),
       ],
     );
   }
@@ -366,7 +502,7 @@ class _SupplyPanelState extends State<_SupplyPanel> {
                       key: ValueKey('goal-${kSupplyGoals[i]}'),
                       label: '${kSupplyGoals[i]} วัน',
                       style: s.goal == kSupplyGoals[i]
-                          ? PixelButtonStyle.gold
+                          ? PixelButtonStyle.green
                           : PixelButtonStyle.wood,
                       onPressed: () => onGoal(kSupplyGoals[i]),
                     ),
@@ -487,9 +623,7 @@ class _BatchRow extends StatelessWidget {
                   target: StoryTarget.sellFood,
                   child: PixelButton(
                     label: closed ? 'ปิด' : 'ขาย',
-                    style: closed
-                        ? PixelButtonStyle.wood
-                        : PixelButtonStyle.gold,
+                    style: PixelButtonStyle.wood,
                     below: CoinTag(
                       engine.foodSellPrice(batch.food),
                       boxed: true,

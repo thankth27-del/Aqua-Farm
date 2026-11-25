@@ -1,11 +1,11 @@
-// สร้างไอคอนแอป (PWA / iPhone) จากภาพพิกเซลใน assets/pixel/ — วาดแบบไม่เบลอ
+// สร้างไอคอนแอป (PWA / iPhone) — พื้นบ่อวาดแบบพิกเซล ปลาใช้เฟรมแรกของปลาชุดใหม่ (assets/fish/)
 // รัน: node tool/make_icons.mjs
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { launch } from './cdp.mjs';
 
 const root = resolve(import.meta.dirname, '..');
-const fish = 'data:image/png;base64,' + readFileSync(resolve(root, 'assets/pixel/f_nila.png')).toString('base64');
+const fish = 'data:image/png;base64,' + readFileSync(resolve(root, 'assets/fish/nila_strip.png')).toString('base64');
 
 // [ไฟล์, ขนาด px, maskable?]
 const targets = [
@@ -33,8 +33,10 @@ try {
       // ฟองอากาศ
       for (const [bx, by] of [[17, 5], [19, 3], [6, 15], [15.5, 17]]) { R(bx, by, 1.2, 1.2, '#a5ddf5'); R(bx + .3, by + .3, .4, .4, '#fff'); }
       // ปลานิล (maskable เล็กลงให้อยู่ในวงปลอดภัย)
-      const fw = ${maskable} ? 12 : 17, fh = fw * 7 / 12;
-      x.drawImage(img, Math.round((12 - fw / 2) * u), Math.round((11.5 - fh / 2) * u), Math.round(fw * u), Math.round(fh * u));
+      // เฟรม 128x128 ตัวปลากว้างราว 80% ของเฟรม — ย่อแบบนุ่มเฉพาะตอนย่อภาพ
+      const fw = (${maskable} ? 12 : 17) * 1.25;
+      x.imageSmoothingEnabled = true; x.imageSmoothingQuality = 'high';
+      x.drawImage(img, 0, 0, 128, 128, Math.round((12 - fw / 2) * u), Math.round((11.5 - fw / 2) * u), Math.round(fw * u), Math.round(fw * u));
       return c.toDataURL('image/png');
     })()`);
     writeFileSync(resolve(root, file), Buffer.from(url.split(',')[1], 'base64'));
