@@ -8,6 +8,7 @@ import '../../data/disaster_data.dart';
 import '../../game/hints.dart';
 import '../../game/story.dart';
 import '../../game/tutorial.dart';
+import '../build_info.dart';
 import '../dialogs.dart';
 import '../layout/responsive.dart';
 import '../providers.dart';
@@ -945,6 +946,18 @@ class _PauseMenu extends StatelessWidget {
                         if (i > 0) const SizedBox(height: Gap.s),
                         items[i],
                       ],
+                    // เวอร์ชันที่เปิดอยู่ (commit + เวลา build) เช็กได้ว่าเว็บอัปเดตแล้วหรือยัง
+                    const SizedBox(height: Gap.s),
+                    Align(
+                      alignment: Alignment.bottomRight,
+                      child: Text(
+                        buildLabel,
+                        key: const ValueKey('build-version'),
+                        style: DsText.caption.copyWith(
+                          color: DsColors.textMuted,
+                        ),
+                      ),
+                    ),
                   ],
                 );
               },

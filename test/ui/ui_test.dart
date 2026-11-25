@@ -632,6 +632,8 @@ void main() {
     await tester.tap(find.byTooltip('เมนู / พัก'));
     await tester.pumpAndSettle();
     expect(find.text('เสียง: เปิด'), findsOneWidget);
+    // มุมเมนูพักบอกเวอร์ชันที่เปิดอยู่ (build ในเครื่อง = dev)
+    expect(find.text('เวอร์ชัน dev'), findsOneWidget);
     await tester.tap(find.text('บันทึกเกม'));
     await tester.pumpAndSettle();
     expect(beeper.beeps.sublist(before), [kBeepOk]);

@@ -12,15 +12,28 @@ permissions:
   pages: write
   id-token: write
 
+# ไม่ยกเลิก run ที่กำลังทำ (กันกรณีกด Re-run run เก่าแล้วไปยกเลิก run ใหม่)
+# run ที่รอคิวอยู่จะถูกแทนด้วย run ใหม่กว่าเอง
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      # กันเว็บย้อนเวอร์ชัน: ถ้า commit ของ run นี้ไม่ใช่ล่าสุดของ main (เช่นกด Re-run run เก่า)
+      # ให้ล้มตรงนี้ ไม่ build/deploy ทับเวอร์ชันใหม่กว่า
+      - name: Make sure this is the latest main
+        run: |
+          LATEST=$(git ls-remote origin refs/heads/main | cut -f1)
+          echo "run: $GITHUB_SHA  main: $LATEST"
+          if [ "$LATEST" != "$GITHUB_SHA" ]; then
+            echo "::error::commit นี้ไม่ใช่ล่าสุดของ main ($LATEST) ไม่ deploy เพื่อกันเว็บย้อนเป็นเวอร์ชันเก่า ให้ Re-run run ล่าสุดแทน"
+            exit 1
+          fi
 
       - uses: subosito/flutter-action@v2
         with:
@@ -47,8 +60,14 @@ jobs:
           echo "href=$BASE" >> "$GITHUB_OUTPUT"
           echo "base-href = $BASE"
 
+      # ฝังเวอร์ชัน (commit 7 ตัว + เวลา build ไทย) ไว้แสดงในเมนูพัก
       - name: Build web
-        run: flutter build web --release --no-web-resources-cdn --base-href "${{ steps.base.outputs.href }}"
+        run: |
+          STAMP=$(TZ=Asia/Bangkok date '+%d/%m/%Y %H:%M')
+          flutter build web --release --no-web-resources-cdn \
+            --base-href "${{ steps.base.outputs.href }}" \
+            --dart-define=BUILD_SHA=${GITHUB_SHA::7} \
+            --dart-define="BUILD_TIME=$STAMP"
 
       - uses: actions/configure-pages@v5
 
