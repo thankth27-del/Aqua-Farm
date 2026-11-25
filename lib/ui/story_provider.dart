@@ -9,7 +9,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../game/game_engine.dart';
 import '../game/game_state.dart';
+import '../data/story_script.dart';
 import '../game/story.dart';
+import '../game/story_talk.dart';
 import 'providers.dart';
 
 /// Random ของเนื้อเรื่อง (override ในเทสต์ให้ผลแน่นอน)
@@ -81,6 +83,43 @@ class StoryController extends Notifier<StoryProgress?> {
     final e = _engine;
     if (p == null || e == null) return;
     Story.afterDay(p, e, r);
+    state = p.copy();
+    await _save();
+  }
+
+  /// ลุงพูดชุดนี้จบแล้ว
+  Future<void> hear(TalkCue cue) async {
+    final p = state;
+    if (p == null) return;
+    StoryTalk.hear(p, cue);
+    state = p.copy();
+    await _save();
+  }
+
+  /// ผู้เล่นเลือกตัวเลือก → คืนบทที่ลุงตอบ
+  List<ScriptLine> choose(ChoiceScene c, String id) {
+    final p = state;
+    if (p == null) return const [];
+    final reply = StoryTalk.choose(p, c, id);
+    state = p.copy();
+    _save();
+    return reply;
+  }
+
+  /// ตอบคำถามบท 4 → คืนคำอธิบายของลุง (ผิดก็ไม่มีโทษ ถามข้อเดิมใหม่)
+  QuizAnswer answer(TalkCue cue, int index) {
+    final p = state;
+    final a = StoryTalk.answer(p!, cue, index);
+    state = p.copy();
+    _save();
+    return a;
+  }
+
+  /// เก็บการ์ดความรู้ลงสมุดบันทึก
+  Future<void> keepCard(KnowledgeCard card) async {
+    final p = state;
+    if (p == null) return;
+    StoryTalk.keepCard(p, card);
     state = p.copy();
     await _save();
   }

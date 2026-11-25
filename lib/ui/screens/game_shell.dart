@@ -16,6 +16,7 @@ import '../theme/theme.dart';
 import '../widgets/game_hud.dart';
 import '../widgets/guide_bars.dart';
 import '../widgets/story_gate.dart';
+import '../widgets/story_talk_layer.dart';
 import '../widgets/tutorial_panel.dart';
 import 'farm_tab.dart';
 import 'fish_tab.dart';
@@ -114,6 +115,13 @@ class _GameShellState extends ConsumerState<GameShell> {
       }
       final next = Story.nextTarget(p, e);
       storyTab = next == null ? null : storyTabOf(next);
+      // ไม่มีเมนูล่าง: สิ่งที่ต้องทำต่อไปอยู่หน้าอื่น → ลุงพาไปหน้านั้น
+      final go = storyTab;
+      if (go != null && go != _tab && Story.tabOpen(p, go)) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && _tab != go) _select(go);
+        });
+      }
     }
     final body = switch (_tab) {
       0 => FarmTab(onOpenTab: _select),
@@ -199,7 +207,10 @@ class _GameShellState extends ConsumerState<GameShell> {
         fit: StackFit.expand,
         children: [
           backdrop,
-          if (side)
+          // เนื้อเรื่อง: ไม่มีเมนูหลัก ลุงทองพาไปหน้าที่ต้องใช้เอง (เหลือปุ่มพักมุมจอ)
+          if (story != null)
+            content
+          else if (side)
             Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -214,6 +225,8 @@ class _GameShellState extends ConsumerState<GameShell> {
                 nav,
               ],
             ),
+          // เนื้อเรื่อง: ลุงทองเล่า/ถาม/ให้การ์ดความรู้ ทับหน้าเกม
+          if (story != null) StoryTalkLayer(onOpenTab: _select),
         ],
       ),
     );

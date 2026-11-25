@@ -17,6 +17,9 @@ import 'package:aqua_farm/ui/screens/storage_tab.dart';
 import 'package:aqua_farm/game/story.dart';
 import 'package:aqua_farm/ui/sound.dart';
 import 'package:aqua_farm/ui/story_provider.dart';
+
+import 'uncle_helpers.dart';
+
 import 'package:aqua_farm/ui/theme/theme.dart';
 import 'package:aqua_farm/ui/widgets/guide_bars.dart';
 import 'package:aqua_farm/data/food_data.dart';
@@ -157,10 +160,28 @@ void main() {
   });
 
   group('เนื้อเรื่อง: แถบเป้าหมายและไฮไลต์', () {
-    Future<void> startStory(WidgetTester tester) async {
+    Future<void> startStory(WidgetTester tester, {bool choose = false}) async {
       await pumpApp(tester, unlocked: false);
       await tester.tap(find.byKey(const ValueKey('menu-story')));
       await tester.pumpAndSettle();
+      // ลุงทองเล่าเปิดบท 1 ก่อน แล้วถามให้เลือกปลา
+      expect(find.byKey(const ValueKey('uncle-talk')), findsOneWidget);
+      await hearUncle(tester, pick: null);
+      expect(find.byKey(const ValueKey('uncle-option-2')), findsOneWidget);
+      if (choose) {
+        await hearUncle(tester);
+        return;
+      }
+      // เลือกแล้วกด "ยกเลิก" ที่หน้ายืนยัน = ยังไม่ซื้อ (ไปซื้อเองที่ร้านปลาได้)
+      await tester.tap(find.byKey(const ValueKey('uncle-option-0')));
+      await tester.pumpAndSettle();
+      while (find.text('ยกเลิก').evaluate().isEmpty) {
+        await tester.tap(find.byKey(const ValueKey('uncle-talk')));
+        await tester.pumpAndSettle();
+      }
+      await tester.tap(find.text('ยกเลิก'));
+      await tester.pumpAndSettle();
+      await hearUncle(tester);
     }
 
     bool lit(WidgetTester tester, String target) =>
@@ -196,24 +217,100 @@ void main() {
       },
     );
 
-    testWidgets('บท 1: เปิดแค่แท็บปลา แท็บอื่นจางและกดไม่ได้', (tester) async {
+    testWidgets('ไม่มีเมนูล่าง: ลุงพาไปหน้าที่ต้องใช้ เหลือปุ่มพักมุมจอ', (
+      tester,
+    ) async {
       await startStory(tester);
-      // เริ่มที่แท็บปลา (แท็บฟาร์มยังล็อก)
+      expect(find.byType(GameNavBar), findsNothing);
+      expect(find.byTooltip('เมนู / พัก'), findsOneWidget);
+      // บท 1 เริ่มที่หน้าปลา
       expect(find.byType(FishTab), findsOneWidget);
-      for (final i in [0, 2, 3, 4]) {
-        expect(find.byKey(ValueKey('nav-locked-$i')), findsOneWidget);
-      }
-      expect(find.byKey(const ValueKey('nav-locked-1')), findsNothing);
-      await tester.tap(
-        find.descendant(
-          of: find.byType(GameNavBar),
-          matching: find.text('ตลาด'),
-        ),
-        warnIfMissed: false,
-      );
-      await tester.pumpAndSettle();
-      expect(find.byType(MarketTab), findsNothing);
     });
+
+    testWidgets('บท 1: เลือกปลาแล้วยืนยัน = ซื้อปลาชนิดนั้นครบ 3 ตัวจริง', (
+      tester,
+    ) async {
+      await pumpApp(tester, unlocked: false);
+      await tester.tap(find.byKey(const ValueKey('menu-story')));
+      await tester.pumpAndSettle();
+      await hearUncle(tester, pick: null);
+      final money = container.read(gameProvider)!.state.money;
+      // ข้อ 2 = ปลาดุก
+      await tester.tap(find.byKey(const ValueKey('uncle-option-1')));
+      await tester.pumpAndSettle();
+      while (find.text('ตกลง').evaluate().isEmpty) {
+        await tester.tap(find.byKey(const ValueKey('uncle-talk')));
+        await tester.pumpAndSettle();
+      }
+      expect(
+        find.text('ซื้อปลาดุก 3 ตัว ราคา 90฿ ปล่อยลงบ่อ?'),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('ตกลง'));
+      await tester.pumpAndSettle();
+      final s = container.read(gameProvider)!.state;
+      expect(s.pond.map((f) => f.type), ['dook', 'dook', 'dook']);
+      expect(s.money, money - 90);
+      expect(container.read(storyProvider)!.choices['fish'], 'dook');
+      // ถัดไปลุงสอนให้อาหาร
+      expect(find.byKey(const ValueKey('talk-1-t:feed')), findsOneWidget);
+    });
+
+    testWidgets(
+      'บท 4: ลุงสอนทีละวิธี ถามสั้น ตอบผิดลุงอธิบายแล้วให้เลือกใหม่',
+      (tester) async {
+        await startStory(tester, choose: true);
+        container.read(storyProvider)!
+          ..chapter = 4
+          ..talked = 4
+          ..heard.clear();
+        container.read(gameProvider.notifier).update((_) {});
+        await tester.pumpAndSettle();
+        Finder k(String s) => find.byKey(ValueKey(s));
+        Future<void> next() async {
+          await tester.tap(k('uncle-talk'));
+          await tester.pump();
+          await tester.pump(const Duration(seconds: 2));
+        }
+
+        // สอนตากแห้ง 2 ประโยค (แตะข้าม typewriter แล้วแตะไปต่อ)
+        expect(k('talk-4-l:dried'), findsOneWidget);
+        for (
+          var i = 0;
+          i < 4 && k('talk-4-l:dried').evaluate().isNotEmpty;
+          i++
+        ) {
+          await next();
+        }
+        expect(k('talk-4-q:dried'), findsOneWidget);
+        expect(find.text('ทำไมปลาตากแห้งถึงเก็บได้นาน?'), findsWidgets);
+        expect(k('uncle-option-2'), findsOneWidget);
+        final money = container.read(gameProvider)!.state.money;
+
+        // ตอบผิด → ลุงอธิบาย (หน้าคิด ไม่ตำหนิ) → ถามข้อเดิมอีกครั้ง
+        await tester.tap(k('uncle-option-1'));
+        await tester.pump();
+        await tester.pump(const Duration(seconds: 2));
+        expect(k('talk-reply'), findsOneWidget);
+        expect(k('uncle-think'), findsOneWidget);
+        expect(find.textContaining('ลองดูอีกทีนะ'), findsWidgets);
+        await next();
+        expect(k('talk-4-q:dried'), findsOneWidget);
+        expect(container.read(gameProvider)!.state.money, money);
+
+        // ตอบถูก → ลุงชม แล้วชวนลองทำ (พาไปหน้าครัว)
+        await tester.pump(const Duration(seconds: 2));
+        await tester.tap(k('uncle-option-0'));
+        await tester.pump();
+        await tester.pump(const Duration(seconds: 2));
+        expect(k('uncle-smile'), findsOneWidget);
+        expect(find.textContaining('ถูกต้อง!'), findsWidgets);
+        await next();
+        expect(k('talk-4-try:dried'), findsOneWidget);
+        expect(k('talk-4-l:salted'), findsNothing);
+        expect(container.read(storyProvider)!.heard, contains('q:dried'));
+      },
+    );
 
     testWidgets('ปุ่มจบวันจางจนกว่าจะซื้อปลาครบและให้อาหาร แล้วจึงกะพริบ', (
       tester,
@@ -243,13 +340,28 @@ void main() {
         e.state.day = p.startDay + kStoryCareDays;
       });
       await tester.pumpAndSettle();
+      // จบบท: ลุงชม แล้วให้การ์ด "ลุงรู้มา" พร้อมตัวเลขติดป้าย "ค่าในเกม"
+      expect(find.byKey(const ValueKey('talk-1-done')), findsOneWidget);
+      while (find.byKey(const ValueKey('card-keep')).evaluate().isEmpty) {
+        await tester.tap(find.byKey(const ValueKey('uncle-talk')));
+        await tester.pumpAndSettle();
+      }
+      expect(find.byKey(const ValueKey('card-fish')), findsOneWidget);
+      expect(find.text('ค่าในเกม'), findsWidgets);
+      await tester.tap(find.byKey(const ValueKey('card-keep')));
+      await tester.pumpAndSettle();
+      expect(container.read(storyProvider)!.cards, ['fish']);
       expect(find.text('ผ่านบทนี้แล้ว! กด "บทถัดไป"'), findsOneWidget);
       expect(find.byKey(const ValueKey('story-locked-endDay')), findsOneWidget);
       await tester.tap(find.byKey(const ValueKey('story-next')));
       await tester.pumpAndSettle();
+      // บทใหม่: ลุงทองเล่าเปิดบทก่อนให้ทำ
+      expect(find.byKey(const ValueKey('talk-2-intro')), findsOneWidget);
+      await hearUncle(tester);
       expect(find.text('บทที่ 2/7 · ตลาด'), findsOneWidget);
-      expect(find.byKey(const ValueKey('nav-locked-2')), findsNothing);
-      expect(container.read(saveRepositoryProvider).loadStory()!.$1.chapter, 2);
+      final saved = container.read(saveRepositoryProvider).loadStory()!.$1;
+      expect(saved.chapter, 2);
+      expect(saved.cards, ['fish']);
     });
 
     testWidgets('แพ้บท: แถบเป้าหมายเป็นสีแดง บอกเหตุผล และลองใหม่ได้', (
@@ -274,6 +386,7 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('story-retry')));
       await tester.pumpAndSettle();
       expect(container.read(gameProvider)!.state.pond, isEmpty);
+      await hearUncle(tester, pick: null);
       expect(find.text('บทที่ 1/7 · ลงบ่อ'), findsOneWidget);
     });
   });

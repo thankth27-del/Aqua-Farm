@@ -14,6 +14,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../game/helpers.dart';
+import 'uncle_helpers.dart';
 
 class _SilentBeeper implements Beeper {
   @override
@@ -46,6 +47,7 @@ Future<void> pumpStory(WidgetTester tester) async {
   await tester.pumpAndSettle();
   await tester.tap(find.byKey(const ValueKey('menu-story')));
   await tester.pumpAndSettle();
+  await hearUncle(tester);
 }
 
 StoryProgress get progress => container.read(storyProvider)!;
@@ -79,14 +81,13 @@ void expectNoScroll(WidgetTester tester, Finder f, String what) {
 Future<void> settle(WidgetTester tester) async {
   await tester.pump();
   await tester.pumpAndSettle();
+  // เปิดบทใหม่ → ลุงทองเล่าก่อน
+  await hearUncle(tester);
 }
 
+/// เนื้อเรื่องไม่มีเมนูล่าง: ลุงทองพาไปหน้า [name] เอง — ตรวจว่าไม่มีเมนูให้กด
 Future<void> openTab(WidgetTester tester, String name) async {
-  final f = find.descendant(
-    of: find.byType(GameNavBar),
-    matching: find.text(name),
-  );
-  await tester.tap(f);
+  expect(find.byType(GameNavBar), findsNothing, reason: 'ไปหน้า$name');
   await settle(tester);
 }
 

@@ -228,7 +228,13 @@ class StoryProgress {
     this.failReason,
     this.snapshot,
     this.retryChapter = 1,
-  });
+    this.talked = 0,
+    Set<String>? heard,
+    Map<String, String>? choices,
+    List<String>? cards,
+  }) : heard = heard ?? {},
+       choices = choices ?? {},
+       cards = cards ?? [];
 
   /// บทปัจจุบัน 1-7
   int chapter;
@@ -248,6 +254,21 @@ class StoryProgress {
   /// บทที่กลับไปเมื่อกดลองใหม่ (บท 6 ที่เริ่มโดยยังเตรียมไม่ครบ = กลับไปบท 5)
   int retryChapter;
 
+  /// บทล่าสุดที่ลุงทองเล่าเปิดบทแล้ว (น้อยกว่า [chapter] = ต้องเล่าบทนี้)
+  int talked;
+
+  /// บทพูดของบทนี้ที่ลุงพูดไปแล้ว (เช่น 't:feed', 'done', 'card') — ล้างเมื่อเปลี่ยนบท
+  final Set<String> heard;
+
+  /// ตัวเลือกที่ผู้เล่นตัดสินใจแล้ว (id จุดตัดสินใจ → id ตัวเลือก)
+  final Map<String, String> choices;
+
+  /// การ์ดความรู้ที่เก็บในสมุดบันทึกลุงทองแล้ว (ตามลำดับที่ได้)
+  final List<String> cards;
+
+  /// ลุงยังไม่ได้เล่าเปิดบทปัจจุบัน
+  bool get needsIntro => talked < chapter;
+
   bool get failed => failReason != null;
   StoryChapter get spec => kStory[chapter - 1];
   bool get finished => chapter == kStoryChapters;
@@ -259,6 +280,10 @@ class StoryProgress {
     failReason: failReason,
     snapshot: snapshot,
     retryChapter: retryChapter,
+    talked: talked,
+    heard: {...heard},
+    choices: {...choices},
+    cards: [...cards],
   );
 
   Map<String, dynamic> toJson() => {
@@ -268,6 +293,10 @@ class StoryProgress {
     'fail': failReason,
     'snap': snapshot,
     'retry': retryChapter,
+    'talk': talked,
+    'heard': heard.toList(),
+    'pick': choices,
+    'cards': cards,
   };
 
   factory StoryProgress.fromJson(Map<String, dynamic> j) => StoryProgress(
@@ -279,6 +308,10 @@ class StoryProgress {
         ? null
         : Map<String, dynamic>.from(j['snap'] as Map),
     retryChapter: (j['retry'] as num?)?.toInt() ?? 1,
+    talked: (j['talk'] as num?)?.toInt() ?? 0,
+    heard: {...((j['heard'] as List?) ?? const []).cast<String>()},
+    choices: Map<String, String>.from((j['pick'] as Map?) ?? const {}),
+    cards: [...((j['cards'] as List?) ?? const []).cast<String>()],
   );
 }
 
@@ -472,6 +505,7 @@ abstract final class Story {
       // บทสรุปไม่มีเป้าหมาย: ผ่านทันที
       ..done = n == kStoryChapters
       ..retryChapter = n;
+    p.heard.clear();
     if (p.chapter == 5) {
       // ประกาศน้ำท่วมล่วงหน้าตามต้นแบบ (เตือน 5 วัน ความรุนแรงเท่าภัยแรก)
       s.upcoming = UpcomingDisaster(
@@ -494,6 +528,8 @@ abstract final class Story {
       ..startDay = s.day
       ..done = false
       ..failReason = null;
+    // ลองใหม่: ลุงเล่าคำแนะนำระหว่างบทซ้ำได้ (เปิดบทไม่ต้องเล่าซ้ำ)
+    p.heard.clear();
     check(p, e);
     return e;
   }

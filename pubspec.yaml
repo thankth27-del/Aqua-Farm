@@ -66,6 +66,7 @@ flutter:
     - assets/pixel/
     # ปลาชุดใหม่: แถบ 8 เฟรม เฟรมละ 128x128 หันหัวไปทางขวา (ดู lib/ui/theme/fish_sprite.dart)
     - assets/fish/
+    - assets/characters/
 
   # ฟอนต์ไทยกลมมน Mali (SIL OFL 1.1 — ดู assets/fonts/Mali-OFL.txt) ฝังในแอป ไม่ดึงจากเน็ต
   fonts:
