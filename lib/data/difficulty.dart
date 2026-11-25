@@ -94,6 +94,10 @@ const List<double> kStageWater = [1, 1, 1.1, 1.2, 1.3, 1.4];
 /// เกรดรวมตอนชนะ: เฉลี่ยคะแนนเกรดรายวัน (S=3 A=2 B=1)
 const Map<String, int> kGradePoints = {'S': 3, 'A': 2, 'B': 1};
 const double kOverallS = 2.1;
+
+/// เกรดรายวัน: รายได้วันนั้นถึงเท่านี้ +1 / ปลาทุกตัวในบ่อสุขภาพถึงเท่านี้ +1
+const int kGradeEarned = 50;
+const int kGradeFishHealth = 60;
 const double kOverallA = 1.75;
 
 /// ขั้นความยาก 0..5 จากความคืบหน้า = วันปัจจุบัน ÷ วันเป้าหมาย
@@ -120,3 +124,19 @@ const double kDisasterGrowthBase = 0;
 
 /// ฟาร์มเสียหายที่ยังไม่ซ่อม ปลาโตช้าลงเหลือเท่านี้
 const double kDamagedGrowth = .5;
+
+// ปรับให้การเตรียมรับภัยคุ้ม (จากผลจำลอง tool/simulate.dart):
+// ไม่เตรียม = ปลาตายมากขึ้น · เตรียมครบ = ปลาตายน้อยกว่าเดิม · อดอาหารอันตรายขึ้น
+
+/// ปลาตายจากภัย: ตัวคูณจำนวนที่ตาย (ไม่เตรียมเลย = ปลาตาย ≈ จำนวนปลา × ความรุนแรง × ค่านี้)
+const double kDisasterFishLoss = 1.5;
+
+/// อุปกรณ์ครบ ลดปลาตายจากภัยได้กี่ส่วน (0.9 = เหลือ 10%)
+const double kDisasterProtectionCut = .9;
+
+/// ค่าเสียหายฟาร์มต่อวันของภัย (คูณความรุนแรง)
+const double kDisasterRepairBase = 40;
+
+/// อดอาหาร (ความอิ่ม 0) เสียสุขภาพต่อวัน / หิวมาก (ความอิ่ม < 20) เสียสุขภาพต่อวัน
+const int kStarveDamage = 30;
+const int kHungryDamage = 10;

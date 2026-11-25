@@ -587,7 +587,7 @@ void main() {
         tester.getSemantics(find.byKey(ValueKey(k))).label;
     // ค่าในเกม: โต 30/50/50 · น้ำเสีย .1/.25/.8 (เทียบกับค่ามากสุด เป็น 5 ช่อง)
     expect(meter('feed-grow-1'), 'ปลาโต 3 จาก 5');
-    expect(meter('feed-grow-2'), 'ปลาโต 5 จาก 5');
+    expect(meter('feed-grow-2'), 'ปลาโต 4 จาก 5');
     expect(meter('feed-grow-3'), 'ปลาโต 5 จาก 5');
     expect(meter('feed-dirty-1'), 'น้ำเสีย 1 จาก 5');
     expect(meter('feed-dirty-2'), 'น้ำเสีย 2 จาก 5');
@@ -625,7 +625,7 @@ void main() {
     expect(dayChip('2/30'), findsOneWidget);
   });
 
-  testWidgets('ให้อาหารมาก: ปลาโตเท่าพอดี แต่เตือนว่าน้ำจะเสียไว', (
+  testWidgets('ให้อาหารมาก: ปลาโตเร็วขึ้น แต่เตือนว่าน้ำจะเสียไว', (
     tester,
   ) async {
     await pumpApp(tester);
@@ -642,7 +642,10 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('feed-3')));
     await tester.pump();
-    expect(find.text('ให้อาหารมากเกินไป ของเสียจะสะสม'), findsOneWidget);
+    expect(
+      find.text('ให้อาหารมาก ปลาโตเร็วขึ้น แต่ของเสียจะสะสมไว'),
+      findsOneWidget,
+    );
     final s = container.read(gameProvider)!.state;
     expect(s.fed, 3);
     expect(s.money, money - cost);

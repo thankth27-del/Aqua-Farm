@@ -4,7 +4,7 @@ import 'package:material_ui/material_ui.dart';
 import '../../data/constants.dart';
 import '../../data/fish_data.dart';
 import '../../game/tutorial.dart';
-import '../design/design_system.dart' show DsColors;
+import '../design/design_system.dart' show DsColors, DsText;
 import '../dialogs.dart';
 import '../../game/story.dart';
 import '../layout/responsive.dart';
@@ -291,7 +291,36 @@ Widget _waterPanel(GameEngine e, GameState s) {
             textColor: AquaColors.ink,
           ),
         ),
-        PixelBar(value: s.water, color: wc, height: 22),
+        // เส้นแบ่ง 60%: ต่ำกว่านี้ปลาโตช้าและเริ่มป่วย (ค่าในเกม)
+        Stack(
+          key: const ValueKey('water-bar'),
+          children: [
+            PixelBar(value: s.water, color: wc, height: 22),
+            Positioned.fill(
+              child: FractionallySizedBox(
+                alignment: Alignment.centerLeft,
+                widthFactor: kWaterGoodLine / 100,
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: Container(width: 3, color: AquaColors.ink),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          s.water >= kWaterGoodLine
+              ? 'รักษาน้ำให้เกิน $kWaterGoodLine% (เส้นดำ) ปลาจะโตเต็มที่'
+              : s.water >= kWaterDangerLine
+              ? 'น้ำต่ำกว่า $kWaterGoodLine%: ปลาโตช้าลงและเริ่มป่วย'
+              : 'น้ำต่ำกว่า $kWaterDangerLine%: ปลาโตช้าและป่วยหนัก รีบเปลี่ยนน้ำ!',
+          key: const ValueKey('water-line-note'),
+          style: DsText.body.copyWith(
+            fontSize: 15,
+            color: s.water >= kWaterGoodLine ? DsColors.textMuted : wc,
+          ),
+        ),
         const SizedBox(height: Gap.m),
         GridView.count(
           crossAxisCount: 3,

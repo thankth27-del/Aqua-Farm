@@ -1,6 +1,8 @@
 /// ข้อมูลปลา 8 ชนิด (FISH ในต้นแบบ)
 library;
 
+import 'constants.dart';
+
 class FishSpec {
   const FishSpec({
     required this.id,
@@ -58,7 +60,11 @@ class FishSpec {
   final String forWho;
 
   /// จำนวนวันโดยประมาณเมื่อให้อาหารพอดี
-  int get daysToGrow => (100 / (50 * growthMul)).ceil();
+  int get daysToGrow => daysToGrowAt(2);
+
+  /// จำนวนวันโดยประมาณเมื่อให้อาหารระดับ [level] (1=น้อย 2=พอดี 3=มาก)
+  int daysToGrowAt(int level) =>
+      (100 / (kFeedGrowth[level] * growthMul)).ceil();
 
   /// ป้ายความเร็วเติบโต
   String get growthLabel => growthMul >= 1.1

@@ -182,6 +182,32 @@ void main() {
       },
     );
 
+    test(
+      'บ่อว่าง ไม่มีปลาเหลือ เงินไม่พอซื้อปลา → ลุงทองให้ลูกปลานิล 2 ตัวฟรี',
+      () {
+        final e = newEngine();
+        e.state.money = 10;
+        expect(e.freeFish, isTrue);
+        expect(e.buyFish('nila', 3).ok, isFalse);
+        final r = e.buyFish('nila', 2);
+        expect(r.ok, isTrue);
+        expect(r.message, contains('ลุงทอง'));
+        expect(e.state.pond.length, 2);
+        expect(e.state.money, 10);
+        expect(e.freeFish, isFalse);
+        // มีเงินพอซื้อเอง → ไม่ฟรี
+        final rich = newEngine();
+        expect(rich.freeFish, isFalse);
+      },
+    );
+
+    test('ให้อาหารมาก: ปลาโตช้าจับได้เร็วขึ้น 1 วัน ปลาโตเร็วเท่าเดิม', () {
+      expect(kFish['nila']!.daysToGrowAt(3), kFish['nila']!.daysToGrow);
+      expect(kFish['swai']!.daysToGrow, 3);
+      expect(kFish['swai']!.daysToGrowAt(3), 2);
+      expect(kFish['carp']!.daysToGrowAt(3), 3);
+    });
+
     test('มีเงินพอ "น้อย" → ไม่ฟรี จ่ายตามปกติ', () {
       final e = newEngine();
       e.buyFish('nila', 2);

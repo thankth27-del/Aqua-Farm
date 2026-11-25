@@ -279,7 +279,9 @@ class _FishDetailScreenState extends ConsumerState<FishDetailScreen> {
                         _Stat(
                           icon: const PixelIcon('cal', size: 26),
                           label: 'โต (อาหารพอดี)',
-                          value: '~${f.daysToGrow} วัน',
+                          value: f.daysToGrowAt(3) < f.daysToGrow
+                              ? '~${f.daysToGrow} วัน (ให้มาก ~${f.daysToGrowAt(3)})'
+                              : '~${f.daysToGrow} วัน',
                         ),
                         _Stat(
                           icon: const PixelGlyph(

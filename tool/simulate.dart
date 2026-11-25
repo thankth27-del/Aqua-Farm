@@ -2,6 +2,7 @@
 //
 // รัน:
 //   dart run tool/simulate.dart [จำนวนเกม]          ตารางผล (ค่าเริ่มต้น 200 เกม)
+//   dart run tool/simulate.dart ... --fish <ชนิด>   ให้บอทเลี้ยงปลาชนิดนั้นแทนปลานิล
 //   dart run tool/simulate.dart --rules             สรุปกติกาการตัดสินใจของบอทแต่ละแบบ
 //   dart run tool/simulate.dart --trace <โหมด> <ผู้เล่น> <seed> [วัน]
 //                                                   พิมพ์ทุกการกระทำของเกมเดียว ทีละวัน
@@ -19,6 +20,9 @@ import 'package:aqua_farm/data/ingredients.dart';
 import 'package:aqua_farm/game/game_engine.dart';
 
 enum Player { none, half, good }
+
+/// ชนิดปลาที่บอทเลี้ยง (เปลี่ยนด้วย `--fish <id>` เพื่อเทียบความคุ้มของแต่ละชนิด)
+var fishType = 'nila';
 
 const playerNames = {
   Player.none: 'ไม่เตรียม',
@@ -42,12 +46,15 @@ const rules = '''
   8. ขายอาหารปรุงสุกส่วนเกิน เก็บไว้กินพอ 2 วัน (ไม่เตรียม/เตรียมครึ่ง เก็บเพิ่มตามเป้าเสบียงถ้ามีภัย
      เล่นดี ไม่ตุนอาหารสุก เพราะเสียใน 3 วัน ใช้อาหารถนอมรับภัยแทน)
      อาหารถนอมเกินเป้าเกิน 3 วัน และไม่มีภัย → ขายส่วนเกิน
-  9. เติมปลานิลลงบ่อจนเต็ม 8 ตัว โดยเหลือเงินไว้ค่าอาหารปลา (บ่อว่างต้องซื้อก่อนเสมอ เพราะเป็นรายได้ทางเดียว)
+  9. (เริ่มซื้อปลาวันที่ 1-2 สุ่มต่อเกม) เติมปลานิลลงบ่อจนเต็ม 8 ตัว โดยเหลือเงินไว้ค่าอาหารปลา (บ่อมีปลาแล้ว: เหลือค่าอาหาร 3 วัน + ค่าเปลี่ยนน้ำ)
+     บ่อว่างและเงินหมด → รับลูกปลาฟรี 2 ตัวจากลุงทอง (บ่อว่างต้องซื้อก่อนเสมอ เพราะเป็นรายได้ทางเดียว)
 
 ส่วนที่ต่างกัน (เมื่อมีข่าวเตือนหรือภัยกำลังเกิด):
   ไม่เตรียม:
-    - ไม่ซื้ออุปกรณ์ป้องกัน ไม่ถนอมอาหาร ไม่ซ่อมฟาร์ม
+    - ไม่ซื้ออุปกรณ์ป้องกัน ไม่ถนอมอาหาร
+    - ซ่อมฟาร์มหลังภัยจบ เมื่อเงินเหลือเกินค่าซ่อม + 300 (เหมือนผู้เล่นทั่วไป)
     - เสบียงเท่าวันปกติ
+  (เตรียมครึ่ง/เล่นดี ซื้ออุปกรณ์เมื่อมีปลาในบ่อแล้วเท่านั้น)
   เตรียมครึ่ง:
     - ซื้ออุปกรณ์ป้องกันของภัยนั้นชนิดละ 1 ชิ้น (กระสอบทราย 1 ใบจาก 4)
     - เก็บอาหารปรุงสุกไว้ครึ่งหนึ่งของความยาวภัย (ไม่ถนอม อาหารสุกเสียใน 3 วัน)
@@ -69,7 +76,10 @@ class Result {
 }
 
 class Bot {
-  Bot(this.e, this.p, {this.log});
+  Bot(this.e, this.p, {this.log, this.startDay = 1});
+
+  /// วันแรกที่เริ่มซื้อปลา (สุ่มต่อเกม ให้จังหวะปลาโตไม่ตรงกันทุกเกม เหมือนผู้เล่นจริง)
+  final int startDay;
   final GameEngine e;
   final Player p;
   final List<String>? log;
@@ -96,7 +106,7 @@ class Bot {
   /// เงินสำรองที่ไม่ใช้ซื้ออุปกรณ์: ค่าอาหารปลา 3 วัน + ค่าเปลี่ยนน้ำ
   /// + ค่าปลาใหม่ 4 ตัวไว้เติมบ่อหลังภัย
   /// (ใช้เงินหมดแล้วปลาไม่โต จะไม่มีรายได้อีกเลย)
-  int get reserve => e.feedCost(2) * 3 + 40 + 4 * kFish['nila']!.buyPrice;
+  int get reserve => e.feedCost(2) * 3 + 40 + 4 * kFish[fishType]!.buyPrice;
 
   /// เป้าเสบียง (วัน)
 
@@ -260,8 +270,9 @@ class Bot {
   /// ซื้ออุปกรณ์ป้องกันของภัย
   void prepareEquipment() {
     final t = threat;
-    if (t == null || p == Player.none) return;
     final s = e.state;
+    // ยังไม่มีปลา = ยังไม่มีรายได้ → เลี้ยงปลาก่อน ค่อยซื้ออุปกรณ์
+    if (t == null || p == Player.none || s.pond.isEmpty) return;
     final spec = kDisasters[t]!;
     final ids = spec.equipment.keys.toList();
     while (true) {
@@ -314,17 +325,23 @@ class Bot {
     }
 
     // ซ่อมฟาร์มก่อนจับจ่าย (ฟาร์มพังปลาโตช้า)
-    final int? repairBuffer = switch (p) {
-      Player.none => null,
-      Player.half => 300,
+    final int repairBuffer = switch (p) {
+      Player.none || Player.half => 300,
       Player.good => e.feedCost(2) * 2 + 20,
     };
     if (s.damaged &&
         s.active == null &&
-        repairBuffer != null &&
         s.money >= s.repairCost + repairBuffer) {
       needEnergy(15);
       act('ซ่อมฟาร์ม ${s.repairCost}', e.repair());
+    }
+
+    // บ่อว่าง: ซื้อปลาก่อนของอื่น (เป็นรายได้ทางเดียว)
+    if (s.pond.isEmpty && s.day >= startDay) {
+      if (e.freeFish) act('รับลูกปลาฟรีจากลุงทอง', e.buyFish('nila', 2));
+      while (s.pond.length < 8 &&
+          s.money >= kFish[fishType]!.buyPrice + 2 * (s.pond.length + 1) + 10 &&
+          e.buyFish(fishType, 1).ok) {}
     }
 
     buySpice();
@@ -345,11 +362,17 @@ class Bot {
     eat(); // กินมื้อเย็นก่อน แล้วค่อยขายส่วนที่เกิน
     sellSurplus();
 
-    // เติมปลาในบ่อ
+    if (s.day < startDay) return;
+    // เติมปลาในบ่อ (ติดตาย → รับลูกปลาฟรีจากลุงทอง)
+    if (e.freeFish) act('รับลูกปลาฟรีจากลุงทอง', e.buyFish('nila', 2));
     var bought = 0;
+    // เก็บเงินสำรอง (ค่าอาหาร 3 วัน + เปลี่ยนน้ำ) ไม่ทุ่มซื้อปลาจนหมดตัว
+    final keep = s.pond.isNotEmpty
+        ? reserve - 4 * kFish[fishType]!.buyPrice
+        : 10;
     while (s.pond.length < 8 &&
-        s.money >= kFish['nila']!.buyPrice + 2 * (s.pond.length + 1) + 10 &&
-        e.buyFish('nila', 1).ok) {
+        s.money >= kFish[fishType]!.buyPrice + 2 * (s.pond.length + 1) + keep &&
+        e.buyFish(fishType, 1).ok) {
       bought++;
     }
     if (bought > 0) log?.add('ซื้อปลานิล $bought ตัว');
@@ -366,6 +389,7 @@ Result playGame(
 }) {
   final e = GameEngine.newGame('sim', random: Random(seed), mode: mode);
   final s = e.state;
+  final startDay = 1 + Random(seed * 31 + 7).nextInt(2);
   while (!s.finished && s.day <= maxDays) {
     final log = trace ? <String>[] : null;
     final before = trace
@@ -378,7 +402,7 @@ Result playGame(
                   ? 'เตือน${kDisasters[s.upcoming!.type]!.name}อีก ${e.warnDays} วัน'
                   : 'ปกติ'}'
         : '';
-    Bot(e, p, log: log).dayStep();
+    Bot(e, p, log: log, startDay: startDay).dayStep();
     if (trace) {
       stdout.writeln(before);
       stdout.writeln('   → ${log!.join(' · ')}');
@@ -395,7 +419,13 @@ Result playGame(
   return Result(s.won, e.summary.days, e.overallGrade, s.survived, s.money);
 }
 
-void main(List<String> args) {
+void main(List<String> argv) {
+  final args = [...argv];
+  final fi = args.indexOf('--fish');
+  if (fi >= 0) {
+    fishType = args[fi + 1];
+    args.removeRange(fi, fi + 2);
+  }
   if (args.isNotEmpty && args.first == '--rules') {
     stdout.write(rules);
     return;

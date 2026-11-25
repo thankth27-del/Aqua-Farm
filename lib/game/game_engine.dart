@@ -196,6 +196,12 @@ class GameEngine {
   /// เงินไม่พอแม้แต่ให้อาหาร "น้อย" → ลุงทองแบ่งอาหารปลาให้ฟรี (กันเลี้ยงต่อไม่ได้)
   bool get freeFeed => s.pond.isNotEmpty && s.money < feedCost(1);
 
+  /// บ่อว่าง ไม่มีปลาเหลือขาย และเงินไม่พอซื้อปลา → ลุงทองให้ลูกปลา [kFreeFishCount] ตัวฟรี
+  bool get freeFish =>
+      s.pond.isEmpty &&
+      s.fishStock.values.every((n) => n == 0) &&
+      s.money < kFish[kFreeFishType]!.buyPrice;
+
   // ---------------------------------------------------------- difficulty
 
   DifficultySpec get difficulty => kDifficulties[s.mode]!;
@@ -286,6 +292,26 @@ class GameEngine {
     return base;
   }
 
+  /// ความพร้อมที่เพิ่มต่อบาท ถ้าซื้อ [id] เพิ่ม 1 ชิ้นสำหรับภัย [type] (0 = ครบแล้ว)
+  double equipmentValue(DisasterType type, String id) {
+    final need = requiredEquipment(type, id);
+    if (s.equipmentCount(id) >= need) return 0;
+    final n = kDisasters[type]!.equipment.length;
+    return 1 / n / need / equipmentPrice(id);
+  }
+
+  /// อุปกรณ์ของภัย [type] เรียงตามความคุ้ม: ชิ้นที่ยังขาดและได้ความพร้อมต่อบาทมากสุดก่อน
+  /// ชิ้นที่ครบแล้วอยู่ท้าย
+  List<String> equipmentByValue(DisasterType type) {
+    final ids = kDisasters[type]!.equipment.keys.toList();
+    final order = {for (var i = 0; i < ids.length; i++) ids[i]: i};
+    ids.sort((a, b) {
+      final c = equipmentValue(type, b).compareTo(equipmentValue(type, a));
+      return c != 0 ? c : order[a]!.compareTo(order[b]!);
+    });
+    return ids;
+  }
+
   /// ความพร้อมของอุปกรณ์ 0..1 (protOf)
   double protection(DisasterType type) {
     final ids = kDisasters[type]!.equipment.keys.toList();
@@ -305,7 +331,7 @@ class GameEngine {
     final pct = jsRound(
       (e * .5 +
               sup * .3 +
-              (s.water >= 60 ? .1 : 0) +
+              (s.water >= kWaterGoodLine ? .1 : 0) +
               (s.money >= 100 ? .1 : 0)) *
           100,
     );
@@ -314,7 +340,7 @@ class GameEngine {
       pct,
       equipmentPts: jsRound(e * 50),
       supplyPts: jsRound(sup * 30),
-      waterPts: s.water >= 60 ? 10 : 0,
+      waterPts: s.water >= kWaterGoodLine ? 10 : 0,
       moneyPts: s.money >= 100 ? 10 : 0,
     );
   }
@@ -503,6 +529,15 @@ class GameEngine {
   ActionResult buyFish(String type, int qty) {
     final f = kFish[type]!;
     if (qty < 1) return const ActionResult.fail('จำนวนไม่ถูกต้อง');
+    // ติดตาย (บ่อว่าง เงินหมด): ลุงทองให้ลูกปลาฟรี ไม่ต้องรอตลาด
+    if (type == kFreeFishType && qty <= kFreeFishCount && freeFish) {
+      for (var i = 0; i < qty; i++) {
+        s.pond.add(PondFish(type: type));
+      }
+      return ActionResult.ok(
+        'ลุงทองให้ลูกปลานิล $qty ตัวฟรี เลี้ยงให้โต แล้วตั้งตัวใหม่นะ',
+      );
+    }
     if (s.marketClosed) return _closedMsg;
     if (s.pond.length + qty > kPondCapacity) {
       return ActionResult.fail(
@@ -540,7 +575,7 @@ class GameEngine {
       '',
       'ให้อาหารน้อย ปลาโตช้า',
       'ให้อาหารพอดี ปลาโตดี',
-      'ให้อาหารมากเกินไป ของเสียจะสะสม',
+      'ให้อาหารมาก ปลาโตเร็วขึ้น แต่ของเสียจะสะสมไว',
     ];
     return ActionResult.ok(msg[level], warning: level == 3);
   }
@@ -728,9 +763,16 @@ class GameEngine {
   // ---------------------------------------------------------------- day cycle
 
   /// เกรดประจำวัน S/A/B
+  ///
+  /// ไม่ผูกกับรายได้วันนั้นอย่างเดียว (วันที่ปลายังไม่โตไม่มีรายได้อยู่แล้ว)
+  /// ได้คะแนนจาก: มีรายได้ · ปลาในบ่อแข็งแรง · น้ำดี · เสบียงพอ · พร้อมรับภัย
   String grade(DayReport r) {
-    var p = r.earned >= 200 ? 2 : (r.earned >= 50 ? 1 : 0);
-    if (s.water >= 60) p++;
+    var p = r.earned >= kGradeEarned ? 1 : 0;
+    if (s.pond.isNotEmpty &&
+        s.pond.every((f) => f.health >= kGradeFishHealth)) {
+      p++;
+    }
+    if (s.water >= kWaterGoodLine) p++;
     if (supplyDays >= 2) p++;
     final ev = r.event;
     if (ev != null) {
@@ -762,8 +804,9 @@ class GameEngine {
       jsRound(
         a.fishBefore *
             a.severity *
+            kDisasterFishLoss *
             w *
-            (1 - .75 * prot) *
+            (1 - kDisasterProtectionCut * prot) *
             (s.water < 50 ? 1.25 : 1),
       ),
     );
@@ -783,7 +826,7 @@ class GameEngine {
         s.o2 = max(15.0, s.o2 - 10 * (1 - .7 * prot));
     }
 
-    final cost = jsRound(40 * a.severity * (1 - .6 * prot));
+    final cost = jsRound(kDisasterRepairBase * a.severity * (1 - .6 * prot));
     if (cost > 0) {
       s.repairCost += cost;
       s.damaged = true;
@@ -863,7 +906,9 @@ class GameEngine {
     final fg = farmGrowth;
     for (final f in s.pond) {
       final spec = kFish[f.type]!;
-      double st = s.water < 40 ? -25 : (s.water < 60 ? -10 : 5);
+      double st = s.water < kWaterDangerLine
+          ? -25
+          : (s.water < kWaterGoodLine ? -10 : 5);
       if (st < 0) st *= 1.4 - spec.toughness * .15;
       if (s.o2 < spec.o2Need) st -= 12;
       f.health = clampDouble(f.health + st, 0, 100);
@@ -874,7 +919,7 @@ class GameEngine {
               kFeedGrowth[s.fed] *
                   spec.growthMul *
                   max(.5, f.health / 100) *
-                  (s.water >= 60 ? 1 : .6) *
+                  (s.water >= kWaterGoodLine ? 1 : .6) *
                   fg,
         ),
       );
@@ -904,9 +949,9 @@ class GameEngine {
     s.hunger = max(0, s.hunger - kHungerPerDay);
     s.energy = min(100, s.energy + kNightEnergyGain);
     if (s.hunger <= 0) {
-      s.health = max(0, s.health - 20);
+      s.health = max(0, s.health - kStarveDamage);
     } else if (s.hunger < 20) {
-      s.health = max(0, s.health - 5);
+      s.health = max(0, s.health - kHungryDamage);
     } else if (s.hunger > 50) {
       s.health = min(100, s.health + 5);
     }

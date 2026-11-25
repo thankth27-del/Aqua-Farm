@@ -621,8 +621,16 @@ class _PreparePanel extends ConsumerWidget {
     final needs = dType == null
         ? const <String, int>{}
         : kDisasters[dType]!.equipment;
+    // อุปกรณ์ของภัยนี้: เรียงชิ้นที่คุ้มที่สุด (ความพร้อมต่อบาท) ขึ้นก่อน
+    final needOrder = dType == null
+        ? const <String>[]
+        : e.equipmentByValue(dType);
+    final best =
+        needOrder.isNotEmpty && e.equipmentValue(dType!, needOrder.first) > 0
+        ? needOrder.first
+        : null;
     final order = [
-      ...kDefenseEquipmentOrder.where(needs.containsKey),
+      ...needOrder,
       ...kDefenseEquipmentOrder.where((id) => !needs.containsKey(id)),
     ];
     return WoodPanel(
@@ -638,7 +646,7 @@ class _PreparePanel extends ConsumerWidget {
             Padding(
               padding: const EdgeInsets.only(bottom: Gap.s),
               child: Muted(
-                'อุปกรณ์ที่${kDisasters[dType]!.name}ต้องใช้อยู่ด้านบน',
+                'อุปกรณ์ที่${kDisasters[dType]!.name}ต้องใช้อยู่ด้านบน เรียงชิ้นที่คุ้มที่สุดก่อน',
                 size: 13,
               ),
             ),
@@ -657,7 +665,7 @@ class _PreparePanel extends ConsumerWidget {
                   badge: needs.containsKey(id)
                       ? (s.equipmentCount(id) >= needs[id]!
                             ? '${kDisasters[dType]!.name}: ครบแล้ว'
-                            : '${kDisasters[dType]!.name}: ยังขาด ${needs[id]! - s.equipmentCount(id)}')
+                            : '${kDisasters[dType]!.name}: ยังขาด ${needs[id]! - s.equipmentCount(id)}${id == best ? ' · คุ้มสุด' : ''}')
                       : null,
                   badgeOk:
                       needs.containsKey(id) &&

@@ -209,31 +209,58 @@ void main() {
         last = e.endDay();
         hp.add(s.health);
       }
-      // อิ่ม 80→60→40→20→0: วันที่ 3-4 สุขภาพคงที่ แล้วลด 20/วัน เมื่ออิ่มเป็น 0
-      expect(hp, [100, 100, 100, 80, 60, 40, 20, 0]);
+      // อิ่ม 80→60→40→20→0: 3 วันแรกสุขภาพคงที่ แล้วลด 30/วัน (kStarveDamage) เมื่ออิ่มเป็น 0
+      expect(hp, [100, 100, 100, 70, 40, 10, 0]);
       expect(s.over, isTrue);
       expect(last!.gameOver, isTrue);
     });
 
-    test('ความหิว < 20 ลดสุขภาพ 5 และ > 50 ฟื้น 5', () {
+    test('ความหิว < 20 ลดสุขภาพ 10 และ > 50 ฟื้น 5', () {
       final e = newEngine();
       e.state
         ..hunger = 35
         ..health = 50;
       e.endDay();
-      expect(e.state.health, 45);
+      expect(e.state.health, 40);
       e.state.hunger = 75;
       e.endDay();
-      expect(e.state.health, 50);
+      expect(e.state.health, 45);
+    });
+  });
+
+  group('เรียงอุปกรณ์ตามความคุ้ม', () {
+    test('ชิ้นที่ได้ความพร้อมต่อบาทสูงสุดขึ้นก่อน ชิ้นที่ครบแล้วอยู่ท้าย', () {
+      final e = newEngine();
+      final order = e.equipmentByValue(DisasterType.flood);
+      for (var i = 1; i < order.length; i++) {
+        expect(
+          e.equipmentValue(DisasterType.flood, order[i - 1]),
+          greaterThanOrEqualTo(e.equipmentValue(DisasterType.flood, order[i])),
+        );
+      }
+      final first = order.first;
+      e.state.money = 10000;
+      while (e.equipmentValue(DisasterType.flood, first) > 0) {
+        expect(e.buyEquipment(first).ok, isTrue);
+      }
+      expect(e.equipmentByValue(DisasterType.flood).last, first);
     });
   });
 
   group('เกรด', () {
-    test('S เมื่อรายได้สูง น้ำดี เสบียงพอ', () {
+    test('S เมื่อมีรายได้ ปลาแข็งแรง น้ำดี เสบียงพอ', () {
       final e = newEngine();
-      e.state.earned = 250;
+      e.buyFish('nila', 2);
+      e.state.earned = 60;
       e.state.stock.add(StockBatch(food: 'canned', qty: 4));
       expect(e.endDay().grade, 'S');
+    });
+
+    test('รายได้สูงแต่บ่อว่าง ไม่ได้ S (เกรดไม่ผูกกับเงินอย่างเดียว)', () {
+      final e = newEngine();
+      e.state.earned = 500;
+      e.state.stock.add(StockBatch(food: 'canned', qty: 4));
+      expect(e.endDay().grade, 'A');
     });
 
     test('B เมื่อไม่มีรายได้ น้ำแย่ และฟาร์มเสียหาย', () {
