@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:aqua_farm/data/fish_data.dart';
 import 'package:aqua_farm/ui/providers.dart';
 import 'package:aqua_farm/ui/scenes/fish_swim.dart';
@@ -137,6 +139,44 @@ void main() {
     for (final e in find.byType(FishSprite).evaluate()) {
       final r = tester.getRect(find.byWidget(e.widget));
       expect(scene.inflate(1).contains(r.center), isTrue);
+    }
+  });
+
+  test('บ่อ: ตำแหน่งปลาเกลี่ยระหว่างเฟรม (ว่ายลื่น) และหันหัวตามทิศ', () {
+    final swim = PondSwim();
+    final data = PondSceneData(
+      fish: [
+        for (var i = 0; i < 3; i++)
+          SwimFish(key: _K(i), type: 'nila', growth: 40),
+      ],
+      water: 90,
+      o2: 60,
+      fed: false,
+    );
+    final painter = PondPainter(ValueNotifier(0), data, swim);
+    painter.fishAt(0);
+    painter.fishAt(20);
+    final half = painter.fishAt(20.5);
+    for (var i = 0; i < 3; i++) {
+      final s = swim.swimmers[i];
+      final lo = math.min(s.px, s.x), hi = math.max(s.px, s.x);
+      expect(half[i].x, inInclusiveRange(lo - 1e-9, hi + 1e-9));
+      expect(half[i].flipX, s.faceLeft);
+      expect(half[i].scaleX, inInclusiveRange(.3, 1.0));
+    }
+  });
+
+  test('ฟาร์ม: ปลาในบ่อหันหัวตามทิศที่ว่าย', () {
+    final painter = FarmPainter(
+      ValueNotifier(0),
+      const FarmSceneData(pond: ['nila', 'dook', 'tap']),
+    );
+    for (var t = 0.0; t < 200; t += 7.3) {
+      final now = painter.fishAt(t), next = painter.fishAt(t + .2);
+      for (var i = 0; i < now.length; i++) {
+        final dx = next[i].x - now[i].x;
+        if (dx.abs() > .05) expect(now[i].flipX, dx < 0);
+      }
     }
   });
 }

@@ -4,9 +4,12 @@
 /// - ปลาแต่ละตัวจำตำแหน่งของตัวเองไว้ตามตัวตน (ไม่ใช่ลำดับในรายการ)
 ///   ซื้อ จับ หรือปลาตายไป ปลาตัวอื่นจึงไม่กระโดด
 /// - มีเป้าหมายใหม่เป็นระยะ แล้วค่อย ๆ เลี้ยวไปหา (จำกัดมุมเลี้ยวต่อเฟรม)
-/// - หันหัวตามทิศที่ว่าย กลับด้านได้ไม่ถี่เกินไป (ไม่กระพริบ)
-/// - ความเร็วต่างกัน ช้าลงตอนเลี้ยว แกว่งขึ้นลงเล็กน้อย
-/// - อยู่ในน้ำเสมอ ไม่ทะลุผิวน้ำ ขอบบ่อ หรือพื้น
+///   ระหว่างทางส่ายเป็นเส้นโค้งเล็กน้อย ไม่ว่ายเป็นเส้นตรง
+/// - เร่ง/ผ่อนความเร็วนุ่มนวล บางครั้งหยุดลอยนิ่ง บางครั้งพุ่งสั้น ๆ
+/// - หางโบกเร็วตามความเร็ว (เฟรมภาพเดินตามจังหวะหาง ไม่ใช่นาฬิกา)
+/// - หันหัวตามทิศที่ว่าย กลับด้านไม่ถี่เกินไป และมีจังหวะหมุนตัว (ภาพแคบลงแล้วกางออก)
+/// - ปลาแต่ละชนิดเร็วไม่เท่ากัน ปลาดุกชอบอยู่ล่าง
+/// - หลบกันเองและหลบขอบบ่อ อยู่ในน้ำเสมอ ไม่ทะลุผิวน้ำ ขอบบ่อ หรือพื้น
 library;
 
 import 'dart:math' as math;
@@ -20,6 +23,21 @@ const double kSwimFloorY = 154;
 
 /// เขตเศษอาหารที่โรยลงบ่อ (ฉากวาดอาหารที่ x 20-146, y 38-108)
 const double kFeedMinX = 24, kFeedMaxX = 150, kFeedMaxY = 104;
+
+/// ความเร็วประจำชนิด (ภาพเท่านั้น ไม่เกี่ยวกับกติกา)
+const Map<String, double> kSwimSpeedOf = {
+  'nila': 1.0,
+  'dook': .78,
+  'tap': 1.18,
+  'carp': .86,
+  'rad': .72,
+  'chon': .9,
+  'swai': 1.14,
+  'nuan': 1.02,
+};
+
+/// ชนิดที่ชอบหากินใกล้พื้นบ่อ
+const Set<String> kBottomDwellers = {'dook'};
 
 /// ข้อมูลปลา 1 ตัวที่ฉากต้องใช้
 class SwimFish {
@@ -55,10 +73,15 @@ double fishUnit(int growth) => 2 + growth.clamp(0, 100) / 100;
 class Swimmer {
   Swimmer._(this.fish, this.x, this.y, this.heading, this.base, this.phase)
     : tx = x,
-      ty = y;
+      ty = y,
+      px = x,
+      py = y;
 
   SwimFish fish;
   double x, y;
+
+  /// ตำแหน่งก่อนเฟรมล่าสุด (ใช้เกลี่ยภาพระหว่างเฟรมให้ลื่น)
+  double px, py;
 
   /// ทิศที่ว่าย (เรเดียน 0 = ขวา, π = ซ้าย)
   double heading;
@@ -66,27 +89,39 @@ class Swimmer {
   /// ความเร็วปัจจุบัน (พิกเซลฉากต่อเฟรม 100ms)
   double speed = 0;
 
-  /// ความเร็วประจำตัว (สุ่มต่อตัว)
+  /// ความเร็วประจำตัว (สุ่มต่อตัว × ความเร็วประจำชนิด)
   final double base;
 
-  /// เฟสการแกว่งขึ้นลง
+  /// เฟสการแกว่งขึ้นลง / การส่ายตัว
   final double phase;
 
   /// เฟรมเริ่มของแอนิเมชันว่าย (ปลาแต่ละตัวไม่ขยับครีบพร้อมกัน)
   int frameStart = 0;
 
+  /// จังหวะหาง (นับเป็นเฟรมภาพ) — เดินเร็วขึ้นเมื่อว่ายเร็ว
+  double tail = 0, prevTail = 0;
+
   /// เป้าหมาย
   double tx, ty;
   int _retarget = 0;
+
+  /// หยุดลอยนิ่ง / พุ่ง (นับถอยหลังเป็นเฟรม)
+  int _pause = 0, _burst = 0, _calm = 0;
 
   /// หันหัวไปทางซ้าย (ภาพปลาต้นฉบับหัวไปทางขวา จึงกลับด้านเมื่อเป็นจริง)
   bool faceLeft = true;
   int _sinceFlip = 99;
 
+  /// ความกว้างภาพตามแนวนอน (1 = ปกติ, เล็กลงตอนหมุนตัวกลับด้าน)
+  double turnScale = 1, prevTurnScale = 1;
+
   /// ระยะที่เคลื่อนในเฟรมล่าสุด
   double lastDx = 0, lastDy = 0;
 
   double get unit => fishUnit(fish.growth);
+
+  /// กำลังหยุดลอยนิ่งอยู่
+  bool get resting => _pause > 0;
 
   /// ปลาตัวเล็กเร็วกว่าตัวใหญ่เล็กน้อย / เครียดหรือป่วยช้าลง
   double get cruise {
@@ -108,9 +143,19 @@ class Swimmer {
   double get minY => kSwimSurfaceY + 1 + .32 * frame;
   double get maxY => kSwimFloorY - .3 * frame;
 
-  /// ตำแหน่ง y ที่ใช้วาด (รวมการแกว่งขึ้นลง) — ยังอยู่ในน้ำเสมอ
-  double drawY(int t) =>
-      (y + 1.2 * math.sin(t * .22 + phase)).clamp(minY, maxY).toDouble();
+  /// ตำแหน่ง y ที่ใช้วาด (รวมการแกว่งขึ้นลงตามจังหวะว่าย) — ยังอยู่ในน้ำเสมอ
+  /// [t] เป็นเศษส่วนได้ (เกลี่ยระหว่างเฟรม)
+  double drawY(num t, [double? atY]) {
+    final bob = resting ? 1.6 : 1.1;
+    return ((atY ?? y) +
+            bob * math.sin(t * .2 + phase) +
+            .4 * math.sin(tail * math.pi / 2))
+        .clamp(minY, maxY)
+        .toDouble();
+  }
+
+  /// เฟรมภาพหางที่ต้องแสดง (0..7)
+  int get tailFrame => (frameStart + tail.floor()) % 8;
 }
 
 /// สภาพบ่อทั้งหมดที่ส่งผลต่อการว่าย
@@ -130,6 +175,9 @@ class PondSwim {
 
   Swimmer? of(Object key) => _byKey[key];
 
+  /// เฟรมล่าสุดที่เดินไปแล้ว
+  int get time => _t;
+
   /// อัปเดตรายชื่อปลา: ตัวที่มีอยู่แล้วคงตำแหน่งเดิม ตัวใหม่เกิดในน้ำ ตัวที่หายไปถูกลบ
   void sync(List<SwimFish> fish, {required bool fed}) {
     final first = _byKey.isEmpty;
@@ -144,7 +192,10 @@ class PondSwim {
         _byKey[f.key] = s;
       } else {
         // น้ำเพิ่งเสีย/กลับมาดี: เปลี่ยนเป้าหมายทันที
-        if (s.fish.stressed != f.stressed) s._retarget = 0;
+        if (s.fish.stressed != f.stressed) {
+          s._retarget = 0;
+          s._pause = 0;
+        }
         s.fish = f;
       }
       next.add(s);
@@ -156,13 +207,14 @@ class PondSwim {
       // เป้าหมายใหม่ทันทีเพื่อเข้าหาอาหาร
       for (final s in _order) {
         s._retarget = 0;
+        s._pause = 0;
       }
     }
     _fed = fed;
   }
 
   Swimmer _spawn(SwimFish f, int slot, int count) {
-    final base = .9 + _rng.nextDouble() * .7;
+    final base = (.9 + _rng.nextDouble() * .7) * (kSwimSpeedOf[f.type] ?? 1);
     final s = Swimmer._(f, 0, 0, 0, base, _rng.nextDouble() * 6.28);
     if (slot >= 0) {
       // เปิดฉาก: กระจายปลาทั่วบ่อ ไม่ซ้อนกัน
@@ -176,16 +228,21 @@ class PondSwim {
       s.y = s.minY;
     }
     s.x = s.x.clamp(s.minX, s.maxX).toDouble();
+    s.px = s.x;
+    s.py = s.y;
     s.heading = _rng.nextBool() ? 0 : math.pi;
     s.faceLeft = math.cos(s.heading) < 0;
     s.speed = s.cruise * .5;
     _pickTarget(s);
     s.frameStart = _rng.nextInt(8);
+    s._calm = 20 + _rng.nextInt(60);
     return s;
   }
 
+  bool get _rushing => _fed && _t < _rushUntil;
+
   void _pickTarget(Swimmer s) {
-    final feeding = _fed && (_t < _rushUntil || _rng.nextDouble() < .5);
+    final feeding = _fed && (_rushing || _rng.nextDouble() < .5);
     final dir = _rng.nextBool() ? 1 : -1;
     var tx = s.x + dir * (40 + _rng.nextDouble() * 120);
     var ty = s.y + (_rng.nextDouble() - .5) * 60;
@@ -197,6 +254,10 @@ class PondSwim {
     } else if (feeding) {
       tx = kFeedMinX + _rng.nextDouble() * (kFeedMaxX - kFeedMinX);
       hiY = math.min(hiY, kFeedMaxY);
+      ty = loY + _rng.nextDouble() * (hiY - loY);
+    } else if (kBottomDwellers.contains(s.fish.type)) {
+      // ปลาหน้าดิน: หากินครึ่งล่างของบ่อ
+      loY = s.minY + (s.maxY - s.minY) * .5;
       ty = loY + _rng.nextDouble() * (hiY - loY);
     }
     if (tx < s.minX || tx > s.maxX) {
@@ -224,9 +285,14 @@ class PondSwim {
   /// 1 เฟรม (100ms)
   void step() {
     for (final s in _order) {
+      s.px = s.x;
+      s.py = s.y;
+      s.prevTail = s.tail;
+      s.prevTurnScale = s.turnScale;
       if (--s._retarget <= 0 || (s.tx - s.x).abs() + (s.ty - s.y).abs() < 8) {
         _pickTarget(s);
       }
+      _mood(s);
       // ทิศที่อยากไป + ผลักออกจากปลาที่อยู่ใกล้เกินไป (ไม่ว่ายซ้อนกัน)
       var dx = s.tx - s.x, dy = s.ty - s.y;
       final d = math.sqrt(dx * dx + dy * dy) + 1e-6;
@@ -236,17 +302,30 @@ class PondSwim {
         if (identical(o, s)) continue;
         final ox = s.x - o.x, oy = (s.y - o.y) * 1.6;
         final od = math.sqrt(ox * ox + oy * oy);
-        final near = 9 * (s.unit + o.unit) / 2;
+        final near = 10 * (s.unit + o.unit) / 2;
         if (od > 0 && od < near) {
           final w = (near - od) / near * .9;
           dx += ox / od * w;
           dy += oy / od * w;
         }
       }
+      // หลบขอบบ่อแบบนุ่ม ๆ (เลี้ยวออกก่อนชน)
+      const edge = 16.0;
+      if (s.x - s.minX < edge) dx += (edge - (s.x - s.minX)) / edge * .7;
+      if (s.maxX - s.x < edge) dx -= (edge - (s.maxX - s.x)) / edge * .7;
+      if (s.y - s.minY < 6 && !s.fish.stressed) {
+        dy += (6 - (s.y - s.minY)) / 6 * .4;
+      }
+      if (s.maxY - s.y < 6) dy -= (6 - (s.maxY - s.y)) / 6 * .4;
       // ปลาว่ายแนวนอนเป็นหลัก: ลดองค์ประกอบแนวตั้ง
       // ยกเว้นปลาที่กำลังขึ้นไปหายใจที่ผิวน้ำ
       final rising = s.fish.stressed && s.y > s.minY + 22;
-      final want = math.atan2(dy * (rising ? 1.4 : .6), dx);
+      // ส่ายเป็นเส้นโค้ง (คลื่นช้า ๆ ต่อตัว)
+      final wander = s.resting
+          ? 0.0
+          : .28 * math.sin(_t * .045 + s.phase * 3) +
+                .12 * math.sin(_t * .11 + s.phase);
+      final want = math.atan2(dy * (rising ? 1.4 : .6), dx) + wander;
       var diff = want - s.heading;
       while (diff > math.pi) {
         diff -= 2 * math.pi;
@@ -254,19 +333,25 @@ class PondSwim {
       while (diff < -math.pi) {
         diff += 2 * math.pi;
       }
-      // เลี้ยวนุ่มนวล: จำกัดมุมเลี้ยวต่อเฟรม
-      const maxTurn = .16;
+      // เลี้ยวนุ่มนวล: จำกัดมุมเลี้ยวต่อเฟรม (หยุดลอยอยู่ก็เลี้ยวช้า)
+      final maxTurn = s.resting ? .05 : .16;
       s.heading += diff.clamp(-maxTurn, maxTurn);
       // ช้าลงตอนเลี้ยวและตอนใกล้ถึงเป้า
       final turning = 1 - .55 * (diff.abs() / math.pi);
       final arrive = (d / 25).clamp(.45, 1.0);
-      final target = s.cruise * turning * arrive;
-      s.speed += (target - s.speed) * .18;
-      final px = s.x, py = s.y;
-      s.x = (s.x + math.cos(s.heading) * s.speed).clamp(s.minX, s.maxX);
-      s.y = (s.y + math.sin(s.heading) * s.speed).clamp(s.minY, s.maxY);
-      s.lastDx = s.x - px;
-      s.lastDy = s.y - py;
+      var target = s.cruise * turning * arrive;
+      if (s.resting) target = s.cruise * .1;
+      if (s._burst > 0) target = s.cruise * 1.22;
+      // เร่งช้า ผ่อนเร็วกว่า (น้ำต้าน)
+      s.speed += (target - s.speed) * (target > s.speed ? .12 : .2);
+      // โบกหาง: เร็วตามความเร็ว + พุ่งไปข้างหน้าเล็กน้อยทุกจังหวะหาง
+      s.tail += .32 + s.speed * .55;
+      final kick = 1 + .12 * math.sin(s.tail * math.pi / 2);
+      final move = math.min(s.speed * kick, s.maxSpeed);
+      s.x = (s.x + math.cos(s.heading) * move).clamp(s.minX, s.maxX);
+      s.y = (s.y + math.sin(s.heading) * move).clamp(s.minY, s.maxY);
+      s.lastDx = s.x - s.px;
+      s.lastDy = s.y - s.py;
       // ชนขอบ: หันกลับเข้าหาเป้า
       if (s.x <= s.minX || s.x >= s.maxX) _pickTarget(s);
       // หันหัว: กลับด้านเมื่อว่ายสวนทางชัดเจน และไม่ถี่เกิน 0.8 วินาที
@@ -277,6 +362,31 @@ class PondSwim {
         s.faceLeft = !s.faceLeft;
         s._sinceFlip = 0;
       }
+      // หมุนตัว: ภาพแคบลงตอนหันหัวขึ้น/ลง แล้วกางออกหลังกลับด้าน
+      final side = (math.cos(s.heading).abs() * 2.4).clamp(.3, 1.0);
+      final after = (.35 + .65 * s._sinceFlip / 3).clamp(.35, 1.0);
+      s.turnScale = math.min(side, after).toDouble();
+    }
+  }
+
+  /// อารมณ์ของปลา: บางครั้งหยุดลอยนิ่ง บางครั้งพุ่งสั้น ๆ
+  void _mood(Swimmer s) {
+    // ปลาช่อนชอบซุ่มนิ่งแล้วพุ่งออกไป
+    final lurker = s.fish.type == 'chon';
+    if (s._pause > 0 && --s._pause == 0 && lurker) s._burst = 6;
+    if (s._burst > 0) s._burst--;
+    if (s._calm > 0) {
+      s._calm--;
+      return;
+    }
+    if (s.fish.stressed || s.fish.sick || _rushing) return;
+    final r = _rng.nextDouble();
+    if (r < (lurker ? .012 : .006)) {
+      s._pause = 12 + _rng.nextInt(lurker ? 30 : 18);
+      s._calm = s._pause + 40 + _rng.nextInt(60);
+    } else if (r < (lurker ? .02 : .01)) {
+      s._burst = 5 + _rng.nextInt(6);
+      s._calm = 50 + _rng.nextInt(60);
     }
   }
 }

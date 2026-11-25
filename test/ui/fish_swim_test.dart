@@ -197,4 +197,76 @@ void main() {
     p.advanceTo(10);
     expect(p.swimmers.first.x, x);
   });
+
+  test('ปลาต่างชนิดว่ายเร็วไม่เท่ากัน (ปลาตะเพียนเร็วกว่าปลาดุก)', () {
+    double avgBase(String type) {
+      final p = PondSwim(seed: 4)
+        ..sync([
+          for (final k in keys) SwimFish(key: k, type: type, growth: 50),
+        ], fed: false);
+      return p.swimmers.map((s) => s.base).reduce((a, b) => a + b) /
+          keys.length;
+    }
+
+    expect(avgBase('tap'), greaterThan(avgBase('dook') * 1.3));
+  });
+
+  test('หางโบกเร็วขึ้นเมื่อว่ายเร็ว และบางครั้งหยุดลอยนิ่ง', () {
+    final p = PondSwim(seed: 6)..sync(_fish(keys), fed: false);
+    var slow = 0.0, slowN = 0, fast = 0.0, fastN = 0, rested = 0;
+    for (var t = 0; t < 2000; t++) {
+      p.step();
+      for (final s in p.swimmers) {
+        final beat = s.tail - s.prevTail;
+        if (s.speed < .5) {
+          slow += beat;
+          slowN++;
+        } else if (s.speed > 1.2) {
+          fast += beat;
+          fastN++;
+        }
+        if (s.resting) rested++;
+        expect(s.tailFrame, inInclusiveRange(0, 7));
+      }
+    }
+    expect(fast / fastN, greaterThan(slow / slowN * 1.4));
+    expect(rested, greaterThan(0));
+    // หยุดลอยนิ่งเป็นแค่บางช่วง ไม่ใช่ส่วนใหญ่
+    expect(rested / (2000 * keys.length), lessThan(.25));
+  });
+
+  test('หมุนตัวกลับด้าน: ภาพแคบลงตอนกลับด้านแล้วค่อยกางออก', () {
+    final p = PondSwim(seed: 8)..sync(_fish(keys), fed: false);
+    final face = <Swimmer, bool>{};
+    var flips = 0;
+    for (var t = 0; t < 1500; t++) {
+      p.step();
+      for (final s in p.swimmers) {
+        expect(s.turnScale, inInclusiveRange(.3, 1.0));
+        if (face[s] != null && face[s] != s.faceLeft) {
+          flips++;
+          expect(s.turnScale, lessThan(.5));
+        }
+        face[s] = s.faceLeft;
+      }
+    }
+    expect(flips, greaterThan(5));
+  });
+
+  test('ปลาดุกหากินครึ่งล่างของบ่อ', () {
+    final p = PondSwim(seed: 12)
+      ..sync([
+        for (final k in keys) SwimFish(key: k, type: 'dook', growth: 40),
+      ], fed: false);
+    var low = 0, n = 0;
+    for (var t = 0; t < 1200; t++) {
+      p.step();
+      if (t < 200) continue;
+      for (final s in p.swimmers) {
+        n++;
+        if (s.y > (s.minY + s.maxY) / 2 - 6) low++;
+      }
+    }
+    expect(low / n, greaterThan(.7));
+  });
 }
