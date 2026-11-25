@@ -1,8 +1,10 @@
+import 'package:aqua_farm/data/disaster_data.dart';
 import 'package:aqua_farm/data/equipment_data.dart';
 import 'package:aqua_farm/data/fish_data.dart';
 import 'package:aqua_farm/data/food_data.dart';
 import 'package:aqua_farm/data/story_script.dart';
 import 'package:aqua_farm/game/game_engine.dart';
+import 'package:aqua_farm/game/game_state.dart';
 import 'package:aqua_farm/game/story.dart';
 import 'package:aqua_farm/game/story_talk.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -156,6 +158,118 @@ void main() {
     expect(e.state.equipmentCount(tool), 1);
     expect(StoryTalk.effect('method', 'dried', e), isNull);
   });
+
+  /// เข้าบท 6 ตามทางปกติ (บท 5 ประกาศน้ำท่วมล่วงหน้า) แล้วฟังเปิดบท
+  void toChapter6() {
+    p
+      ..chapter = 4
+      ..done = true;
+    Story.next(p, e);
+    p.done = true;
+    Story.next(p, e);
+    expect(p.chapter, 6);
+    StoryTalk.hear(p, cue());
+  }
+
+  test(
+    'บท 6: เตรียมไม่พอ → ลุงไม่ตำหนิ ให้ทางแก้ · ลุงพูดก่อนแต่ละวันน้ำท่วม',
+    () {
+      toChapter6();
+      final prep = cue();
+      expect(prep.key, 'prep');
+      expect(prep.lines, scriptOf(6).notReady);
+      StoryTalk.hear(p, prep);
+
+      // คืนก่อนน้ำมา: ลุงพูดเรื่องวันแรก
+      final up = e.state.upcoming!;
+      e.state.day = up.startDay - 1;
+      expect(Story.floodDayAhead(e), 0);
+      final d0 = cue();
+      expect(d0.key, 'day:0');
+      expect(d0.lines, scriptOf(6).dayLines[0]);
+      StoryTalk.hear(p, d0);
+
+      // ระหว่างน้ำท่วม: วันที่ i ผ่านแล้ว → ลุงพูดเรื่องวันถัดไป
+      e.state.active = ActiveDisaster(
+        type: up.type,
+        duration: 4,
+        severity: up.severity,
+        fishBefore: 3,
+        dayIndex: 1,
+      );
+      expect(Story.floodDayAhead(e), 2);
+      expect(cue().key, 'day:2');
+      e.state.active!.dayIndex = 3;
+      expect(Story.floodDayAhead(e), isNull, reason: 'น้ำลดแล้ว');
+    },
+  );
+
+  test('บท 6: เตรียมพร้อม → ลุงพูดชุด "พร้อมดี"', () {
+    final tool = kDisasters[kStoryDisaster]!.equipment.keys.first;
+    e.state.equipment[tool] = 1;
+    e.state.stock.add(StockBatch(food: 'canned', qty: 20));
+    toChapter6();
+    expect(Story.prepared(e), isTrue);
+    expect(cue().lines, scriptOf(6).ready);
+  });
+
+  test(
+    'บท 6: ไฟดับ มีทั้งอาหารสุกและของถนอม → ถามกินอะไรก่อน ผลคือกินจริง',
+    () {
+      toChapter6();
+      StoryTalk.hear(p, cue()); // prep
+      e.state
+        ..power = false
+        ..hunger = 50
+        ..stock.addAll([
+          StockBatch(food: 'salted', qty: 1),
+          StockBatch(food: 'fry', qty: 1),
+        ]);
+      final c = cue();
+      expect(c.kind, TalkKind.choice);
+      expect(c.choice!.id, 'eat_order');
+      final fx = StoryTalk.effect('eat_order', 'fresh_first', e)!;
+      expect(fx.confirm, contains(kFoods['fry']!.name));
+      expect(fx.apply(e).ok, isTrue);
+      expect(e.state.stock.map((b) => b.food), isNot(contains('fry')));
+      expect(e.state.hunger, greaterThan(50));
+      // อิ่มแล้ว: เลือกได้ แต่ไม่มีผลกิน
+      e.state.hunger = 100;
+      expect(StoryTalk.effect('eat_order', 'preserved_first', e), isNull);
+    },
+  );
+
+  test('บท 6 แพ้: ลุงพูดให้กำลังใจครั้งเดียว แล้วรอผู้เล่นลองใหม่', () {
+    toChapter6();
+    p.failReason = 'อาหารไม่พอ';
+    final f = cue();
+    expect(f.key, 'fail');
+    expect(f.lines, scriptOf(6).onFail);
+    StoryTalk.hear(p, f);
+    expect(StoryTalk.next(p, e), isNull);
+  });
+
+  for (final (g, points) in [('S', 3), ('A', 2), ('B', 1)]) {
+    test('บท 7: ตอนจบเกรด $g → ปลดล็อก → ลุงฝากท้าย → การ์ดสุดท้าย', () {
+      e.state
+        ..gradeDays = 4
+        ..gradePoints = points * 4;
+      expect(e.overallGrade, g);
+      p
+        ..chapter = 6
+        ..done = true;
+      Story.next(p, e);
+      expect(p.finished, isTrue);
+      StoryTalk.hear(p, cue()); // เปิดบท 7
+      final end = cue();
+      expect(end.key, 'ending');
+      expect(end.lines, [...kStoryEndingScript[g]!, ...kStoryUnlockScript]);
+      StoryTalk.hear(p, end);
+      expect(cue().key, 'done');
+      StoryTalk.hear(p, cue());
+      expect(cue().card!.id, 'summary');
+    });
+  }
 
   test('เซฟ/โหลด: จำบทพูดที่ฟังแล้ว ตัวเลือก และการ์ดในสมุด', () {
     p

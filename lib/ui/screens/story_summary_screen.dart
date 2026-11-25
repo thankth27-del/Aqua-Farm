@@ -8,8 +8,10 @@ import '../providers.dart';
 import '../scenes/pixel_scene.dart';
 import '../story_provider.dart';
 import '../theme/theme.dart';
+import '../widgets/story_talk_layer.dart';
 
 /// บทที่ 7 สรุปเนื้อเรื่อง: เกรด S/A/B + ข้อความตอนจบ → ปลดล็อกโหมดเอาชีวิตรอด
+/// ลุงทองเล่าตอนจบตามเกรด แล้วให้การ์ดใบสุดท้ายก่อน (ทับหน้าสรุป)
 class StorySummaryScreen extends ConsumerWidget {
   const StorySummaryScreen({super.key});
 
@@ -165,6 +167,8 @@ class StorySummaryScreen extends ConsumerWidget {
               ),
             ),
           ),
+          // ไม่มีแท็บให้เปิดในบทสรุป
+          StoryTalkLayer(onOpenTab: (_) {}),
         ],
       ),
     );

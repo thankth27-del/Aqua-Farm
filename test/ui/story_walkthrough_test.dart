@@ -241,6 +241,10 @@ void main() {
         await step(tester);
       }
       expect(chapters, {1, 2, 3, 4, 5, 6});
+      // บท 7: ลุงเล่าตอนจบตามเกรด → ปลดล็อก → การ์ดใบสุดท้าย (ครบ 7 ใบในสมุด)
+      await hearUncle(tester);
+      expect(progress.heard, containsAll(['ending', 'done']));
+      expect(progress.cards, hasLength(kStoryChapters));
       expect(find.byKey(const ValueKey('story-grade')), findsOneWidget);
       expect(find.byKey(const ValueKey('story-ending')), findsOneWidget);
 

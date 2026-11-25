@@ -81,8 +81,25 @@ abstract final class StoryTalk {
     if (p.needsIntro) {
       return TalkCue(TalkKind.intro, 'intro', lines: sc.intro);
     }
-    if (p.failed) return null;
+    if (p.failed) {
+      // แพ้: ลุงไม่โทษ ชวนดูว่าครั้งหน้าทำอะไรได้ (พูดครั้งเดียว)
+      if (sc.onFail.isNotEmpty && !p.heard.contains('fail')) {
+        return TalkCue(TalkKind.done, 'fail', lines: sc.onFail);
+      }
+      return null;
+    }
     if (p.done) {
+      // บท 7: ตอนจบตามเกรดรวม + ปลดล็อกโหมดเอาชีวิตรอด
+      if (p.chapter == kStoryChapters && !p.heard.contains('ending')) {
+        final g = kStoryEndingScript.containsKey(e.overallGrade)
+            ? e.overallGrade
+            : 'B';
+        return TalkCue(
+          TalkKind.done,
+          'ending',
+          lines: [...kStoryEndingScript[g]!, ...kStoryUnlockScript],
+        );
+      }
       if (!p.heard.contains('done')) {
         return TalkCue(TalkKind.done, 'done', lines: sc.onDone);
       }
@@ -109,6 +126,17 @@ abstract final class StoryTalk {
         return TalkCue(TalkKind.lesson, 'try:$m', lines: l.tryIt);
       }
     }
+    // บท 6: เปิดภัยด้วยการดูว่าเตรียมพร้อมแค่ไหน (ไม่ตำหนิ มีทางแก้ให้)
+    final prep = Story.prepared(e) ? sc.ready : sc.notReady;
+    if (prep.isNotEmpty && !p.heard.contains('prep')) {
+      return TalkCue(TalkKind.target, 'prep', lines: prep);
+    }
+    // บท 6: ลุงพูดก่อนแต่ละวันของน้ำท่วม
+    final day = p.chapter == 6 ? Story.floodDayAhead(e) : null;
+    final dayLines = day == null ? null : sc.dayLines[day];
+    if (dayLines != null && !p.heard.contains('day:$day')) {
+      return TalkCue(TalkKind.target, 'day:$day', lines: dayLines);
+    }
     final ch = sc.choice;
     if (ch != null && !p.choices.containsKey(ch.id) && _choiceDue(p, e)) {
       return TalkCue(
@@ -134,8 +162,22 @@ abstract final class StoryTalk {
     2 => e.fishTotal > 0 && e.state.earned == 0,
     // บท 4: เรียนครบทุกวิธีแล้ว ยังไม่ได้เริ่มถนอม
     4 => e.state.processing.isEmpty,
+    // บท 6: ไฟดับ และมีทั้งอาหารสุกและของถนอมให้เลือกกิน
+    6 =>
+      !e.state.power &&
+          _edibleOf(e, FoodKind.meal) >= 0 &&
+          _edibleOf(e, FoodKind.preserved) >= 0,
     _ => false,
   };
+
+  /// ช่องในคลังของอาหารประเภท [kind] ที่ยังกินได้ (-1 = ไม่มี)
+  static int _edibleOf(GameEngine e, FoodKind kind) {
+    final st = e.state.stock;
+    for (var i = 0; i < st.length; i++) {
+      if (kFoods[st[i].food]!.kind == kind && !e.isExpired(st[i])) return i;
+    }
+    return -1;
+  }
 
   /// ลุงพูดชุดนี้จบแล้ว
   static void hear(StoryProgress p, TalkCue cue) {
@@ -216,6 +258,21 @@ abstract final class StoryTalk {
           'ซื้อ${kEquipment[tool]!.name} ราคา $price฿ ไว้${kFoods[id]!.name}?',
           (e) => e.buyEquipment(tool),
         );
+      // บท 6: กินอาหารประเภทที่เลือก 1 จาน (อิ่มแล้ว = แค่จำคำตอบ)
+      case ('eat_order', 'fresh_first' || 'preserved_first'):
+        if (s.hunger >= 100) return null;
+        final kind = option == 'fresh_first'
+            ? FoodKind.meal
+            : FoodKind.preserved;
+        final i = _edibleOf(e, kind);
+        if (i < 0) return null;
+        final food = kFoods[s.stock[i].food]!.name;
+        return ChoiceEffect('กิน$food 1 จาน?', (e) {
+          final j = _edibleOf(e, kind);
+          return j < 0
+              ? const ActionResult.fail('ไม่มีอาหารให้กิน')
+              : e.eatStock(j);
+        });
     }
     return null;
   }

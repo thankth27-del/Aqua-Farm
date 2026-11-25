@@ -7,6 +7,7 @@ import 'package:material_ui/material_ui.dart';
 import '../../data/story_script.dart';
 import '../design/design_system.dart' show DsColors, DsText;
 import '../theme/theme.dart';
+import 'game_hud.dart' show showDetailSheet;
 
 class KnowledgeCardView extends StatelessWidget {
   const KnowledgeCardView({
@@ -134,6 +135,66 @@ class _FactRow extends StatelessWidget {
               ),
             ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+/// สมุดบันทึกลุงทอง: การ์ด "ลุงรู้มา" ทุกบท ใบที่ยังไม่ได้แสดงเป็นช่องล็อก
+Future<void> showUncleNotebook(BuildContext context, Set<String> have) {
+  return showDetailSheet<void>(
+    context,
+    title: 'สมุดบันทึกลุงทอง',
+    icon: const PixelIcon('scroll', size: 32),
+    builder: (c) => Column(
+      key: const ValueKey('uncle-notebook'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          'เก็บแล้ว ${have.length}/${kKnowledgeCards.length} ใบ',
+          style: DsText.strong.copyWith(fontSize: 16),
+        ),
+        const SizedBox(height: 8),
+        for (final (i, card) in kKnowledgeCards.indexed)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: have.contains(card.id)
+                ? KnowledgeCardView(card: card, chapter: i + 1)
+                : _LockedCard(chapter: i + 1),
+          ),
+      ],
+    ),
+  );
+}
+
+class _LockedCard extends StatelessWidget {
+  const _LockedCard({required this.chapter});
+  final int chapter;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: ValueKey('card-locked-$chapter'),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: DsColors.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: DsColors.border, width: 2),
+      ),
+      child: Row(
+        children: [
+          const PixelGlyph(Glyph.lock, size: 22, color: DsColors.textMuted),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'บทที่ $chapter · ยังไม่ได้รับ เล่นเนื้อเรื่องให้ผ่านบทนี้ก่อน',
+              style: DsText.body.copyWith(
+                fontSize: 16,
+                color: DsColors.textMuted,
+              ),
+            ),
+          ),
         ],
       ),
     );

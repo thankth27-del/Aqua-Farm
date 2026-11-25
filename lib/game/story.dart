@@ -340,13 +340,32 @@ abstract final class Story {
       2 => s.earned > 0,
       3 => s.stock.any((b) => kFoods[b.food]!.kind == FoodKind.meal),
       4 => s.processing.isNotEmpty,
-      5 =>
-        kDisasters[kStoryDisaster]!.equipment.keys.any(
-              (k) => s.equipmentCount(k) > 0,
-            ) &&
-            e.supplyDays >= kStorySupplyDays,
+      5 => prepared(e),
       _ => false,
     };
+  }
+
+  /// เตรียมรับน้ำท่วมครบ: มีอุปกรณ์กันภัยอย่างน้อย 1 ชิ้น และอาหารพอ [kStorySupplyDays] วัน
+  static bool prepared(GameEngine e) =>
+      kDisasters[kStoryDisaster]!.equipment.keys.any(
+        (k) => e.state.equipmentCount(k) > 0,
+      ) &&
+      e.supplyDays >= kStorySupplyDays;
+
+  /// บท 6: วันของน้ำท่วมที่จะผ่านไปเมื่อกด "จบวัน" ครั้งถัดไป (0 = วันแรก)
+  /// null = ยังไม่ถึงคืนก่อนน้ำมา หรือน้ำลดแล้ว
+  static int? floodDayAhead(GameEngine e) {
+    final s = e.state;
+    final a = s.active;
+    if (a != null) {
+      final i = a.dayIndex + 1;
+      return i < a.duration ? i : null;
+    }
+    final up = s.upcoming;
+    if (up != null && up.type == kStoryDisaster && up.startDay == s.day + 1) {
+      return 0;
+    }
+    return null;
   }
 
   /// เรียกหลังทุกการกระทำ: ทำเป้าหมายสำเร็จ → done (ติดค้างจนเปลี่ยนบท)

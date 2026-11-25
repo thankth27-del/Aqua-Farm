@@ -312,6 +312,24 @@ void main() {
       },
     );
 
+    testWidgets('สมุดบันทึกลุงทองเปิดจากเมนูพัก: ใบที่เก็บแล้ว + ช่องล็อก', (
+      tester,
+    ) async {
+      await startStory(tester, choose: true);
+      container.read(storyProvider)!.cards.add('fish');
+      await tester.tap(find.byTooltip('เมนู / พัก'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('menu-notebook')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('uncle-notebook')), findsOneWidget);
+      expect(find.text('สมุดบันทึกลุงทอง'), findsWidgets);
+      expect(find.text('เก็บแล้ว 1/7 ใบ'), findsOneWidget);
+      expect(find.byKey(const ValueKey('card-fish')), findsOneWidget);
+      expect(find.text('ค่าในเกม'), findsWidgets);
+      expect(find.byKey(const ValueKey('card-locked-2')), findsOneWidget);
+      expect(find.byKey(const ValueKey('card-market')), findsNothing);
+    });
+
     testWidgets('ปุ่มจบวันจางจนกว่าจะซื้อปลาครบและให้อาหาร แล้วจึงกะพริบ', (
       tester,
     ) async {
@@ -2027,6 +2045,7 @@ void main() {
           find.byKey(const ValueKey('menu-resume')),
           find.widgetWithText(PixelButton, 'บันทึกเกม'),
           find.byKey(const ValueKey('sound-toggle')),
+          find.byKey(const ValueKey('menu-notebook')),
           find.widgetWithText(PixelButton, 'เล่นบทเรียนซ้ำ'),
           find.widgetWithText(PixelButton, 'กลับเมนูหลัก'),
         ]) {

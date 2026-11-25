@@ -7,16 +7,20 @@ import '../../data/difficulty.dart';
 import '../../data/disaster_data.dart';
 import '../../game/hints.dart';
 import '../../game/story.dart';
+import '../../game/story_talk.dart';
+import '../../data/story_script.dart';
 import '../../game/tutorial.dart';
 import '../build_info.dart';
 import '../dialogs.dart';
 import '../layout/responsive.dart';
 import '../providers.dart';
 import '../sound.dart';
+import '../story_provider.dart';
 import '../theme/theme.dart';
 import '../widgets/game_hud.dart';
 import '../widgets/guide_bars.dart';
 import '../widgets/story_gate.dart';
+import '../widgets/knowledge_card.dart';
 import '../widgets/story_talk_layer.dart';
 import '../widgets/tutorial_panel.dart';
 import 'farm_tab.dart';
@@ -117,8 +121,10 @@ class _GameShellState extends ConsumerState<GameShell> {
       final next = Story.nextTarget(p, e);
       storyTab = next == null ? null : storyTabOf(next);
       // ไม่มีเมนูล่าง: สิ่งที่ต้องทำต่อไปอยู่หน้าอื่น → ลุงพาไปหน้านั้น
+      // (รอลุงพูดจบก่อน: บรรทัดที่ลุงชี้หน้าอื่น เช่น "ลองตากปลาดู" จะได้ไม่ถูกดึงกลับ)
       final go = storyTab;
-      if (go != null && go != _tab && Story.tabOpen(p, go)) {
+      final talking = StoryTalk.next(p, e) != null;
+      if (go != null && go != _tab && !talking && Story.tabOpen(p, go)) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted && _tab != go) _select(go);
         });
@@ -483,6 +489,15 @@ class TopBar extends ConsumerWidget {
     if (choice == 'save') {
       await ctl.save();
       if (context.mounted) toast(context, 'บันทึกเกมแล้ว');
+    } else if (choice == 'notebook') {
+      // เนื้อเรื่อง: การ์ดที่เก็บแล้ว · โหมดเอาชีวิตรอด (จบเนื้อเรื่องแล้ว): ครบทุกใบ
+      final p = ref.read(storyProvider);
+      final have = isStory
+          ? <String>{...?p?.cards}
+          : ref.read(saveRepositoryProvider).survivalUnlocked
+          ? {for (final c in kKnowledgeCards) c.id}
+          : <String>{};
+      await showUncleNotebook(context, have);
     } else if (choice == 'tutorial') {
       ctl.update((e) => e.tutorialRestart());
       onReplayTutorial?.call();
@@ -829,6 +844,7 @@ class _PauseMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final short = Responsive.of(context).isLandscapePhone;
     final items = <Widget>[
       PixelButton(
         label: 'บันทึกเกม',
@@ -854,6 +870,14 @@ class _PauseMenu extends StatelessWidget {
             onPressed: () => ref.read(soundProvider.notifier).toggle(),
           );
         },
+      ),
+      PixelButton(
+        key: const ValueKey('menu-notebook'),
+        label: 'สมุดบันทึกลุงทอง',
+        icon: const PixelIcon('scroll', size: 26),
+        style: PixelButtonStyle.water,
+        expand: true,
+        onPressed: () => Navigator.pop(context, 'notebook'),
       ),
       if (!isStory)
         PixelButton(
@@ -905,13 +929,25 @@ class _PauseMenu extends StatelessWidget {
                             style: DsText.title.copyWith(fontSize: 24),
                           ),
                         ),
+                        // เวอร์ชันที่เปิดอยู่ (commit + เวลา build) เช็กได้ว่าเว็บอัปเดตแล้วหรือยัง
+                        Text(
+                          buildLabel,
+                          key: const ValueKey('build-version'),
+                          textAlign: TextAlign.right,
+                          style: DsText.caption.copyWith(
+                            color: DsColors.textMuted,
+                          ),
+                        ),
                       ],
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'เกมหยุดไว้ก่อน กด "เล่นต่อ" เพื่อกลับไปที่ฟาร์ม',
-                      style: DsText.body.copyWith(color: DsColors.textMuted),
-                    ),
+                    // มือถือแนวนอน (จอเตี้ย): ซ่อนคำอธิบาย ให้ทุกปุ่มอยู่บนจอโดยไม่ต้องเลื่อน
+                    if (!short) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        'เกมหยุดไว้ก่อน กด "เล่นต่อ" เพื่อกลับไปที่ฟาร์ม',
+                        style: DsText.body.copyWith(color: DsColors.textMuted),
+                      ),
+                    ],
                     const SizedBox(height: Gap.m),
                     PixelButton(
                       key: const ValueKey('menu-resume'),
@@ -946,18 +982,6 @@ class _PauseMenu extends StatelessWidget {
                         if (i > 0) const SizedBox(height: Gap.s),
                         items[i],
                       ],
-                    // เวอร์ชันที่เปิดอยู่ (commit + เวลา build) เช็กได้ว่าเว็บอัปเดตแล้วหรือยัง
-                    const SizedBox(height: Gap.s),
-                    Align(
-                      alignment: Alignment.bottomRight,
-                      child: Text(
-                        buildLabel,
-                        key: const ValueKey('build-version'),
-                        style: DsText.caption.copyWith(
-                          color: DsColors.textMuted,
-                        ),
-                      ),
-                    ),
                   ],
                 );
               },
