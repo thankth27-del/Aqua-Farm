@@ -1,4 +1,7 @@
 import 'package:aqua_farm/ui/design/design_system.dart';
+import 'package:aqua_farm/ui/dialogs.dart';
+import 'package:aqua_farm/ui/layout/responsive.dart';
+import 'package:aqua_farm/ui/theme/theme.dart';
 import 'package:aqua_farm/ui/screens/design_preview_screen.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
@@ -70,6 +73,39 @@ void main() {
       await tester.pumpAndSettle();
       expect(await f, isFalse);
     });
+
+    for (final size in const [Size(390, 844), Size(1366, 768)]) {
+      testWidgets(
+        'หน้ายืนยันซื้อ/ขายไม่ยืดเต็มจอกว้าง (${size.width.toInt()})',
+        (tester) async {
+          tester.view
+            ..physicalSize = size
+            ..devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          late BuildContext ctx;
+          await tester.pumpWidget(
+            MaterialApp(
+              theme: buildDesignTheme(),
+              home: Builder(
+                builder: (c) {
+                  ctx = c;
+                  return const SizedBox();
+                },
+              ),
+            ),
+          );
+          confirmDialog(ctx, 'ซื้อแผงตากปลา ราคา 60฿?');
+          await tester.pumpAndSettle();
+          final w = tester.getSize(find.byType(WoodPanel)).width;
+          expect(w, lessThanOrEqualTo(Responsive.maxPanel));
+          expect(w, lessThanOrEqualTo(size.width));
+          final ok = tester.getRect(find.widgetWithText(PixelButton, 'ตกลง'));
+          expect(ok.height, greaterThanOrEqualTo(48));
+          await tester.tap(find.text('ยกเลิก'));
+          await tester.pumpAndSettle();
+        },
+      );
+    }
 
     testWidgets('แผ่นล่างเปิดและปิดได้', (tester) async {
       await _pump(tester, const Size(390, 844));

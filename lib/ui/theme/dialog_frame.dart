@@ -3,6 +3,7 @@ import 'package:material_ui/material_ui.dart';
 import 'app_theme.dart';
 import 'buttons.dart';
 import '../design/design_system.dart';
+import '../layout/responsive.dart';
 import 'colors.dart';
 import 'frames.dart';
 import 'motion.dart';
@@ -25,30 +26,38 @@ class PixelDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Dialog(
-      child: BounceIn(
-        from: .8,
-        child: WoodPanel(
-          margin: EdgeInsets.zero,
-          padding: const EdgeInsets.fromLTRB(16, 18, 16, 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (icon != null) ...[icon!, const SizedBox(height: Gap.s)],
-              if (title != null) ...[
-                Text(title!, textAlign: TextAlign.center, style: DsText.title),
-                const SizedBox(height: Gap.s),
-              ],
-              Flexible(child: SingleChildScrollView(child: body)),
-              const SizedBox(height: Gap.l),
-              Row(
-                children: [
-                  for (var i = 0; i < actions.length; i++) ...[
-                    if (i > 0) const SizedBox(width: Gap.m),
-                    Expanded(child: actions[i]),
-                  ],
+      // จอกว้างไม่ยืดเต็มจอ: กว้างสุดเท่าแผงมาตรฐาน จัดกลาง
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: Responsive.maxPanel),
+        child: BounceIn(
+          from: .8,
+          child: WoodPanel(
+            margin: EdgeInsets.zero,
+            padding: const EdgeInsets.fromLTRB(16, 18, 16, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (icon != null) ...[icon!, const SizedBox(height: Gap.s)],
+                if (title != null) ...[
+                  Text(
+                    title!,
+                    textAlign: TextAlign.center,
+                    style: DsText.title,
+                  ),
+                  const SizedBox(height: Gap.s),
                 ],
-              ),
-            ],
+                Flexible(child: SingleChildScrollView(child: body)),
+                const SizedBox(height: Gap.l),
+                Row(
+                  children: [
+                    for (var i = 0; i < actions.length; i++) ...[
+                      if (i > 0) const SizedBox(width: Gap.m),
+                      Expanded(child: actions[i]),
+                    ],
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),
