@@ -569,15 +569,47 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('บ่อปลา'));
     await tester.pumpAndSettle();
+    // ปุ่มให้อาหาร → แผ่นเลือก น้อย/พอดี/มาก พร้อมผลต่อการโตและน้ำเสีย
     final feed = find.byKey(const ValueKey('feed-main'));
     expect(
-      find.descendant(of: feed, matching: find.text('พอดี')),
+      find.descendant(of: feed, matching: find.text('เลือก น้อย/พอดี/มาก')),
       findsOneWidget,
     );
     await tester.tap(feed);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('feed-choices')), findsOneWidget);
+    expect(
+      container.read(gameProvider)!.state.fed,
+      0,
+      reason: 'ยังไม่ได้เลือก',
+    );
+    String meter(String k) =>
+        tester.getSemantics(find.byKey(ValueKey(k))).label;
+    // ค่าในเกม: โต 30/50/50 · น้ำเสีย .1/.25/.8 (เทียบกับค่ามากสุด เป็น 5 ช่อง)
+    expect(meter('feed-grow-1'), 'ปลาโต 3 จาก 5');
+    expect(meter('feed-grow-2'), 'ปลาโต 5 จาก 5');
+    expect(meter('feed-grow-3'), 'ปลาโต 5 จาก 5');
+    expect(meter('feed-dirty-1'), 'น้ำเสีย 1 จาก 5');
+    expect(meter('feed-dirty-2'), 'น้ำเสีย 2 จาก 5');
+    expect(meter('feed-dirty-3'), 'น้ำเสีย 5 จาก 5');
+    final e = container.read(gameProvider)!.engine;
+    for (final lv in [1, 2, 3]) {
+      final b = tester.getRect(find.byKey(ValueKey('feed-$lv')));
+      expect(b.height, greaterThanOrEqualTo(48));
+      expect(
+        find.descendant(
+          of: find.byKey(ValueKey('feed-$lv')),
+          matching: find.text('${e.feedCost(lv)}'),
+        ),
+        findsWidgets,
+      );
+    }
+    await tester.tap(find.byKey(const ValueKey('feed-2')));
     await tester.pump();
     expect(find.text('ให้อาหารพอดี ปลาโตดี'), findsOneWidget);
     expect(container.read(gameProvider)!.state.fed, 2);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('feed-choices')), findsNothing);
 
     await tester.tap(find.byKey(const ValueKey('end-day')));
     await tester.pumpAndSettle();
@@ -591,6 +623,70 @@ void main() {
     await tester.tap(find.text('เริ่มวันใหม่'));
     await tester.pumpAndSettle();
     expect(dayChip('2/30'), findsOneWidget);
+  });
+
+  testWidgets('ให้อาหารมาก: ปลาโตเท่าพอดี แต่เตือนว่าน้ำจะเสียไว', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+    await startNewGame(tester);
+    await openFishShopCard(tester, 'nila');
+    await buyFish(tester);
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('บ่อปลา'));
+    await tester.pumpAndSettle();
+    final money = container.read(gameProvider)!.state.money;
+    final cost = container.read(gameProvider)!.engine.feedCost(3);
+    await tester.tap(find.byKey(const ValueKey('feed-main')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('feed-3')));
+    await tester.pump();
+    expect(find.text('ให้อาหารมากเกินไป ของเสียจะสะสม'), findsOneWidget);
+    final s = container.read(gameProvider)!.state;
+    expect(s.fed, 3);
+    expect(s.money, money - cost);
+    await tester.pumpAndSettle();
+    // ให้แล้ววันนี้: ปุ่มหลักกดไม่ได้จนวันใหม่
+    expect(find.text('ให้อาหารแล้ว'), findsOneWidget);
+  });
+
+  testWidgets('เงินหมด: ตัวเลือก "น้อย" ขึ้นว่าฟรี ลุงทองช่วย กดได้', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+    await startNewGame(tester);
+    await openFishShopCard(tester, 'nila');
+    await buyFish(tester);
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pumpAndSettle();
+    container.read(gameProvider.notifier).update((e) => e.state.money = 0);
+    await tester.tap(find.text('บ่อปลา'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('feed-main')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('feed-free-1')), findsOneWidget);
+    expect(find.byKey(const ValueKey('feed-free-2')), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('feed-1')));
+    await tester.pump();
+    final s = container.read(gameProvider)!.state;
+    expect(s.fed, 1);
+    expect(s.money, 0);
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('ซื้อปลาจนเงินเหลือน้อย → หน้ายืนยันเตือนค่าอาหาร', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+    await startNewGame(tester);
+    container.read(gameProvider.notifier).update((e) => e.state.money = 42);
+    await openFishShopCard(tester, 'nila');
+    await tester.tap(find.widgetWithText(PixelButton, 'ซื้อปลา'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('ไม่พอค่าอาหารปลา'), findsOneWidget);
+    await tester.tap(find.text('ยกเลิก').last);
+    await tester.pumpAndSettle();
   });
 
   testWidgets('ปลาในบ่อ: การ์ดต่อตัว มีป้ายป่วย/หิวชัดเจน', (tester) async {

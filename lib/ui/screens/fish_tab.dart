@@ -14,6 +14,7 @@ import '../../game/game_state.dart';
 import '../scenes/fish_swim.dart';
 import '../scenes/pixel_scene.dart';
 import '../theme/theme.dart';
+import '../widgets/feed_choice.dart';
 import '../widgets/game_hud.dart';
 import '../widgets/story_gate.dart';
 import '../widgets/guide_bars.dart';
@@ -166,40 +167,8 @@ Future<void> showPondCareSheet(BuildContext context) {
                           )
                         : Tag('${e.feedUnit} หน่วย/วัน'),
                   ),
-                  StoryGate(
-                    target: StoryTarget.feed,
-                    child: Row(
-                      children: [
-                        for (final (lv, name) in const [
-                          (1, 'น้อย'),
-                          (2, 'พอดี'),
-                          (3, 'มาก'),
-                        ]) ...[
-                          Expanded(
-                            child: PixelButton(
-                              key: ValueKey('feed-$lv'),
-                              label: name,
-                              style: lv == 2
-                                  ? PixelButtonStyle.gold
-                                  : PixelButtonStyle.water,
-                              below: CoinTag(
-                                e.feedCost(lv),
-                                boxed: true,
-                                size: FontSize.small,
-                              ),
-                              onPressed: s.fed > 0
-                                  ? null
-                                  : () => showResult(
-                                      context,
-                                      ctl.run((e) => e.feed(lv)),
-                                    ),
-                            ),
-                          ),
-                          if (lv < 3) const SizedBox(width: Gap.s),
-                        ],
-                      ],
-                    ),
-                  ),
+                  // เลือกปริมาณ: น้อย/พอดี/มาก พร้อมผลต่อการโตและน้ำเสีย
+                  const FeedChoices(),
                   const SizedBox(height: Gap.m),
                   StoryGate(
                     target: StoryTarget.water,
@@ -510,7 +479,7 @@ class _PondView extends ConsumerWidget {
             onTap: () => showPondFishSheet(context, onShop: onShop),
           );
 
-    // ปุ่มหลัก: บ่อว่าง → ไปร้านปลา · มีปลา → ให้อาหาร "พอดี" (เลือกปริมาณอื่นในแผ่นดูแลบ่อ)
+    // ปุ่มหลัก: บ่อว่าง → ไปร้านปลา · มีปลา → ให้อาหาร (เปิดแผ่นเลือก น้อย/พอดี/มาก)
     final Widget primary;
     if (empty) {
       primary = PixelButton(
@@ -530,30 +499,17 @@ class _PondView extends ConsumerWidget {
           target: StoryTarget.feed,
           child: PixelButton(
             key: const ValueKey('feed-main'),
-            label: fed ? 'ให้อาหารแล้ว' : (short ? 'ให้อาหารพอดี' : 'ให้อาหาร'),
+            label: fed ? 'ให้อาหารแล้ว' : 'ให้อาหาร',
             size: short ? PixelButtonSize.normal : PixelButtonSize.large,
             icon: const PixelIcon('fry', size: 32),
-            // จอเตี้ย: ราคาอยู่ท้ายปุ่มบรรทัดเดียว (ปุ่มเตี้ยลง เห็นฉากมากขึ้น)
-            trailing: short && !fed
-                ? CoinTag(e.feedCost(2), boxed: true, size: FontSize.small)
-                : null,
             below: short
                 ? null
-                : fed
-                ? _belowText('พรุ่งนี้ให้อีกครั้ง')
-                : Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _belowText('พอดี'),
-                      const SizedBox(width: 6),
-                      CoinTag(e.feedCost(2), boxed: true, size: FontSize.small),
-                    ],
+                : _belowText(
+                    fed ? 'พรุ่งนี้ให้อีกครั้ง' : 'เลือก น้อย/พอดี/มาก',
                   ),
-            tooltip: 'ให้อาหารปลาปริมาณพอดี',
+            tooltip: 'ให้อาหารปลา เลือกปริมาณได้',
             expand: true,
-            onPressed: fed
-                ? null
-                : () => showResult(context, ctl.run((e) => e.feed(2))),
+            onPressed: fed ? null : () => showFeedPicker(context),
           ),
         ),
       );

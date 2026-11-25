@@ -379,7 +379,8 @@ class _MarketSheetBody extends ConsumerWidget {
                   closed: closed,
                   onBuy: () => act(
                     closed || s.money < e.equipmentPrice(eq.id),
-                    'ยืนยันซื้อ${eq.name} ราคา ${e.equipmentPrice(eq.id)} บาท?',
+                    'ยืนยันซื้อ${eq.name} ราคา ${e.equipmentPrice(eq.id)} บาท?'
+                    '${_warnLine(e.lowMoneyWarning(e.equipmentPrice(eq.id)))}',
                     PixelIcon(eq.icon, size: 56),
                     (e) => e.buyEquipment(eq.id),
                   ),
@@ -750,3 +751,6 @@ class _FoodRow extends StatelessWidget {
     );
   }
 }
+
+/// บรรทัดเตือนเงินเหลือน้อยต่อท้ายข้อความยืนยันซื้อ
+String _warnLine(String? warn) => warn == null ? '' : '\n$warn';

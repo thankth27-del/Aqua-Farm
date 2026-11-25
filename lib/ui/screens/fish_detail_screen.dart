@@ -38,11 +38,17 @@ class _FishDetailScreenState extends ConsumerState<FishDetailScreen> {
   }
 
   Future<void> _buy(FishSpec f) async {
-    final s = ref.read(gameProvider)!.state;
+    final session = ref.read(gameProvider)!;
+    final s = session.state;
     final total = f.buyPrice * _qty;
+    final warn = session.engine.lowMoneyWarning(
+      total,
+      extraUnits: f.feed * _qty,
+    );
     final ok = await confirmDialog(
       context,
-      'ยืนยันซื้อ${f.name} $_qty ตัว รวม $total บาท? (เงินคงเหลือ ${s.money - total} บาท)',
+      'ยืนยันซื้อ${f.name} $_qty ตัว รวม $total บาท? (เงินคงเหลือ ${s.money - total} บาท)'
+      '${warn == null ? '' : '\n$warn'}',
       icon: PixelIcon('f_${f.id}', size: 72),
     );
     if (!ok || !mounted) return;

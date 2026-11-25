@@ -674,9 +674,11 @@ class _PreparePanel extends ConsumerWidget {
                       showResult(context, ctl.run((e) => e.buyEquipment(id)));
                       return;
                     }
+                    final warn = e.lowMoneyWarning(price);
                     final ok = await confirmDialog(
                       context,
-                      'ยืนยันซื้อ${q.name} ราคา $price บาท?',
+                      'ยืนยันซื้อ${q.name} ราคา $price บาท?'
+                      '${warn == null ? '' : '\n$warn'}',
                       icon: PixelIcon(q.icon, size: 56),
                     );
                     if (ok && context.mounted) {

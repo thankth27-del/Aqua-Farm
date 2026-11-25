@@ -164,6 +164,48 @@ void main() {
       expect(e.feed(1).message, 'วันนี้ให้อาหารแล้ว');
     });
 
+    test(
+      'เงินหมด: ให้อาหาร "น้อย" ฟรี (ลุงทองช่วย) แต่ พอดี/มาก ยังต้องจ่าย',
+      () {
+        final e = newEngine();
+        e.buyFish('nila', 2);
+        e.state.money = 0;
+        expect(e.freeFeed, isTrue);
+        expect(e.feed(2).ok, isFalse);
+        final energy = e.state.energy;
+        final r = e.feed(1);
+        expect(r.ok, isTrue);
+        expect(r.message, contains('ลุงทอง'));
+        expect(e.state.money, 0);
+        expect(e.state.fed, 1);
+        expect(e.state.energy, energy - kFeedEnergy);
+      },
+    );
+
+    test('มีเงินพอ "น้อย" → ไม่ฟรี จ่ายตามปกติ', () {
+      final e = newEngine();
+      e.buyFish('nila', 2);
+      e.state.money = e.feedCost(1);
+      expect(e.freeFeed, isFalse);
+      expect(e.feed(1).ok, isTrue);
+      expect(e.state.money, 0);
+    });
+
+    test('เตือนเมื่อซื้อแล้วเงินเหลือไม่พอค่าอาหาร "พอดี" 2 วัน', () {
+      final e = newEngine();
+      e.buyFish('nila', 2);
+      final reserve = e.feedReserve();
+      expect(reserve, e.feedCost(2) * kFeedReserveDays);
+      e.state.money = 100 + reserve;
+      expect(e.lowMoneyWarning(100), isNull);
+      expect(e.lowMoneyWarning(101), contains('ไม่พอค่าอาหารปลา'));
+      // ซื้อปลาเพิ่ม → นับค่าอาหารของปลาใหม่ด้วย
+      expect(e.feedReserve(extraUnits: 2), greaterThan(reserve));
+      // บ่อว่าง ไม่มีค่าอาหาร → ไม่เตือน
+      final empty = newEngine()..state.money = 10;
+      expect(empty.lowMoneyWarning(10), isNull);
+    });
+
     test('เปลี่ยนน้ำและเติมอากาศ', () {
       final e = newEngine();
       final s = e.state

@@ -177,6 +177,25 @@ class GameEngine {
   int feedCost(int level) =>
       jsRound(kFeedCostMultiplier[level] * feedUnit * buyMultiplier);
 
+  /// ค่าอาหารปลา "พอดี" [kFeedReserveDays] วัน (รวมปลาที่กำลังจะซื้อเพิ่ม [extraUnits] หน่วย)
+  int feedReserve({int extraUnits = 0}) =>
+      jsRound(
+        kFeedCostMultiplier[2] * (feedUnit + extraUnits) * buyMultiplier,
+      ) *
+      kFeedReserveDays;
+
+  /// ซื้อของราคา [cost] แล้วเงินเหลือไม่พอค่าอาหารปลา → ข้อความเตือน (null = ไม่ต้องเตือน)
+  String? lowMoneyWarning(int cost, {int extraUnits = 0}) {
+    final reserve = feedReserve(extraUnits: extraUnits);
+    final left = s.money - cost;
+    if (reserve <= 0 || left >= reserve) return null;
+    return 'ระวัง! เหลือเงิน $left บาท ไม่พอค่าอาหารปลา '
+        '$kFeedReserveDays วัน ($reserve บาท)';
+  }
+
+  /// เงินไม่พอแม้แต่ให้อาหาร "น้อย" → ลุงทองแบ่งอาหารปลาให้ฟรี (กันเลี้ยงต่อไม่ได้)
+  bool get freeFeed => s.pond.isNotEmpty && s.money < feedCost(1);
+
   // ---------------------------------------------------------- difficulty
 
   DifficultySpec get difficulty => kDifficulties[s.mode]!;
@@ -505,6 +524,15 @@ class GameEngine {
   ActionResult feed(int level) {
     if (s.pond.isEmpty) return const ActionResult.fail('ยังไม่มีปลาในบ่อ');
     if (s.fed != 0) return const ActionResult.fail('วันนี้ให้อาหารแล้ว');
+    // เงินหมด: ให้ "น้อย" ได้ฟรี ปลายังโตต่อ จับขายแล้วตั้งตัวใหม่ได้
+    if (level == 1 && freeFeed) {
+      final err = _pay(0, kFeedEnergy);
+      if (err != null) return err;
+      s.fed = 1;
+      return const ActionResult.ok(
+        'ลุงทองแบ่งอาหารปลาให้ฟรี (น้อย) จับปลาขายได้แล้วค่อยซื้อเองนะ',
+      );
+    }
     final err = _pay(feedCost(level), kFeedEnergy);
     if (err != null) return err;
     s.fed = level;

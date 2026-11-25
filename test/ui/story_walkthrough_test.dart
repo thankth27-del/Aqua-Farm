@@ -157,7 +157,10 @@ Future<void> step(WidgetTester tester) async {
         await settle(tester);
       }
       if (t == StoryTarget.feed) {
-        await pressIn(tester, 'feed', 'พอดี');
+        // ปุ่มให้อาหาร → แผ่นเลือกปริมาณ → "พอดี"
+        await pressIn(tester, 'feed', 'ให้อาหาร');
+        await tester.tap(find.byKey(const ValueKey('feed-2')));
+        await settle(tester);
       } else {
         await pressIn(tester, 'catchFish', 'จับปลา');
       }
