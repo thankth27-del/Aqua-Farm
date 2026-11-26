@@ -3,6 +3,8 @@ import 'dart:math';
 import 'package:aqua_farm/data/disaster_data.dart';
 import 'package:aqua_farm/game/game_engine.dart';
 import 'package:aqua_farm/game/game_state.dart';
+import 'package:aqua_farm/game/hints.dart';
+import 'package:aqua_farm/game/tutorial.dart';
 import 'package:aqua_farm/game/story.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -23,6 +25,37 @@ GameEngine beforeFlood() {
 }
 
 void main() {
+  test('ข่าวเตือนภัย: แถบ "ตอนนี้ควรทำ" บอกอุปกรณ์ที่ภัยนี้ต้องใช้แต่ยังขาด', () {
+    final e = newEngine();
+    e.state
+      ..tut = kTutorialSteps
+      ..upcoming = UpcomingDisaster(
+        type: DisasterType.flood,
+        startDay: e.state.day + 3,
+        severity: .5,
+      );
+    expect(e.warnDays, 3);
+    expect(
+      nextStep(e)!.text,
+      'น้ำท่วม ขาดกระสอบทราย 4 · เครื่องสูบน้ำ · ตาข่ายกันปลาหลุด',
+    );
+    e.state.equipment
+      ..['sand'] = 3
+      ..['pump'] = 1;
+    expect(missingEquipment(e, DisasterType.flood), ['กระสอบทราย', 'ตาข่ายกันปลาหลุด']);
+    e.state.equipment
+      ..['sand'] = 4
+      ..['net'] = 1;
+    expect(nextStep(e)!.text, 'น้ำท่วม อุปกรณ์ครบแล้ว เช็กเสบียงที่ฟาร์ม');
+    // ภัยอื่นบอกอุปกรณ์ของภัยนั้น
+    e.state.upcoming = UpcomingDisaster(
+      type: DisasterType.drought,
+      startDay: e.state.day + 1,
+      severity: .5,
+    );
+    expect(nextStep(e)!.text, 'ภัยแล้ง ขาดถังเก็บน้ำ · หลังคาบังแดด');
+  });
+
   test('เกมใหม่โหมดเอาชีวิตรอด: สุ่มภัยแรกจากทุกภัย วันที่และความรุนแรงเท่าเดิม', () {
     final seen = <DisasterType>{};
     for (var seed = 0; seed < 40; seed++) {

@@ -1028,6 +1028,35 @@ void main() {
     },
   );
 
+  for (final size in const [Size(360, 740), Size(844, 390)]) {
+    testWidgets(
+      '${size.width.toInt()}x${size.height.toInt()}: แถบ "ตอนนี้ควรทำ" บอกอุปกรณ์ที่ขาด ไม่ล้นจอ',
+      (tester) async {
+        await pumpApp(tester);
+        tester.view.physicalSize = size;
+        await tester.pumpAndSettle();
+        await startNewGame(tester);
+        // ข้อความยาวที่สุด: น้ำท่วม ยังไม่มีอุปกรณ์เลย
+        container.read(gameProvider.notifier).update((e) {
+          floodFirst(e);
+          e.state.day = 2;
+        });
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        final r = tester.getRect(find.byKey(const ValueKey('next-step')));
+        expect(r.left, greaterThanOrEqualTo(0));
+        expect(r.right, lessThanOrEqualTo(size.width + .5));
+        expect(r.bottom, lessThanOrEqualTo(size.height + .5));
+        expect(
+          find.text(
+            'น้ำท่วม ขาดกระสอบทราย 4 · เครื่องสูบน้ำ · ตาข่ายกันปลาหลุด',
+          ),
+          findsOneWidget,
+        );
+      },
+    );
+  }
+
   testWidgets('วันที่ภัยเกิด: จบวันแล้วเห็นฉากภัยก่อน แล้วไปรายงานเอง', (
     tester,
   ) async {

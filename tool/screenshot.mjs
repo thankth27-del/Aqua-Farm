@@ -8,6 +8,7 @@
 //   ["scrollTo", "ข้อความ"]       เลื่อนจนเห็นข้อความ
 //   ["shot", "ชื่อไฟล์"]           บันทึกภาพ
 //   ["story", {p}, {S}]          แก้เซฟเนื้อเรื่องใน localStorage (ใช้คู่กับ reload)
+//   ["pref", "คีย์", "ค่า"]         ตั้งค่า shared_preferences แบบข้อความ (ใช้คู่กับ reload)
 // "tap" ใช้ semantics ของ Flutter web (เปิดให้อัตโนมัติ) จึงไม่ผูกกับตำแหน่งปุ่ม
 import { createServer } from 'node:http';
 import { mkdirSync, readFileSync, writeFileSync, existsSync, statSync } from 'node:fs';
@@ -93,6 +94,9 @@ try {
         localStorage.setItem(k, JSON.stringify(JSON.stringify(m)));
         return 'บท ' + m.p.ch;
       })()`));
+    }
+    if (op === 'pref') {
+      await b.evaluate(`localStorage.setItem('flutter.' + ${JSON.stringify(a[0])}, ${JSON.stringify(JSON.stringify(a[1]))})`);
     }
     if (op === 'reload') {
       await b.send('Page.reload', {});

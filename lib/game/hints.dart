@@ -2,6 +2,7 @@
 library;
 
 import '../data/disaster_data.dart';
+import '../data/equipment_data.dart';
 import 'game_engine.dart';
 import 'tutorial.dart';
 
@@ -56,11 +57,13 @@ int? tabOfPlace(NextPlace p) => switch (p) {
   }
   final w = e.warnDays;
   if (w > 0) {
-    final name = kDisasters[s.upcoming!.type]!.name;
+    // จำนวนวันอยู่บนป้ายภัยแล้ว แถบนี้บอกอุปกรณ์ที่ขาด (ให้พอ 2 บรรทัด)
+    final when = kDisasters[s.upcoming!.type]!.name;
+    final lack = missingEquipment(e, s.upcoming!.type);
     return (
-      text: w == 1
-          ? 'พรุ่งนี้มี$name ไปเตรียมอุปกรณ์ที่ฟาร์ม'
-          : 'อีก $w วันมี$name ไปเตรียมอุปกรณ์ที่ฟาร์ม',
+      text: lack.isEmpty
+          ? '$when อุปกรณ์ครบแล้ว เช็กเสบียงที่ฟาร์ม'
+          : '$when ขาด${lack.join(' · ')}',
       place: NextPlace.farm,
     );
   }
@@ -107,3 +110,10 @@ List<int?> tabBadges(GameEngine e) {
     near > 0 ? near : null,
   ];
 }
+
+/// อุปกรณ์ที่ภัยนี้ต้องใช้แต่ยังขาด เช่น "กระสอบทราย 4" (ขาดชิ้นเดียวไม่บอกจำนวน)
+List<String> missingEquipment(GameEngine e, DisasterType type) => [
+  for (final MapEntry(:key, :value) in kDisasters[type]!.equipment.entries)
+    if (value - e.state.equipmentCount(key) case final n when n > 0)
+      n == 1 ? kEquipment[key]!.name : '${kEquipment[key]!.name} $n',
+];
