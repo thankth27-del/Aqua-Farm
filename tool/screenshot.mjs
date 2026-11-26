@@ -7,6 +7,7 @@
 //   ["scroll", x, y, dy]         เลื่อนจอ
 //   ["scrollTo", "ข้อความ"]       เลื่อนจนเห็นข้อความ
 //   ["shot", "ชื่อไฟล์"]           บันทึกภาพ
+//   ["story", {p}, {S}]          แก้เซฟเนื้อเรื่องใน localStorage (ใช้คู่กับ reload)
 // "tap" ใช้ semantics ของ Flutter web (เปิดให้อัตโนมัติ) จึงไม่ผูกกับตำแหน่งปุ่ม
 import { createServer } from 'node:http';
 import { mkdirSync, readFileSync, writeFileSync, existsSync, statSync } from 'node:fs';
@@ -80,6 +81,17 @@ try {
         const out = JSON.stringify(all);
         localStorage.setItem(k, JSON.stringify(wrapped ? out : all));
         return Object.keys(${JSON.stringify(a[0])}).join(',');
+      })()`));
+    }
+    if (op === 'story') {
+      console.log('story', await b.evaluate(`(() => {
+        const k = 'flutter.aquafarm_story_v1';
+        const raw = JSON.parse(localStorage.getItem(k));
+        const m = JSON.parse(raw);
+        Object.assign(m.p, ${JSON.stringify(a[0])});
+        Object.assign(m.S, ${JSON.stringify(a[1] ?? {})});
+        localStorage.setItem(k, JSON.stringify(JSON.stringify(m)));
+        return 'บท ' + m.p.ch;
       })()`));
     }
     if (op === 'reload') {

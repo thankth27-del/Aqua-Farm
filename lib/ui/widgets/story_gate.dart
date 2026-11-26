@@ -68,7 +68,7 @@ class StoryGate extends ConsumerWidget {
   }
 }
 
-/// แถบ "เป้าหมายบทนี้" ติดบนจอเสมอ: บท n/7 เป้าหมาย คำอธิบายสั้น ๆ
+/// แถบ "เป้าหมายบทนี้" ติดบนจอเสมอ: บท n/$kStoryChapters เป้าหมาย คำอธิบายสั้น ๆ
 /// และปุ่มบทถัดไป / ลองบทนี้ใหม่
 class StoryGoalBar extends ConsumerWidget {
   const StoryGoalBar({super.key});

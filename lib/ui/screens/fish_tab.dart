@@ -323,7 +323,7 @@ class _WaterCareState extends ConsumerState<_WaterCare> {
       style: TextStyle(
         fontSize: FontSize.small,
         fontWeight: FontWeight.w700,
-        color: AquaColors.paper.withValues(alpha: .9),
+        color: AquaColors.textSoft,
       ),
     );
     final water = button(

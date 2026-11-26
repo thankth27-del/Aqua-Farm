@@ -503,7 +503,7 @@ void main() {
       tester,
     ) async {
       await pumpApp(tester, unlocked: false);
-      expect(find.text('เรียนรู้ทีละบท 7 บท'), findsOneWidget);
+      expect(find.text('เรียนรู้ทีละบท 9 บท'), findsOneWidget);
       await tester.tap(find.byKey(const ValueKey('menu-story')));
       await tester.pumpAndSettle();
       expect(container.read(gameProvider)!.slot, kStorySlot);

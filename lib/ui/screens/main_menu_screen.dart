@@ -4,6 +4,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../design/design_system.dart' show DsColors;
 
+import '../../game/story.dart' show kStoryChapters;
 import '../../save/save_repository.dart';
 import '../dialogs.dart';
 import '../layout/responsive.dart';
@@ -197,7 +198,7 @@ class MainMenuScreen extends ConsumerWidget {
             size: PixelButtonSize.large,
             expand: true,
             below: Text(
-              saved ? 'เล่นต่อจากบทที่ค้างไว้' : 'เรียนรู้ทีละบท 7 บท',
+              saved ? 'เล่นต่อจากบทที่ค้างไว้' : 'เรียนรู้ทีละบท $kStoryChapters บท',
               style: const TextStyle(
                 color: AquaColors.ink,
                 fontSize: FontSize.small,
