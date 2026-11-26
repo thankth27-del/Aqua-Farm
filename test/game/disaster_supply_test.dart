@@ -1,6 +1,9 @@
+import 'dart:math';
+
 import 'package:aqua_farm/data/disaster_data.dart';
 import 'package:aqua_farm/game/game_engine.dart';
 import 'package:aqua_farm/game/game_state.dart';
+import 'package:aqua_farm/game/story.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'helpers.dart';
@@ -20,6 +23,20 @@ GameEngine beforeFlood() {
 }
 
 void main() {
+  test('เกมใหม่โหมดเอาชีวิตรอด: สุ่มภัยแรกจากทุกภัย วันที่และความรุนแรงเท่าเดิม', () {
+    final seen = <DisasterType>{};
+    for (var seed = 0; seed < 40; seed++) {
+      final dz = GameEngine.newGame('ทดสอบ', random: Random(seed)).state.upcoming!;
+      seen.add(dz.type);
+      expect(dz.startDay, kFirstDisasterDay);
+      expect(dz.severity, kFirstDisasterSeverity);
+      expect(dz.customDuration, isNull);
+    }
+    expect(seen, DisasterType.values.toSet());
+    // เนื้อเรื่อง: น้ำท่วมมาตามบทคำเตือน ไม่มีภัยสุ่ม
+    expect(Story.newEngine(random: Random(1)).state.upcoming, isNull);
+  });
+
   group('น้ำท่วม 4 วัน', () {
     test('ข่าวเตือนล่วงหน้า 5 วัน', () {
       final e = newEngine();

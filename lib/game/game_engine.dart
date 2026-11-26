@@ -124,10 +124,12 @@ class GameEngine {
   GameEngine(this.state, {Random? random}) : random = random ?? Random();
 
   /// เริ่มเกมใหม่ (newSlot ในต้นแบบ): สุ่มราคา แล้วตั้งราคาเมื่อวาน = วันนี้
+  /// ภัยแรก: สุ่มจากทุกภัย (ไม่ระบุ [firstDisaster]) แล้ววนต่อตามลำดับเดิม
   factory GameEngine.newGame(
     String slotName, {
     Random? random,
     Difficulty mode = Difficulty.normal,
+    DisasterType? firstDisaster,
   }) {
     final e = GameEngine(
       GameState.initial(slotName: slotName, mode: mode),
@@ -135,6 +137,14 @@ class GameEngine {
     );
     e.rollPrices();
     e.state.prevPrices = Map.of(e.state.prices);
+    final dz = e.state.upcoming!;
+    e.state.upcoming = UpcomingDisaster(
+      type:
+          firstDisaster ??
+          kDisasterOrder[e.random.nextInt(kDisasterOrder.length)],
+      startDay: dz.startDay,
+      severity: dz.severity,
+    );
     e.calcWater();
     return e;
   }

@@ -140,6 +140,16 @@ Finder dayChip(String v) => find.descendant(
   matching: find.text(v),
 );
 
+/// เกมใหม่สุ่มภัยแรก: เทสที่ดูข่าว/ฉากน้ำท่วมตั้งภัยแรกเป็นน้ำท่วม (ตามต้นแบบ)
+void floodFirst(GameEngine e) {
+  final dz = e.state.upcoming!;
+  e.state.upcoming = UpcomingDisaster(
+    type: DisasterType.flood,
+    startDay: dz.startDay,
+    severity: dz.severity,
+  );
+}
+
 void main() {
   testWidgets('เมนูหลักมีปุ่มครบ และเล่นต่อเมื่อไม่มีเซฟแจ้งเตือน', (
     tester,
@@ -977,7 +987,10 @@ void main() {
       await pumpApp(tester);
       await startNewGame(tester);
       final ctl = container.read(gameProvider.notifier);
-      ctl.update((e) => e.state.day = 2);
+      ctl.update((e) {
+        floodFirst(e);
+        e.state.day = 2;
+      });
       await tester.pumpAndSettle();
       expect(find.text('น้ำท่วมในอีก 5 วัน'), findsOneWidget);
       // ป้ายภัยบนฉาก: อีกกี่วัน + ความพร้อม
@@ -1022,6 +1035,7 @@ void main() {
     await startNewGame(tester);
     final ctl = container.read(gameProvider.notifier);
     ctl.update((e) {
+      floodFirst(e);
       e.state
         ..day = 6
         ..hunger = 100;

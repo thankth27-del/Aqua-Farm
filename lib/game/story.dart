@@ -371,7 +371,11 @@ class StoryProgress {
 abstract final class Story {
   /// เกมใหม่ของเนื้อเรื่อง: ไม่มีภัยสุ่ม (น้ำท่วมมาตามบทคำเตือน) และไม่ใช้บทเรียนเดิม
   static GameEngine newEngine({Random? random}) {
-    final e = GameEngine.newGame('เนื้อเรื่อง', random: random);
+    final e = GameEngine.newGame(
+      'เนื้อเรื่อง',
+      random: random,
+      firstDisaster: kStoryDisaster,
+    );
     e.state
       ..upcoming = null
       // โรคปลาเปิดเมื่อถึงบทปลาป่วย

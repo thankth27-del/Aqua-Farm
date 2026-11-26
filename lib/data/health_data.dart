@@ -115,7 +115,7 @@ const Map<String, MedicineSpec> kMedicines = {
   'kmno4': MedicineSpec(
     id: 'kmno4',
     name: 'ด่างทับทิม',
-    price: 25,
+    price: 15,
     icon: 'vin',
     description: 'ฆ่าเชื้อแผลภายนอก ใช้กับโรคตัวด่าง',
   ),
@@ -135,15 +135,15 @@ const List<String> kMedicineOrder = ['salt', 'kmno4', 'antibio'];
 const double kSickBadWater = .15; // น้ำต่ำกว่าเส้นดี ติดกัน 2 วัน
 const double kSickDangerWater = .30; // น้ำต่ำกว่าเส้นอันตราย ติดกัน 2 วัน
 const int kSickBadWaterDays = 2;
-const double kSickCrowded = .05; // ปลาเกิน [kCrowdedFish] ตัว
+const double kSickCrowded = .02; // ปลาเกิน [kCrowdedFish] ตัว
 const int kCrowdedFish = 6;
 const double kSickHot = .10; // น้ำ ≥ [kHotTemp]
 const double kHotTemp = 33;
 const double kSickTempSwing = .10; // อุณหภูมิเปลี่ยน ≥ [kTempSwing] ใน 1 วัน
 const double kTempSwing = 2;
-const double kSickOutbreak = .20; // ช่วงหลังภัย
+const double kSickOutbreak = .10; // ช่วงหลังภัย
 const int kOutbreakDays = 2;
-const double kSickSpread = .10; // ต่อปลาป่วย 1 ตัวที่ไม่ได้แยกบ่อ
+const double kSickSpread = .05; // ต่อปลาป่วย 1 ตัวที่ไม่ได้แยกบ่อ
 
 /// ปลาป่วย: สุขภาพลดต่อวัน และตายถ้าไม่รักษาภายใน N วัน (ปลาทน +1 วัน)
 const int kSickDamage = 15;
