@@ -20,7 +20,15 @@ DisasterType disasterFromName(String n) => DisasterType.values.byName(n);
 
 /// ปลา 1 ตัวในบ่อ
 class PondFish {
-  PondFish({required this.type, this.growth = 0, this.health = 100});
+  PondFish({
+    required this.type,
+    this.growth = 0,
+    this.health = 100,
+    this.disease,
+    this.sickDays = 0,
+    this.treatDays = 0,
+    this.quarantine = false,
+  });
 
   /// id ปลา (t)
   final String type;
@@ -31,13 +39,38 @@ class PondFish {
   /// สุขภาพ 0-100 (h) — อาจเป็นทศนิยม
   double health;
 
-  bool get mature => growth >= 100;
+  /// โรคที่เป็นอยู่ (id ใน kDiseases) · null = ปกติ
+  String? disease;
 
-  Map<String, dynamic> toJson() => {'t': type, 'g': growth, 'h': health};
+  /// ป่วยมาแล้วกี่วัน (ไม่รักษา ครบกำหนด = ตาย)
+  int sickDays;
+
+  /// กำลังรักษาด้วยยาที่ถูก เหลืออีกกี่วันหาย · 0 = ไม่ได้รักษา
+  int treatDays;
+
+  /// อยู่ในบ่อพักแยกปลา (ไม่แพร่เชื้อ ไม่ติดเชื้อ)
+  bool quarantine;
+
+  bool get mature => growth >= 100;
+  bool get sick => disease != null;
+
+  Map<String, dynamic> toJson() => {
+    't': type,
+    'g': growth,
+    'h': health,
+    'dz': ?disease,
+    if (sickDays > 0) 'sd': sickDays,
+    if (treatDays > 0) 'td': treatDays,
+    if (quarantine) 'q': true,
+  };
   factory PondFish.fromJson(Map<String, dynamic> j) => PondFish(
     type: j['t'] as String,
     growth: _i(j['g']),
     health: _d(j['h'], 100),
+    disease: j['dz'] as String?,
+    sickDays: _i(j['sd']),
+    treatDays: _i(j['td']),
+    quarantine: (j['q'] as bool?) ?? false,
   );
 }
 
@@ -284,6 +317,16 @@ class DayReport {
   int fish = 0;
   int money = 0;
 
+  /// โรคปลา: ป่วยใหม่ (ชื่อโรค) ตายจากโรค หายป่วย ยาไม่ได้ผลเพราะน้ำแย่
+  final List<String> sickNew = [];
+  int diseaseDied = 0;
+  int cured = 0;
+  int treatFailed = 0;
+
+  /// ค่าไฟเครื่องเติมอากาศที่จ่ายคืนนี้ · ปิดเองเพราะเงินไม่พอ
+  int aeratorCost = 0;
+  bool aeratorOff = false;
+
   /// เกรด S/A/B
   String grade = 'B';
 
@@ -309,6 +352,12 @@ class DayReport {
     'g': grade,
     'over': gameOver,
     'won': won,
+    if (sickNew.isNotEmpty) 'sick': sickNew,
+    if (diseaseDied > 0) 'dzDied': diseaseDied,
+    if (cured > 0) 'cured': cured,
+    if (treatFailed > 0) 'tFail': treatFailed,
+    if (aeratorCost > 0) 'airCost': aeratorCost,
+    if (aeratorOff) 'airOff': true,
   };
 
   factory DayReport.fromJson(Map<String, dynamic> j) {
@@ -326,7 +375,13 @@ class DayReport {
       ..money = _i(j['money'])
       ..grade = j['g'] as String
       ..gameOver = (j['over'] as bool?) ?? false
-      ..won = (j['won'] as bool?) ?? false;
+      ..won = (j['won'] as bool?) ?? false
+      ..diseaseDied = _i(j['dzDied'])
+      ..cured = _i(j['cured'])
+      ..treatFailed = _i(j['tFail'])
+      ..aeratorCost = _i(j['airCost'])
+      ..aeratorOff = (j['airOff'] as bool?) ?? false;
+    r.sickNew.addAll([for (final x in (j['sick'] as List? ?? const [])) '$x']);
     for (final d in (j['done'] as List? ?? const [])) {
       r.done.add(DoneItem.fromJson(Map<String, dynamic>.from(d as Map)));
     }
@@ -431,6 +486,38 @@ class GameState {
   /// จำนวนภัยที่ผ่านพ้นมาได้
   int survived = 0;
 
+  // ---------------------------------------------------------------- ดูแลน้ำ/โรค
+
+  /// เปิดเครื่องเติมอากาศอยู่ (ต้องมีอุปกรณ์ 'air')
+  bool aeratorOn = false;
+
+  /// ความสกปรกของตัวกรอง 0-100
+  int filterDirt = 0;
+
+  /// วันที่ตรวจน้ำด้วยชุดตรวจล่าสุด (0 = ยังไม่เคย)
+  int testedDay = 0;
+
+  /// ยาปลาที่มี (ไม่รวมเกลือ ซึ่งอยู่ในวัตถุดิบ)
+  Map<String, int> meds = {};
+
+  /// น้ำต่ำกว่าเส้นดีติดกันกี่วัน
+  int badWaterDays = 0;
+
+  /// โรคระบาดช่วงหลังภัย (id โรค) และเหลืออีกกี่วัน
+  String? outbreak;
+  int outbreakDays = 0;
+
+  /// ระบบโรคปลาทำงาน (เนื้อเรื่องเปิดเมื่อถึงบทปลาป่วย)
+  bool diseaseOn = true;
+
+  /// ให้ยาผิดโรคครั้งล่าสุดของวันนี้: ยาที่ใช้ และโรคของปลาตัวนั้น (null = ไม่มี)
+  /// ลุงทองอธิบายแล้วให้เลือกใหม่ · ล้างเมื่อให้ยาถูกหรือจบวัน
+  String? wrongMed;
+  String? wrongFor;
+
+  /// ตรวจน้ำแล้ววันนี้
+  bool get testedToday => testedDay == day;
+
   /// เกมจบแล้ว (แพ้หรือชนะ)
   bool get finished => over || won;
 
@@ -480,6 +567,16 @@ class GameState {
     'gp': gradePoints,
     'gd': gradeDays,
     'surv': survived,
+    'air': aeratorOn,
+    'dirt': filterDirt,
+    'test': testedDay,
+    'meds': Map<String, int>.from(meds),
+    'bad': badWaterDays,
+    'ob': ?outbreak,
+    'obd': outbreakDays,
+    'dzOn': diseaseOn,
+    'wm': ?wrongMed,
+    'wf': ?wrongFor,
   };
 
   /// โหลดจาก JSON — ฟิลด์ที่ขาดใช้ค่าเริ่มต้น (เหมือน Object.assign(def(), o))
@@ -518,7 +615,17 @@ class GameState {
       ..won = (j['won'] as bool?) ?? false
       ..gradePoints = _i(j['gp'])
       ..gradeDays = _i(j['gd'])
-      ..survived = _i(j['surv']);
+      ..survived = _i(j['surv'])
+      ..aeratorOn = (j['air'] as bool?) ?? false
+      ..filterDirt = _i(j['dirt'])
+      ..testedDay = _i(j['test'])
+      ..badWaterDays = _i(j['bad'])
+      ..outbreak = j['ob'] as String?
+      ..outbreakDays = _i(j['obd'])
+      ..diseaseOn = (j['dzOn'] as bool?) ?? true
+      ..wrongMed = j['wm'] as String?
+      ..wrongFor = j['wf'] as String?;
+    s.meds = _intMap(j['meds']);
     if (j['pond'] != null) {
       s.pond = [for (final f in j['pond'] as List) PondFish.fromJson(m(f))];
     }

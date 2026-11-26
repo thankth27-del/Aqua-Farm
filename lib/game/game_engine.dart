@@ -10,6 +10,7 @@ import '../data/disaster_data.dart';
 import '../data/equipment_data.dart';
 import '../data/fish_data.dart';
 import '../data/food_data.dart';
+import '../data/health_data.dart';
 import '../data/ingredients.dart';
 import 'game_state.dart';
 import 'js_math.dart';
@@ -195,6 +196,10 @@ class GameEngine {
 
   /// เงินไม่พอแม้แต่ให้อาหาร "น้อย" → ลุงทองแบ่งอาหารปลาให้ฟรี (กันเลี้ยงต่อไม่ได้)
   bool get freeFeed => s.pond.isNotEmpty && s.money < feedCost(1);
+
+  /// เงินไม่พอค่าเติมอากาศ ปลาในบ่อขาดออกซิเจน → ลุงทองให้ยืมเครื่องเติมอากาศฟรี
+  bool get freeAerate =>
+      s.pond.isNotEmpty && s.money < kAerateCost && s.o2 < pondO2Need;
 
   /// บ่อว่าง ไม่มีปลาเหลือขาย และเงินไม่พอซื้อปลา → ลุงทองให้ลูกปลา [kFreeFishCount] ตัวฟรี
   bool get freeFish =>
@@ -406,6 +411,39 @@ class GameEngine {
     return tips.isEmpty ? null : tips.join('\n');
   }
 
+  // ---------------------------------------------------------------- ดูแลน้ำ/โรค
+
+  /// ประสิทธิภาพตัวกรอง (1 = สะอาด · ลดลงตามความสกปรก)
+  double get filterEfficiency => 1 - s.filterDirt / kFilterDirtPenalty;
+
+  bool get hasAerator => s.equipmentCount('air') > 0;
+  bool get hasTestKit => s.equipmentCount('kit') > 0;
+
+  /// ราคายา (เกลือ = ราคาวัตถุดิบวันนี้)
+  int medicinePrice(String id) {
+    final m = kMedicines[id]!;
+    return m.ingredient
+        ? (s.prices[id] ?? kIngredients[id]!.basePrice)
+        : jsRound(m.price * buyMultiplier);
+  }
+
+  /// ยาที่มี (หน่วย)
+  int medCount(String id) =>
+      kMedicines[id]!.ingredient ? (s.inventory[id] ?? 0) : (s.meds[id] ?? 0);
+
+  int get sickCount => s.pond.where((f) => f.sick).length;
+
+  /// ที่ว่างในบ่อพักแยกปลา
+  int get quarantineFree =>
+      s.equipmentCount('qtank') * kQuarantineSlots -
+      s.pond.where((f) => f.quarantine).length;
+
+  /// ป่วยแล้วอยู่ได้อีกกี่วันก่อนตาย (ไม่รักษา)
+  int daysToDie(PondFish f) =>
+      kSickDaysToDie +
+      (kFish[f.type]!.toughness >= kToughFish ? 1 : 0) -
+      f.sickDays;
+
   /// การโตสูงสุดของปลาในบ่อ (%)
   int get maxPondGrowth => s.pond.fold(0, (a, f) => max(a, f.growth));
 
@@ -580,8 +618,9 @@ class GameEngine {
     return ActionResult.ok(msg[level], warning: level == 3);
   }
 
-  ActionResult changeWater() {
-    final err = _pay(kChangeWaterCost, kChangeWaterEnergy);
+  /// เปลี่ยนน้ำ — [free] = ลุงทองช่วยเปลี่ยนให้ (เนื้อเรื่อง เงินไม่พอ)
+  ActionResult changeWater({bool free = false}) {
+    final err = _pay(free ? 0 : kChangeWaterCost, kChangeWaterEnergy);
     if (err != null) return err;
     s.ammonia *= .3;
     s.nitrite *= .3;
@@ -592,10 +631,130 @@ class GameEngine {
   }
 
   ActionResult aerate() {
-    final err = _pay(kAerateCost, kAerateEnergy);
+    final free = freeAerate;
+    final err = _pay(free ? 0 : kAerateCost, kAerateEnergy);
     if (err != null) return err;
     s.o2 = 100;
-    return const ActionResult.ok('เติมอากาศแล้ว ออกซิเจนเต็ม');
+    return ActionResult.ok(
+      free
+          ? 'ลุงทองให้ยืมเครื่องเติมอากาศฟรี ออกซิเจนเต็ม ขายปลาได้แล้วค่อยจ่ายเองนะ'
+          : 'เติมอากาศแล้ว ออกซิเจนเต็ม',
+    );
+  }
+
+  /// เปิด/ปิดเครื่องเติมอากาศ (เปิดไว้ คืนละ [kAeratorPowerCost] บาท)
+  ActionResult toggleAerator() {
+    if (!hasAerator) {
+      return const ActionResult.fail(
+        'ยังไม่มีเครื่องเติมอากาศ (ซื้อที่หน้าฟาร์ม > ป้องกัน)',
+      );
+    }
+    s.aeratorOn = !s.aeratorOn;
+    return ActionResult.ok(
+      s.aeratorOn
+          ? 'เปิดเครื่องเติมอากาศ ออกซิเจนตอนเช้าไม่ต่ำกว่า ${kAeratorO2Floor.toInt()}% (ค่าไฟคืนละ $kAeratorPowerCost บาท)'
+          : 'ปิดเครื่องเติมอากาศแล้ว',
+    );
+  }
+
+  /// ล้างตัวกรอง: ความสกปรกเป็น 0 แต่แบคทีเรียดีหายไปบ้าง
+  ActionResult cleanFilter() {
+    if (s.filterDirt < kCleanFilterMin) {
+      return const ActionResult.fail(
+        'ตัวกรองยังสะอาดอยู่ ล้างบ่อยไปแบคทีเรียดีจะหาย',
+      );
+    }
+    final err = _pay(0, kCleanFilterEnergy);
+    if (err != null) return err;
+    s.filterDirt = 0;
+    s.bio = max(0, s.bio - kCleanFilterBioLoss);
+    return const ActionResult.ok(
+      'ล้างตัวกรองแล้ว กรองของเสียได้เต็มที่ (แบคทีเรียดีลดลงเล็กน้อย)',
+    );
+  }
+
+  /// ตรวจน้ำด้วยชุดตรวจ: เห็นค่าจริงของวันนี้
+  ActionResult testWater() {
+    if (!hasTestKit) {
+      return const ActionResult.fail('ต้องมีชุดตรวจน้ำ (ซื้อที่ตลาด)');
+    }
+    if (s.testedToday) return const ActionResult.fail('วันนี้ตรวจน้ำแล้ว');
+    final err = _pay(0, kTestWaterEnergy);
+    if (err != null) return err;
+    s.testedDay = s.day;
+    return const ActionResult.ok('ตรวจน้ำแล้ว ดูค่าจริงได้ทั้งวัน');
+  }
+
+  /// ซื้อยาปลา 1 หน่วย — UI ต้องแสดงหน้ายืนยันก่อนเรียก
+  ActionResult buyMedicine(String id) {
+    final m = kMedicines[id]!;
+    if (m.ingredient) return buyIngredient(id);
+    if (s.marketClosed) return _closedMsg;
+    final err = _pay(medicinePrice(id), 0);
+    if (err != null) return err;
+    s.meds[id] = (s.meds[id] ?? 0) + 1;
+    return ActionResult.ok('ซื้อ${m.name}');
+  }
+
+  /// ย้ายปลาเข้า/ออกบ่อพักแยกปลา
+  ActionResult toggleQuarantine(int i) {
+    if (i < 0 || i >= s.pond.length) {
+      return const ActionResult.fail('ไม่พบปลา');
+    }
+    final f = s.pond[i];
+    if (f.quarantine) {
+      f.quarantine = false;
+      return const ActionResult.ok('ย้ายปลากลับบ่อใหญ่แล้ว');
+    }
+    if (s.equipmentCount('qtank') == 0) {
+      return const ActionResult.fail('ยังไม่มีบ่อพักแยกปลา (ซื้อที่ตลาด)');
+    }
+    if (quarantineFree <= 0) {
+      return const ActionResult.fail('บ่อพักเต็มแล้ว');
+    }
+    f.quarantine = true;
+    return const ActionResult.ok('ย้ายปลาไปบ่อพักแล้ว ไม่แพร่เชื้อให้ตัวอื่น');
+  }
+
+  /// ให้ยาปลาตัวที่ [i] — ยาถูกโรค หายใน [kTreatDays] วัน (ถ้าน้ำไม่แย่)
+  ActionResult treat(int i, String med) {
+    if (i < 0 || i >= s.pond.length) {
+      return const ActionResult.fail('ไม่พบปลา');
+    }
+    final f = s.pond[i];
+    final m = kMedicines[med]!;
+    if (!f.sick) return const ActionResult.fail('ปลาตัวนี้ไม่ได้ป่วย');
+    if (f.treatDays > 0) return const ActionResult.fail('กำลังรักษาอยู่');
+    if (medCount(med) < m.dose) {
+      return ActionResult.fail('${m.name}ไม่พอ (ซื้อที่ตลาด)');
+    }
+    final err = _pay(0, kTreatEnergy);
+    if (err != null) return err;
+    if (m.ingredient) {
+      s.inventory[med] = s.inventory[med]! - m.dose;
+    } else {
+      s.meds[med] = s.meds[med]! - m.dose;
+    }
+    final d = kDiseases[f.disease]!;
+    if (d.medicine != med) {
+      s
+        ..wrongMed = med
+        ..wrongFor = d.id;
+      return ActionResult.ok(
+        'ให้${m.name}แล้ว แต่อาการไม่ดีขึ้น ยานี้ไม่ตรงกับ${d.name}',
+        warning: true,
+      );
+    }
+    f.treatDays = kTreatDays;
+    s
+      ..wrongMed = null
+      ..wrongFor = null;
+    return ActionResult.ok(
+      s.water < kWaterDangerLine
+          ? 'ให้${m.name}แล้ว แต่น้ำยังแย่มาก ยาจะไม่ได้ผล รีบเปลี่ยนน้ำ!'
+          : 'ให้${m.name}แล้ว ถ้าน้ำไม่แย่ อีก $kTreatDays วันน่าจะหาย',
+      warning: s.water < kWaterDangerLine,
+    );
   }
 
   ActionResult catchFish() {
@@ -877,6 +1036,95 @@ class GameEngine {
   }
 
   /// จบวัน (endDay) — คืนรายงานประจำวัน; ถ้า report.gameOver = true ห้ามเซฟ
+  /// เครื่องเติมอากาศคืนนี้ (ไฟดับ = ไม่ทำงาน · เงินไม่พอค่าไฟ = ปิดเอง)
+  void _aerator(DayReport r) {
+    if (!s.aeratorOn) return;
+    if (!hasAerator) {
+      s.aeratorOn = false;
+      return;
+    }
+    if (!s.power) return;
+    if (s.money < kAeratorPowerCost) {
+      s.aeratorOn = false;
+      r.aeratorOff = true;
+      return;
+    }
+    s.money -= kAeratorPowerCost;
+    r.aeratorCost = kAeratorPowerCost;
+    s.o2 = max(s.o2, kAeratorO2Floor);
+  }
+
+  /// โรคปลาคืนนี้: รักษา/ทรุด/ตาย แล้วติดเชื้อใหม่
+  void _diseaseNight(DayReport r, double swing) {
+    s.badWaterDays = s.water < kWaterGoodLine ? s.badWaterDays + 1 : 0;
+    for (final f in s.pond) {
+      if (!f.sick) continue;
+      if (f.treatDays > 0) {
+        if (s.water < kWaterDangerLine) {
+          // ไม่แก้ต้นเหตุ: น้ำแย่มาก ยาไม่ได้ผล
+          f.treatDays = 0;
+          r.treatFailed++;
+        } else if (--f.treatDays == 0) {
+          f
+            ..disease = null
+            ..sickDays = 0;
+          r.cured++;
+          continue;
+        } else {
+          continue;
+        }
+      }
+      f.sickDays++;
+      f.health = max(0, f.health - kSickDamage);
+      if (daysToDie(f) <= 0) f.health = 0;
+      if (f.health <= 0) r.diseaseDied++;
+    }
+
+    if (s.diseaseOn) {
+      // ปลาป่วยที่ไม่ได้แยกบ่อ แพร่เชื้อ
+      final spread = <String, int>{};
+      for (final f in s.pond) {
+        if (f.sick && !f.quarantine && f.health > 0) {
+          spread[f.disease!] = (spread[f.disease!] ?? 0) + 1;
+        }
+      }
+      double p(String id) {
+        var x = switch (id) {
+          'spot' =>
+            (s.badWaterDays >= kSickBadWaterDays
+                    ? (s.water < kWaterDangerLine
+                          ? kSickDangerWater
+                          : kSickBadWater)
+                    : 0.0) +
+                (s.pond.length > kCrowdedFish ? kSickCrowded : 0.0),
+          'bleed' => s.temp >= kHotTemp ? kSickHot : 0.0,
+          _ => swing >= kTempSwing ? kSickTempSwing : 0.0,
+        };
+        if (s.outbreak == id) x += kSickOutbreak;
+        final n = spread[id] ?? 0;
+        if (n > 0) x += 1 - pow(1 - kSickSpread, n);
+        return min(1.0, x);
+      }
+
+      final chance = {for (final id in kDiseases.keys) id: p(id)};
+      if (chance.values.any((x) => x > 0)) {
+        for (final f in s.pond) {
+          if (f.sick || f.quarantine || f.health <= 0) continue;
+          for (final id in kDiseases.keys) {
+            final x = chance[id]!;
+            if (x > 0 && random.nextDouble() < x) {
+              f.disease = id;
+              f.sickDays = 0;
+              r.sickNew.add(id);
+              break;
+            }
+          }
+        }
+      }
+    }
+    if (s.outbreakDays > 0 && --s.outbreakDays == 0) s.outbreak = null;
+  }
+
   DayReport endDay() {
     final r = DayReport(day: s.day, earned: s.earned);
     final n0 = s.pond.length;
@@ -887,7 +1135,7 @@ class GameEngine {
         (kFeedAmmonia[s.fed] * (fu > 14 ? 1.3 : 1) * max(1, fu / 4) +
             fu * .05) *
         waterMultiplier;
-    final c = s.bio / 100;
+    final c = s.bio / 100 * filterEfficiency;
     var t = s.ammonia * .6 * c;
     s.ammonia -= t;
     s.nitrite += t;
@@ -898,8 +1146,14 @@ class GameEngine {
     s.ammonia = toFixed2(s.ammonia);
     s.nitrite = toFixed2(s.nitrite);
     s.nitrate = toFixed2(s.nitrate);
+    final temp0 = s.temp;
     s.temp += (28 - s.temp) * .5;
+    final swing = (s.temp - temp0).abs();
     s.o2 = max(0.0, s.o2 - 10 - n0 * 1.5);
+    if (n0 > 0) {
+      s.filterDirt = min(100, s.filterDirt + kFilterDirtPerDay[s.fed]);
+    }
+    _aerator(r);
     calcWater();
 
     // สุขภาพและการเติบโตของปลา
@@ -912,6 +1166,7 @@ class GameEngine {
       if (st < 0) st *= 1.4 - spec.toughness * .15;
       if (s.o2 < spec.o2Need) st -= 12;
       f.health = clampDouble(f.health + st, 0, 100);
+      if (f.sick) continue; // ปลาป่วยไม่โต
       f.growth = min(
         100,
         jsRound(
@@ -924,6 +1179,7 @@ class GameEngine {
         ),
       );
     }
+    _diseaseNight(r, swing);
     s.pond.removeWhere((f) => f.health <= 0);
     r.died = n0 - s.pond.length;
 
@@ -957,6 +1213,9 @@ class GameEngine {
     }
     s.joy = max(0, s.joy - 2);
     s.fed = 0;
+    s
+      ..wrongMed = null
+      ..wrongFor = null;
     s.day++;
     s.power = true;
     s.marketClosed = false;
@@ -981,6 +1240,16 @@ class GameEngine {
       if (ev.last) {
         ev.supplyDaysAfter = supplyDays;
         s.survived++;
+        // หลังภัย: โรคระบาดในบ่อช่วงสั้นๆ (น้ำท่วม = จุดขาว · น้ำเสีย = ตกเลือด)
+        final ob = switch (a.type) {
+          DisasterType.flood => 'ich',
+          DisasterType.poll => 'bleed',
+          _ => null,
+        };
+        if (ob != null) {
+          s.outbreak = ob;
+          s.outbreakDays = kOutbreakDays;
+        }
         s.joy = max(0, s.joy - (ev.protectionPct >= 100 ? 5 : 15));
         final next =
             kDisasterOrder[(kDisasterOrder.indexOf(a.type) + 1) %

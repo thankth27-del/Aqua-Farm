@@ -3,6 +3,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../data/constants.dart';
 import '../../data/fish_data.dart';
+import '../../data/health_data.dart';
 import '../../game/tutorial.dart';
 import '../design/design_system.dart' show DsColors, DsText;
 import '../dialogs.dart';
@@ -117,7 +118,8 @@ class _FishTabState extends ConsumerState<FishTab> {
           icon: const PixelIcon('f_nila', size: 32),
           label: 'ร้านปลา',
           labelOnScene: true,
-          diameter: ScenePage.round(context),
+          // จอแคบ: ปุ่มกลมเล็กลง ให้ป้ายน้ำ/ปลาแถวเดียวกันพอดี
+          diameter: context.rs.isCompact ? 52 : ScenePage.round(context),
           color: DsColors.primarySoft,
           onPressed: () => _set(true),
         ),
@@ -136,88 +138,546 @@ class _FishTabState extends ConsumerState<FishTab> {
   }
 }
 
-/// แผ่นรายละเอียด: ดูแลบ่อ (ค่าน้ำทุกค่า + ปริมาณอาหาร + เปลี่ยนน้ำ/เติมอากาศ)
+/// แผ่น "ดูแลน้ำ" (แยกจากการให้อาหาร): แถบสถานะเดียว ดี/เริ่มแย่/อันตราย
+/// แตะแถบดูรายละเอียด · ปุ่ม เปลี่ยนน้ำบางส่วน / เครื่องเติมอากาศ / ล้างตัวกรอง / ตรวจน้ำ
 Future<void> showPondCareSheet(BuildContext context) {
   return showDetailSheet<void>(
     context,
-    title: 'ดูแลบ่อ',
+    title: 'ดูแลน้ำ',
     icon: const PixelIcon('drop', size: 32),
-    builder: (_) => Consumer(
-      builder: (context, ref, _) {
-        final session = ref.watch(gameProvider)!;
-        final e = session.engine;
-        final s = session.state;
-        final ctl = ref.read(gameProvider.notifier);
-        return Column(
+    builder: (_) => const _WaterCare(),
+  );
+}
+
+class _WaterCare extends ConsumerStatefulWidget {
+  const _WaterCare();
+
+  @override
+  ConsumerState<_WaterCare> createState() => _WaterCareState();
+}
+
+class _WaterCareState extends ConsumerState<_WaterCare> {
+  bool _details = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final session = ref.watch(gameProvider)!;
+    final e = session.engine;
+    final s = session.state;
+    final ctl = ref.read(gameProvider.notifier);
+    final ws = e.pondStatus;
+    final wc = Color(ws.color);
+    final word = waterWord(ws);
+    final advice = e.waterAdvice;
+    final tested = s.testedToday;
+    void run(ActionResult Function(GameEngine e) a) =>
+        showResult(context, ctl.run(a));
+
+    // ---------- แถบสถานะเดียว (แตะดูรายละเอียด)
+    final status = Pressable(
+      key: const ValueKey('water-status'),
+      label: 'คุณภาพน้ำ $word แตะเพื่อ${_details ? 'ซ่อน' : 'ดู'}รายละเอียด',
+      onTap: () => setState(() => _details = !_details),
+      child: ExcludeSemantics(
+        child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _waterPanel(e, s),
-            WoodPanel(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  SectionTitle(
-                    'ให้อาหาร',
-                    icon: const PixelIcon('fry', size: 28),
-                    trailing: s.fed > 0
-                        ? Tag(
-                            'ให้แล้ว',
-                            color: AquaColors.leafLight,
-                            icon: passGlyph(true, size: 12),
-                          )
-                        : Tag('${e.feedUnit} หน่วย/วัน'),
+            Row(
+              children: [
+                const PixelIcon('drop', size: 26),
+                const SizedBox(width: Gap.xs),
+                const Expanded(child: Bold('สถานะน้ำ', size: FontSize.body)),
+                Tag(word, color: wc, textColor: AquaColors.ink),
+              ],
+            ),
+            const SizedBox(height: Gap.xs),
+            // เส้นแบ่ง 60%: ต่ำกว่านี้ปลาโตช้าและเริ่มป่วย (ค่าในเกม)
+            Stack(
+              key: const ValueKey('water-bar'),
+              children: [
+                PixelBar(value: s.water, color: wc, height: 22),
+                Positioned.fill(
+                  child: FractionallySizedBox(
+                    alignment: Alignment.centerLeft,
+                    widthFactor: kWaterGoodLine / 100,
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: Container(width: 3, color: AquaColors.ink),
+                    ),
                   ),
-                  // เลือกปริมาณ: น้อย/พอดี/มาก พร้อมผลต่อการโตและน้ำเสีย
-                  const FeedChoices(),
-                  const SizedBox(height: Gap.m),
-                  StoryGate(
-                    target: StoryTarget.water,
-                    child: Row(
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              s.water >= kWaterGoodLine
+                  ? 'รักษาน้ำให้เกินเส้นดำ ปลาจะโตเต็มที่และไม่ค่อยป่วย'
+                  : s.water >= kWaterDangerLine
+                  ? 'ต่ำกว่าเส้นดำ: ปลาโตช้าลง ถ้านานหลายวันปลาจะเริ่มป่วย'
+                  : 'อันตราย: ปลาป่วยหนัก ยารักษาไม่ได้ผล รีบเปลี่ยนน้ำ!',
+              key: const ValueKey('water-line-note'),
+              style: DsText.body.copyWith(
+                fontSize: 15,
+                color: s.water >= kWaterGoodLine ? DsColors.textMuted : wc,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Muted(
+              _details ? 'แตะเพื่อซ่อนรายละเอียด ▲' : 'แตะเพื่อดูรายละเอียด ▼',
+              size: 13,
+              align: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
+
+    // ---------- รายละเอียด 4 ค่า (ตัวเลขจริงต้องตรวจด้วยชุดตรวจน้ำ)
+    String v(String x) => tested ? x : '?';
+    ValueLevel? lv(ValueLevel l) => tested ? l : null;
+    final details = Column(
+      key: const ValueKey('water-details'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SizedBox(height: Gap.s),
+        GridView.count(
+          crossAxisCount: 2,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          mainAxisSpacing: Gap.s,
+          crossAxisSpacing: Gap.s,
+          childAspectRatio: 2.1,
+          children: [
+            _Gauge(
+              'แอมโมเนีย',
+              v(s.ammonia.toStringAsFixed(2)),
+              'ppm',
+              level: lv(e.ammoniaLevel),
+              help: 'ของเสียจากปลาและเศษอาหาร ยิ่งต่ำยิ่งดี',
+            ),
+            _Gauge(
+              'ไนไตรต์',
+              v(s.nitrite.toStringAsFixed(2)),
+              'ppm',
+              level: lv(e.nitriteLevel),
+              help: 'ของเสียที่ตัวกรองย่อยมาครึ่งทาง ยิ่งต่ำยิ่งดี',
+            ),
+            _Gauge(
+              'ออกซิเจน',
+              v(_num(s.o2)),
+              '%',
+              level: lv(e.o2Level),
+              help: s.pond.isEmpty
+                  ? 'ออกซิเจนในน้ำ ลดลงทุกคืนตามจำนวนปลา'
+                  : 'ปลาในบ่อต้องการอย่างน้อย ${e.pondO2Need}% ต่ำกว่านี้ปลาเสียสุขภาพ',
+              icon: const PixelIcon('bub', size: 16),
+            ),
+            _Gauge(
+              'อุณหภูมิ',
+              v(s.temp.toStringAsFixed(1)),
+              '°C',
+              level: lv(e.tempLevel),
+              help: 'น้ำเกิน 31°C ปลาเริ่มเครียด ร้อนจัดเสี่ยงโรคตกเลือด',
+              icon: const PixelGlyph(
+                Glyph.sun,
+                size: 14,
+                color: AquaColors.gold,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: Gap.xs),
+        Muted(
+          tested
+              ? 'ค่าจากชุดตรวจน้ำวันนี้ · แตะค้างที่การ์ดดูคำอธิบาย'
+              : e.hasTestKit
+              ? 'ยังไม่ได้ตรวจวันนี้ กด "ตรวจน้ำ" เพื่อดูค่าจริง'
+              : 'ดูด้วยตาบอกได้แค่ภาพรวม ซื้อ "ชุดตรวจน้ำ" ที่ตลาดเพื่อดูค่าจริง',
+          key: const ValueKey('water-test-note'),
+          size: 13,
+          align: TextAlign.center,
+        ),
+      ],
+    );
+
+    // ---------- ปุ่มดูแลน้ำ
+    Widget button(
+      String key,
+      String label,
+      Widget icon,
+      Widget below,
+      ActionResult Function(GameEngine e) action,
+    ) => PixelButton(
+      key: ValueKey(key),
+      label: label,
+      icon: icon,
+      style: PixelButtonStyle.water,
+      below: below,
+      expand: true,
+      onPressed: () => run(action),
+    );
+    Widget note(String t) => Text(
+      t,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: TextStyle(
+        fontSize: FontSize.small,
+        fontWeight: FontWeight.w700,
+        color: AquaColors.paper.withValues(alpha: .9),
+      ),
+    );
+    final water = button(
+      'change-water',
+      'เปลี่ยนน้ำ',
+      const PixelIcon('drop', size: 22),
+      const CoinTag(kChangeWaterCost, boxed: true, size: FontSize.small),
+      (e) => e.changeWater(),
+    );
+    final air = e.hasAerator
+        ? button(
+            'aerator-toggle',
+            s.aeratorOn ? 'ปิดเครื่องอากาศ' : 'เปิดเครื่องอากาศ',
+            const PixelIcon('bub', size: 22),
+            note(
+              s.aeratorOn
+                  ? 'เปิดอยู่ · ค่าไฟ $kAeratorPowerCost฿/คืน'
+                  : 'ปิดอยู่',
+            ),
+            (e) => e.toggleAerator(),
+          )
+        : button(
+            'aerate',
+            'เติมอากาศ',
+            const PixelIcon('bub', size: 22),
+            e.freeAerate
+                ? note('ลุงให้ยืมฟรี')
+                : const CoinTag(kAerateCost, boxed: true, size: FontSize.small),
+            (e) => e.aerate(),
+          );
+    final filter = button(
+      'clean-filter',
+      'ล้างตัวกรอง',
+      const PixelIcon('filt', size: 22),
+      note('สกปรก ${s.filterDirt}%'),
+      (e) => e.cleanFilter(),
+    );
+    final test = button(
+      'test-water',
+      'ตรวจน้ำ',
+      const PixelIcon('scroll', size: 22),
+      note(
+        !e.hasTestKit
+            ? 'ต้องมีชุดตรวจ'
+            : tested
+            ? 'ตรวจแล้ววันนี้'
+            : 'ใช้ชุดตรวจน้ำ',
+      ),
+      (e) => e.testWater(),
+    );
+    Widget pair(Widget a, Widget b) => Padding(
+      padding: const EdgeInsets.only(bottom: Gap.s),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(child: a),
+          const SizedBox(width: Gap.s),
+          Expanded(child: b),
+        ],
+      ),
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        WoodPanel(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              status,
+              if (_details) details,
+              if (advice != null) ...[
+                const SizedBox(height: Gap.s),
+                PaperCard(
+                  key: const ValueKey('water-advice'),
+                  fill: AquaColors.goldPale,
+                  padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
+                  child: Text(
+                    advice,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: FontSize.body,
+                      color: AquaColors.text,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        WoodPanel(
+          child: StoryGate(
+            target: StoryTarget.water,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                pair(water, air),
+                pair(filter, test),
+                Muted(
+                  'ตัวกรองสกปรก = กรองของเสียได้น้อยลง · ล้างบ่อยเกินแบคทีเรียดีหาย (ตอนนี้ ${s.bio}%)',
+                  size: 13,
+                  align: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+        ),
+        const Muted(
+          'ค่าน้ำเป็นแบบจำลองเพื่อการเรียนรู้ (ค่าในเกม) ไม่ใช่คำแนะนำการเลี้ยงจริง',
+          size: 13,
+          align: TextAlign.center,
+        ),
+      ],
+    );
+  }
+}
+
+/// แผ่น "รักษาปลา": เลือกปลา → เลือกยา · แยกปลาป่วยไปบ่อพัก · ผลรักษาดูในรายงานตอนจบวัน
+Future<void> showTreatSheet(BuildContext context) {
+  return showDetailSheet<void>(
+    context,
+    title: 'รักษาปลา',
+    icon: const PixelIcon('herb', size: 32),
+    builder: (_) => const _TreatCare(),
+  );
+}
+
+class _TreatCare extends ConsumerStatefulWidget {
+  const _TreatCare();
+
+  @override
+  ConsumerState<_TreatCare> createState() => _TreatCareState();
+}
+
+class _TreatCareState extends ConsumerState<_TreatCare> {
+  /// ปลาที่เลือกรักษา (ลำดับในบ่อ)
+  int? _pick;
+
+  @override
+  Widget build(BuildContext context) {
+    final session = ref.watch(gameProvider)!;
+    final e = session.engine;
+    final s = session.state;
+    final ctl = ref.read(gameProvider.notifier);
+    final pick = _pick;
+    final picked = pick != null && pick < s.pond.length && s.pond[pick].sick
+        ? pick
+        : null;
+    // ปลาป่วยขึ้นก่อน
+    final order = [for (var i = 0; i < s.pond.length; i++) i]
+      ..sort((a, b) => (s.pond[a].sick ? 0 : 1) - (s.pond[b].sick ? 0 : 1));
+
+    Widget fishRow(int i) {
+      final f = s.pond[i];
+      final spec = kFish[f.type]!;
+      final d = f.sick ? kDiseases[f.disease]! : null;
+      final state = d == null
+          ? 'ปกติ'
+          : f.treatDays > 0
+          ? 'กำลังรักษา อีก ${f.treatDays} วันน่าจะหาย'
+          : 'ป่วย · ไม่รักษาอยู่ได้อีก ${e.daysToDie(f)} วัน';
+      return Padding(
+        padding: const EdgeInsets.only(bottom: Gap.s),
+        child: PaperCard(
+          key: ValueKey('treat-fish-$i'),
+          fill: d == null
+              ? AquaColors.paper
+              : (i == picked ? AquaColors.goldPale : AquaColors.redPale),
+          border: d == null ? AquaColors.woodDark : AquaColors.red,
+          padding: const EdgeInsets.all(Gap.s),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  PixelIcon('f_${f.type}', size: 44),
+                  const SizedBox(width: Gap.s),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(
-                          child: PixelButton(
-                            key: const ValueKey('change-water'),
-                            label: 'เปลี่ยนน้ำ',
-                            icon: const PixelIcon('drop', size: 22),
-                            style: PixelButtonStyle.water,
-                            below: const CoinTag(
-                              kChangeWaterCost,
-                              boxed: true,
-                              size: FontSize.small,
-                            ),
-                            onPressed: () => showResult(
-                              context,
-                              ctl.run((e) => e.changeWater()),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: Gap.s),
-                        Expanded(
-                          child: PixelButton(
-                            key: const ValueKey('aerate'),
-                            label: 'เติมอากาศ',
-                            icon: const PixelIcon('bub', size: 22),
-                            style: PixelButtonStyle.water,
-                            below: const CoinTag(
-                              kAerateCost,
-                              boxed: true,
-                              size: FontSize.small,
-                            ),
-                            onPressed: () =>
-                                showResult(context, ctl.run((e) => e.aerate())),
+                        Bold(spec.name, size: FontSize.body, maxLines: 1),
+                        Text(
+                          state,
+                          style: TextStyle(
+                            fontSize: FontSize.small,
+                            fontWeight: FontWeight.w700,
+                            color: d == null ? AquaColors.ok : AquaColors.bad,
                           ),
                         ),
                       ],
                     ),
                   ),
+                  if (f.quarantine)
+                    const Tag('บ่อพัก', size: 12, color: AquaColors.goldLight),
                 ],
               ),
+              if (d != null) ...[
+                const SizedBox(height: Gap.xs),
+                Text(
+                  'อาการ: ${d.symptom}',
+                  key: ValueKey('symptom-$i'),
+                  style: const TextStyle(
+                    fontSize: FontSize.small,
+                    color: AquaColors.text,
+                  ),
+                ),
+              ],
+              if (d != null || f.quarantine) ...[
+                const SizedBox(height: Gap.xs),
+                Row(
+                  children: [
+                    if (d != null && f.treatDays == 0) ...[
+                      Expanded(
+                        child: PixelButton(
+                          key: ValueKey('treat-pick-$i'),
+                          label: 'เลือกยา',
+                          icon: const PixelIcon('herb', size: 20),
+                          style: PixelButtonStyle.green,
+                          expand: true,
+                          onPressed: () => setState(() => _pick = i),
+                        ),
+                      ),
+                      const SizedBox(width: Gap.s),
+                    ],
+                    Expanded(
+                      child: PixelButton(
+                        key: ValueKey('quarantine-$i'),
+                        label: f.quarantine ? 'กลับบ่อใหญ่' : 'แยกบ่อพัก',
+                        icon: const PixelIcon('tank', size: 20),
+                        style: PixelButtonStyle.wood,
+                        expand: true,
+                        onPressed: () => showResult(
+                          context,
+                          ctl.run((e) => e.toggleQuarantine(i)),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
+      );
+    }
+
+    Widget medPicker(int i) {
+      final f = s.pond[i];
+      return WoodPanel(
+        key: const ValueKey('med-picker'),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SectionTitle(
+              'เลือกยาให้${kFish[f.type]!.name}',
+              icon: const PixelIcon('herb', size: 28),
             ),
+            const Muted(
+              'ดูอาการแล้วเลือกยาให้ตรงโรค ยาผิดโรคเสียยาเปล่า · น้ำต้องไม่แย่ ยาถึงได้ผล',
+              size: FontSize.small,
+            ),
+            const SizedBox(height: Gap.s),
+            for (final id in kMedicineOrder)
+              Padding(
+                padding: const EdgeInsets.only(bottom: Gap.s),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: PixelButton(
+                        key: ValueKey('use-$id'),
+                        label: kMedicines[id]!.name,
+                        icon: PixelIcon(kMedicines[id]!.icon, size: 22),
+                        style: e.medCount(id) >= kMedicines[id]!.dose
+                            ? PixelButtonStyle.gold
+                            : PixelButtonStyle.wood,
+                        below: Text(
+                          'มี ${e.medCount(id)} · ใช้ ${kMedicines[id]!.dose}',
+                          style: const TextStyle(
+                            fontSize: FontSize.small,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        expand: true,
+                        onPressed: () {
+                          final r = ctl.run((e) => e.treat(i, id));
+                          showResult(context, r);
+                          if (r.ok) setState(() => _pick = null);
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            for (final id in kMedicineOrder)
+              Muted(
+                '${kMedicines[id]!.name}: ${kMedicines[id]!.description}',
+                size: 13,
+              ),
           ],
-        );
-      },
-    ),
-  );
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (picked != null) medPicker(picked),
+        WoodPanel(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SectionTitle(
+                'ปลาในบ่อ',
+                icon: const PixelIcon('f_nila', size: 30),
+                trailing: Tag(
+                  e.sickCount > 0 ? 'ป่วย ${e.sickCount}' : 'ปกติทุกตัว',
+                  color: e.sickCount > 0
+                      ? AquaColors.red
+                      : AquaColors.leafLight,
+                  textColor: e.sickCount > 0
+                      ? AquaColors.paper
+                      : AquaColors.ink,
+                ),
+              ),
+              if (s.pond.isEmpty)
+                const Muted('ยังไม่มีปลาในบ่อ', size: FontSize.body)
+              else ...[
+                if (e.sickCount == 0)
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: Gap.s),
+                    child: Muted(
+                      'ปลาจะป่วยเมื่อน้ำแย่ติดกันหลายวัน ปลาแน่นบ่อ น้ำร้อนจัด หรือหลังภัยพิบัติ',
+                      key: ValueKey('treat-healthy'),
+                      size: FontSize.small,
+                    ),
+                  ),
+                for (final i in order) fishRow(i),
+              ],
+              Muted(
+                'บ่อพักแยกปลา ว่าง ${e.quarantineFree < 0 ? 0 : e.quarantineFree} ที่ · ปลาป่วยในบ่อใหญ่แพร่เชื้อให้ตัวอื่น',
+                size: 13,
+              ),
+            ],
+          ),
+        ),
+        const Muted(
+          'ผลการรักษาดูได้ในรายงานตอนจบวัน · โรคและยาเป็นแบบจำลองเพื่อการเรียนรู้ (ค่าในเกม)',
+          size: 13,
+          align: TextAlign.center,
+        ),
+      ],
+    );
+  }
 }
 
 /// แผ่นรายละเอียด: ปลาในบ่อทีละตัว + เหตุผลว่าจับได้หรือยัง
@@ -269,148 +729,6 @@ Future<void> showPondFishSheet(
           ),
         );
       },
-    ),
-  );
-}
-
-/// ค่าน้ำทุกค่า (ใช้ในแผ่น "ดูแลบ่อ")
-Widget _waterPanel(GameEngine e, GameState s) {
-  final ws = e.pondStatus;
-  final wc = Color(ws.color);
-  final advice = e.waterAdvice;
-  return WoodPanel(
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        SectionTitle(
-          'คุณภาพน้ำ',
-          icon: const PixelIcon('drop', size: 28),
-          trailing: Tag(
-            '${ws.label} ${s.water}%',
-            color: wc,
-            textColor: AquaColors.ink,
-          ),
-        ),
-        // เส้นแบ่ง 60%: ต่ำกว่านี้ปลาโตช้าและเริ่มป่วย (ค่าในเกม)
-        Stack(
-          key: const ValueKey('water-bar'),
-          children: [
-            PixelBar(value: s.water, color: wc, height: 22),
-            Positioned.fill(
-              child: FractionallySizedBox(
-                alignment: Alignment.centerLeft,
-                widthFactor: kWaterGoodLine / 100,
-                child: Align(
-                  alignment: Alignment.centerRight,
-                  child: Container(width: 3, color: AquaColors.ink),
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 4),
-        Text(
-          s.water >= kWaterGoodLine
-              ? 'รักษาน้ำให้เกิน $kWaterGoodLine% (เส้นดำ) ปลาจะโตเต็มที่'
-              : s.water >= kWaterDangerLine
-              ? 'น้ำต่ำกว่า $kWaterGoodLine%: ปลาโตช้าลงและเริ่มป่วย'
-              : 'น้ำต่ำกว่า $kWaterDangerLine%: ปลาโตช้าและป่วยหนัก รีบเปลี่ยนน้ำ!',
-          key: const ValueKey('water-line-note'),
-          style: DsText.body.copyWith(
-            fontSize: 15,
-            color: s.water >= kWaterGoodLine ? DsColors.textMuted : wc,
-          ),
-        ),
-        const SizedBox(height: Gap.m),
-        GridView.count(
-          crossAxisCount: 3,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          mainAxisSpacing: Gap.s,
-          crossAxisSpacing: Gap.s,
-          childAspectRatio: 1.25,
-          children: [
-            _Gauge(
-              'แอมโมเนีย',
-              s.ammonia.toStringAsFixed(2),
-              'ppm',
-              level: e.ammoniaLevel,
-              help: 'ของเสียจากปลาและเศษอาหาร (NH3) ยิ่งต่ำยิ่งดี',
-            ),
-            _Gauge(
-              'ไนไตรต์',
-              s.nitrite.toStringAsFixed(2),
-              'ppm',
-              level: e.nitriteLevel,
-              help: 'ของเสียที่ตัวกรองย่อยมาครึ่งทาง (NO2) ยิ่งต่ำยิ่งดี',
-            ),
-            _Gauge(
-              'ไนเตรต',
-              s.nitrate.toStringAsFixed(1),
-              'ppm',
-              level: e.nitrateLevel,
-              help: 'ของเสียที่ย่อยแล้ว (NO3) อันตรายน้อย แต่สะสมได้ เปลี่ยนน้ำเพื่อลด',
-            ),
-            _Gauge(
-              'อุณหภูมิ',
-              s.temp.toStringAsFixed(1),
-              '°C',
-              level: e.tempLevel,
-              help: 'น้ำเกิน 31°C ปลาเริ่มเครียด',
-              icon: const PixelGlyph(
-                Glyph.sun,
-                size: 14,
-                color: AquaColors.gold,
-              ),
-            ),
-            _Gauge(
-              'ออกซิเจน',
-              _num(s.o2),
-              '%',
-              level: e.o2Level,
-              help: s.pond.isEmpty
-                  ? 'ออกซิเจนในน้ำ ลดลงทุกคืนตามจำนวนปลา'
-                  : 'ปลาในบ่อต้องการอย่างน้อย ${e.pondO2Need}% ต่ำกว่านี้ปลาเสียสุขภาพ',
-              icon: const PixelIcon('bub', size: 16),
-            ),
-            _Gauge(
-              'ตัวกรอง',
-              '${s.bio}',
-              '%',
-              help: 'ตัวกรองชีวภาพ: แบคทีเรียช่วยย่อยของเสีย โตขึ้นเองทุกวันที่มีปลา',
-              icon: const PixelIcon('filt', size: 16),
-            ),
-          ],
-        ),
-        if (advice != null) ...[
-          const SizedBox(height: Gap.s),
-          PaperCard(
-            key: const ValueKey('water-advice'),
-            fill: AquaColors.goldPale,
-            padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
-            child: Text(
-              advice,
-              style: const TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: FontSize.body,
-                color: AquaColors.text,
-              ),
-            ),
-          ),
-        ],
-        const SizedBox(height: Gap.xs),
-        const Muted(
-          'แตะค้างที่การ์ดเพื่อดูคำอธิบาย · สีเหลือง = เริ่มแย่ · สีแดง = อันตราย',
-          size: 13,
-          align: TextAlign.center,
-        ),
-        const SizedBox(height: Gap.xs),
-        const Muted(
-          'ค่าน้ำเป็นแบบจำลองเพื่อการเรียนรู้ ไม่ใช่คำแนะนำการเลี้ยงจริง',
-          size: 13,
-          align: TextAlign.center,
-        ),
-      ],
     ),
   );
 }
@@ -514,9 +832,8 @@ class _PondView extends ConsumerWidget {
       primary = PixelButton(
         key: const ValueKey('go-shop'),
         label: 'ไปร้านปลา',
-        size: short ? PixelButtonSize.normal : PixelButtonSize.large,
+        size: PixelButtonSize.normal,
         icon: const PixelIcon('f_nila', size: 32),
-        below: short ? null : _belowText('บ่อยังว่าง'),
         expand: true,
         onPressed: onShop,
       );
@@ -529,14 +846,11 @@ class _PondView extends ConsumerWidget {
           child: PixelButton(
             key: const ValueKey('feed-main'),
             label: fed ? 'ให้อาหารแล้ว' : 'ให้อาหาร',
-            size: short ? PixelButtonSize.normal : PixelButtonSize.large,
-            icon: const PixelIcon('fry', size: 32),
-            below: short
-                ? null
-                : _belowText(
-                    fed ? 'พรุ่งนี้ให้อีกครั้ง' : 'เลือก น้อย/พอดี/มาก',
-                  ),
-            tooltip: 'ให้อาหารปลา เลือกปริมาณได้',
+            size: PixelButtonSize.normal,
+            icon: const PixelIcon('fry', size: 24),
+            tooltip: fed
+                ? 'ให้อาหารแล้ว พรุ่งนี้ให้อีกครั้ง'
+                : 'ให้อาหารปลา เลือก น้อย/พอดี/มาก',
             expand: true,
             onPressed: fed ? null : () => showFeedPicker(context),
           ),
@@ -544,28 +858,64 @@ class _PondView extends ConsumerWidget {
       );
     }
 
-    final tray = ActionTray(
-      leading: shopButton,
-      primary: TipSpot(
-        screen: GameScreen.pond,
-        child: KeyedSubtree(
-          key: const ValueKey('primary-pond'),
-          child: primary,
+    final care = StoryGate(
+      target: StoryTarget.water,
+      child: PixelButton(
+        key: const ValueKey('pond-care-water'),
+        label: 'ดูแลน้ำ',
+        size: PixelButtonSize.normal,
+        icon: const PixelIcon('drop', size: 24),
+        style: danger ? PixelButtonStyle.danger : PixelButtonStyle.water,
+        tooltip:
+            'ดูแลน้ำ (น้ำ${waterWord(ws)}): เปลี่ยนน้ำ เติมอากาศ ล้างตัวกรอง ตรวจน้ำ',
+        expand: true,
+        onPressed: () => showPondCareSheet(context),
+      ),
+    );
+    final treat = StoryGate(
+      target: StoryTarget.treat,
+      child: PixelButton(
+        key: const ValueKey('pond-care-treat'),
+        label: 'รักษาปลา',
+        size: PixelButtonSize.normal,
+        icon: const PixelIcon('herb', size: 24),
+        style: sick > 0 ? PixelButtonStyle.danger : PixelButtonStyle.wood,
+        tooltip: sick > 0
+            ? 'ปลาป่วย $sick ตัว เลือกปลาแล้วเลือกยา'
+            : 'รักษาปลาป่วย เลือกปลาแล้วเลือกยา',
+        expand: true,
+        onPressed: () => showTreatSheet(context),
+      ),
+    );
+    final bar = TipSpot(
+      screen: GameScreen.pond,
+      child: KeyedSubtree(
+        key: const ValueKey('primary-pond'),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Expanded(child: primary),
+            const SizedBox(width: Gap.s),
+            Expanded(child: care),
+            const SizedBox(width: Gap.s),
+            Expanded(child: treat),
+          ],
         ),
       ),
-      trailing: StoryGate(
-        target: StoryTarget.catchFish,
-        hide: true,
-        child: RoundAction(
-          key: const ValueKey('pond-catch'),
-          icon: const PixelIcon('net', size: 32),
-          label: 'จับปลา',
-          labelOnScene: true,
-          diameter: short ? 52 : 60,
-          color: e.matureCount > 0 ? DsColors.accent : DsColors.surface,
-          tooltip: 'ปลาที่โตพอจับ ${e.matureCount} ตัว',
-          onPressed: () => showResult(context, ctl.run((e) => e.catchFish())),
-        ),
+    );
+    // ปุ่มกลมรอง: จับปลา (คู่กับปุ่มร้านปลา)
+    final catchButton = StoryGate(
+      target: StoryTarget.catchFish,
+      hide: true,
+      child: RoundAction(
+        key: const ValueKey('pond-catch'),
+        icon: const PixelIcon('net', size: 32),
+        label: 'จับปลา',
+        labelOnScene: true,
+        diameter: short || context.rs.isCompact ? 52 : 60,
+        color: e.matureCount > 0 ? DsColors.accent : DsColors.surface,
+        tooltip: 'ปลาที่โตพอจับ ${e.matureCount} ตัว',
+        onPressed: () => showResult(context, ctl.run((e) => e.catchFish())),
       ),
     );
 
@@ -593,7 +943,33 @@ class _PondView extends ConsumerWidget {
               ],
             ),
           const Spacer(),
-          tray,
+          // ปุ่มกลมรอง (ร้านปลา / จับปลา) ชิดขวาเหนือแถว 3 ปุ่มใหญ่
+          if (!short) ...[
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                shopButton,
+                const SizedBox(width: Gap.s),
+                catchButton,
+              ],
+            ),
+            const SizedBox(height: Gap.xs),
+          ],
+          // จอเตี้ย: ปุ่มกลมขนาบแถว 3 ปุ่ม (แถวบนเหลือแค่ป้าย)
+          if (short)
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                shopButton,
+                const SizedBox(width: Gap.s),
+                Expanded(child: bar),
+                const SizedBox(width: Gap.s),
+                catchButton,
+              ],
+            )
+          else
+            bar,
         ],
       ),
     );
@@ -607,15 +983,6 @@ class _PondView extends ConsumerWidget {
     );
   }
 }
-
-Widget _belowText(String t) => Text(
-  t,
-  style: TextStyle(
-    fontSize: 15,
-    fontWeight: FontWeight.w700,
-    color: DsColors.onAccent.withValues(alpha: .85),
-  ),
-);
 
 String _num(double v) =>
     v == v.roundToDouble() ? v.toInt().toString() : v.toStringAsFixed(1);
@@ -783,8 +1150,9 @@ class _FishCard extends StatelessWidget {
         : (health >= 50 ? AquaColors.gold : AquaColors.red);
     // ภาพปลาโตตามการเติบโตจริง (สัดส่วนเดียวกับในบ่อ)
     final iconSize = 66 * fishUnit(fish.growth) / 3 + 22;
+    final disease = fish.sick ? kDiseases[fish.disease]! : null;
     final status = [
-      if (sick) 'ป่วย',
+      if (sick) disease == null ? 'ป่วย' : 'ป่วย: ${disease.symptom}',
       if (hungry) 'หิว',
       if (mature) 'พร้อมจับ',
     ];

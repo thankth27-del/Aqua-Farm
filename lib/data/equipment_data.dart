@@ -21,6 +21,9 @@ class EquipmentSpec {
 
   /// อุปกรณ์ครัว (ขายในหน้าตลาด) — ที่เหลือขายในหน้าเตรียมภัย
   final bool kitchen;
+
+  /// อุปกรณ์ดูแลบ่อ (ขายในหน้าตลาด หมวดยาและบ่อ)
+  bool get pond => kPondEquipmentOrder.contains(id);
 }
 
 const Map<String, EquipmentSpec> kEquipment = {
@@ -80,6 +83,22 @@ const Map<String, EquipmentSpec> kEquipment = {
     description: 'เพิ่มออกซิเจนละลายน้ำ',
     use: 'รับมือน้ำเสียและอากาศร้อน',
   ),
+  'kit': EquipmentSpec(
+    id: 'kit',
+    name: 'ชุดตรวจน้ำ',
+    price: 50,
+    icon: 'scroll',
+    description: 'วัดแอมโมเนีย ไนไตรต์ ออกซิเจน อุณหภูมิ ได้ค่าจริง',
+    use: 'รู้ปัญหาน้ำก่อนปลาป่วย',
+  ),
+  'qtank': EquipmentSpec(
+    id: 'qtank',
+    name: 'บ่อพักแยกปลา',
+    price: 80,
+    icon: 'tank',
+    description: 'แยกปลาป่วย 2 ตัว/บ่อ ไม่ให้แพร่เชื้อ',
+    use: 'กันโรคระบาดในบ่อ',
+  ),
   'rack': EquipmentSpec(
     id: 'rack',
     name: 'แผงตากปลา',
@@ -129,6 +148,9 @@ const List<String> kDefenseEquipmentOrder = [
   'filter',
   'air',
 ];
+
+/// อุปกรณ์ดูแลบ่อ (หน้าตลาด หมวดยาและบ่อ)
+const List<String> kPondEquipmentOrder = ['kit', 'qtank'];
 
 /// อุปกรณ์ที่ใช้แล้วหมดไปทุกวันที่เกิดภัย
 const String kSandbagId = 'sand';

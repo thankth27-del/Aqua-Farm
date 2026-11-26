@@ -1,4 +1,4 @@
-/// บทพูดของโหมดเนื้อเรื่อง: "ลุงทอง" เล่าเรื่องและสอนไปพร้อมกัน 7 บท
+/// บทพูดของโหมดเนื้อเรื่อง: "ลุงทอง" เล่าเรื่องและสอนไปพร้อมกัน 9 บท
 ///
 /// ไฟล์ข้อมูลเดียวของบทพูดทั้งหมด (UI ไม่ฝังข้อความเอง) — แก้คำพูดที่นี่ได้เลย
 /// - ทุกบรรทัดยาว 1-2 ประโยค พร้อมอารมณ์ของลุง (ยิ้ม/คิด/กังวล)
@@ -6,11 +6,13 @@
 /// - ตัวเลขในการ์ดความรู้อ่านจากข้อมูลเกมจริง (lib/data) และติดป้าย "ค่าในเกม"
 library;
 
-import '../game/story.dart' show StoryTarget;
+import '../game/story.dart' show StoryCh, StoryTarget;
+import 'constants.dart';
 import 'disaster_data.dart';
 import 'equipment_data.dart';
 import 'fish_data.dart';
 import 'food_data.dart';
+import 'health_data.dart';
 
 /// ชื่อและภาพของตัวละครผู้สอน
 abstract final class Uncle {
@@ -59,7 +61,7 @@ class ScriptChoice {
   final List<ScriptLine> reply;
 }
 
-/// จุดตัดสินใจของผู้เล่น (บท 1, 2, 4, 6)
+/// จุดตัดสินใจของผู้เล่น (บทลงบ่อ ตลาด ถนอมอาหาร ภัยจริง)
 class ChoiceScene {
   const ChoiceScene({
     required this.id,
@@ -74,7 +76,7 @@ class ChoiceScene {
   final List<ScriptChoice> options;
 }
 
-/// ตัวเลือกของคำถามสั้น (บท 4) — ตอบผิดไม่ลงโทษ ลุงอธิบายแล้วให้เลือกใหม่
+/// ตัวเลือกของคำถามสั้น (บทเรียนย่อย) — ตอบผิดไม่ลงโทษ ลุงอธิบายแล้วให้เลือกใหม่
 class QuizOption {
   const QuizOption(this.text, {this.correct = false, required this.explain});
 
@@ -92,17 +94,18 @@ class Quiz {
   final List<QuizOption> options;
 }
 
-/// บท 4: สอนวิธีถนอมทีละวิธี → ถาม → ลองทำ
-class PreserveLesson {
-  const PreserveLesson({
-    required this.method,
+/// บทเรียนย่อย: สอนทีละเรื่อง → ถาม → ลองทำ
+/// (บทคุณภาพน้ำ: ดูแลน้ำ · บทถนอมอาหาร: ทีละวิธี · บทปลาป่วย: อาการ/ป้องกัน)
+class Lesson {
+  const Lesson({
+    required this.id,
     required this.teach,
     required this.quiz,
     required this.tryIt,
   });
 
-  /// id ใน kPreserveMethods
-  final String method;
+  /// รหัสบทเรียน (บทถนอมอาหาร = id ใน kPreserveMethods)
+  final String id;
   final List<ScriptLine> teach;
   final Quiz quiz;
 
@@ -157,7 +160,7 @@ class ChapterScript {
     required this.card,
   });
 
-  /// 1-7
+  /// 1-9 (ดู [StoryCh])
   final int chapter;
   final String title;
 
@@ -171,13 +174,13 @@ class ChapterScript {
   final List<ScriptLine> onDone;
   final ChoiceScene? choice;
 
-  /// บท 4: บทเรียนทีละวิธี
-  final List<PreserveLesson> lessons;
+  /// บทเรียนย่อยตามลำดับ
+  final List<Lesson> lessons;
 
-  /// บท 6: ลุงพูดคั่นแต่ละวันของภัย (key = วันของภัย 0..)
+  /// บทภัยจริง: ลุงพูดคั่นแต่ละวันของภัย (key = วันของภัย 0..)
   final Map<int, List<ScriptLine>> dayLines;
 
-  /// บท 6 เริ่มภัย: เตรียมพร้อม / เตรียมไม่พอ (ไม่ตำหนิ เสนอทางออก)
+  /// บทภัยจริง เริ่มภัย: เตรียมพร้อม / เตรียมไม่พอ (ไม่ตำหนิ เสนอทางออก)
   final List<ScriptLine> ready;
   final List<ScriptLine> notReady;
 
@@ -189,11 +192,11 @@ class ChapterScript {
 String _shelf(String food) => '${kFoods[food]!.shelfDays} วัน';
 String _baht(int v) => '$v฿';
 
-/// บท 1-7 (index 0-6)
+/// บท 1-9 (index 0-8)
 final List<ChapterScript> kStoryScript = [
   // ------------------------------------------------------------------ บท 1
   ChapterScript(
-    chapter: 1,
+    chapter: StoryCh.farm,
     title: 'ลงบ่อ',
     intro: const [
       ScriptLine(
@@ -297,7 +300,153 @@ final List<ChapterScript> kStoryScript = [
 
   // ------------------------------------------------------------------ บท 2
   ChapterScript(
-    chapter: 2,
+    chapter: StoryCh.water,
+    title: 'คุณภาพน้ำ',
+    intro: const [
+      ScriptLine(_s, 'ปลาโตดีนะหลาน แต่สังเกตไหม น้ำในบ่อเริ่มขุ่นแล้ว'),
+      ScriptLine(
+        _t,
+        'อาหารที่เหลือกับขี้ปลากลายเป็นของเสียในน้ำ ตัวกรองต้องทำงานหนักขึ้นทุกวัน',
+      ),
+      ScriptLine(
+        _w,
+        'ถ้าปล่อยไว้ น้ำเสีย ปลาจะป่วยและโตช้า ยิ่งช่วงภัยพิบัติยิ่งแก้ยาก',
+      ),
+    ],
+    lessons: const [
+      Lesson(
+        id: 'filter',
+        teach: [
+          ScriptLine(
+            _s,
+            'ตัวกรองเหมือนฟองน้ำ ดักเศษอาหารกับขี้ปลา และเป็นบ้านของแบคทีเรียดีที่ช่วยกินของเสีย',
+          ),
+          ScriptLine(
+            _t,
+            'พอสกปรกมากก็กรองได้น้อยลง ต้องล้าง แต่ล้างบ่อยเกินไปแบคทีเรียดีก็หายไปด้วย',
+          ),
+        ],
+        quiz: Quiz('ควรล้างตัวกรองเมื่อไร?', [
+          QuizOption(
+            'เมื่อตัวกรองเริ่มสกปรก',
+            correct: true,
+            explain: 'ใช่เลย! ล้างเมื่อสกปรก ไม่ต้องล้างทุกวัน แบคทีเรียดีจะได้อยู่ต่อ',
+          ),
+          QuizOption(
+            'ทุกวัน ยิ่งบ่อยยิ่งดี',
+            explain:
+                'ล้างบ่อยไป แบคทีเรียดีที่ช่วยกินของเสียจะหายนะ ลองเลือกใหม่ดู',
+          ),
+          QuizOption(
+            'ไม่ต้องล้างเลย',
+            explain: 'ปล่อยไว้ตัวกรองจะตัน กรองของเสียไม่ไหว ลองใหม่นะ',
+          ),
+        ]),
+        tryIt: [
+          ScriptLine(
+            _s,
+            'ไปหน้าปลา กด "ดูแลน้ำ" แล้วลองล้างตัวกรองดู',
+            point: StoryTarget.water,
+          ),
+        ],
+      ),
+      Lesson(
+        id: 'change',
+        teach: [
+          ScriptLine(
+            _s,
+            'เปลี่ยนน้ำบางส่วนช่วยเจือจางของเสียได้เร็ว แต่ต้องเสียค่าน้ำ',
+          ),
+          ScriptLine(
+            _t,
+            'ปลาหายใจทั้งคืน ออกซิเจนต่ำไปก็เติมอากาศ หรือซื้อเครื่องเติมอากาศเปิดไว้',
+          ),
+          ScriptLine(
+            _t,
+            'อยากรู้ค่าน้ำจริง ๆ ต้องมีชุดตรวจน้ำ ไม่มีก็ดูจากสีน้ำกับอาการปลาไปก่อน',
+          ),
+        ],
+        quiz: Quiz('น้ำแย่และออกซิเจนต่ำ ทำอะไรได้บ้าง?', [
+          QuizOption(
+            'เปลี่ยนน้ำ และเติมอากาศ',
+            correct: true,
+            explain: 'เก่งมาก! สองอย่างนี้ช่วยให้น้ำดีขึ้นได้ทันที',
+          ),
+          QuizOption(
+            'ให้อาหารเพิ่ม',
+            explain:
+                'อาหารยิ่งมาก ของเสียยิ่งเยอะ น้ำจะแย่ลงอีกนะ ลองเลือกใหม่ดู',
+          ),
+          QuizOption(
+            'รอให้น้ำดีขึ้นเอง',
+            explain: 'รอเฉย ๆ ปลาอาจป่วยก่อนน้ำจะดีขึ้น ลองใหม่นะ',
+          ),
+        ]),
+        tryIt: [
+          ScriptLine(
+            _t,
+            'ล้างตัวกรองแล้วน้ำยังไม่ "ดี" ค่อยเปลี่ยนน้ำนะ',
+            point: StoryTarget.water,
+          ),
+        ],
+      ),
+    ],
+    onTarget: const {
+      StoryTarget.water: [
+        ScriptLine(
+          _s,
+          'กด "ดูแลน้ำ" ล้างตัวกรองที่สกปรก ถ้าน้ำยังแย่ค่อยเปลี่ยนน้ำ',
+          point: StoryTarget.water,
+        ),
+      ],
+      StoryTarget.feed: [
+        ScriptLine(
+          _t,
+          'ให้อาหาร "พอดี" ก็พอ ให้มากไปตัวกรองจะสกปรกเร็ว',
+          point: StoryTarget.feed,
+        ),
+      ],
+      StoryTarget.endDay: [
+        ScriptLine(
+          _s,
+          'วันนี้ทำครบแล้ว กด "จบวัน" แล้วมาดูน้ำกันพรุ่งนี้',
+          point: StoryTarget.endDay,
+        ),
+      ],
+    },
+    onDone: const [
+      ScriptLine(_s, 'น้ำใสขึ้นเยอะเลย! ปลาสบายตัว โตได้ดี'),
+      ScriptLine(
+        _t,
+        'จำไว้นะ ตัวกรองสกปรกขึ้นทุกวัน ยิ่งให้อาหารมากยิ่งสกปรกเร็ว',
+      ),
+    ],
+    card: KnowledgeCard(
+      id: 'water',
+      title: 'น้ำดี ปลาดี',
+      body: 'ของเสียจากอาหารและขี้ปลาสะสมทุกวัน ตัวกรองกับแบคทีเรียดีช่วยกำจัด ล้างตัวกรองเมื่อสกปรก เปลี่ยนน้ำเมื่อของเสียสูง',
+      facts: () => [
+        CardFact(
+          'ตัวกรองสกปรกขึ้นต่อวัน',
+          'ให้อาหารน้อย +${kFilterDirtPerDay[1]} · พอดี +${kFilterDirtPerDay[2]} · มาก +${kFilterDirtPerDay[3]}',
+        ),
+        CardFact(
+          'ล้างตัวกรองได้เมื่อสกปรก',
+          'ตั้งแต่ $kCleanFilterMin · แบคทีเรียดีลด $kCleanFilterBioLoss',
+        ),
+        CardFact('เปลี่ยนน้ำ', 'ครั้งละ ${_baht(kChangeWaterCost)}'),
+        CardFact(
+          'เครื่องเติมอากาศ',
+          'ค่าไฟคืนละ ${_baht(kAeratorPowerCost)} · ออกซิเจนตอนเช้าไม่ต่ำกว่า ${kAeratorO2Floor.toInt()}%',
+        ),
+        CardFact('น้ำ "ดี"', 'คะแนนน้ำตั้งแต่ $kWaterGoodLine'),
+      ],
+    ),
+  ),
+
+  // ------------------------------------------------------------------ บท 3
+  ChapterScript(
+    chapter: StoryCh.market,
     title: 'ตลาด',
     intro: const [
       ScriptLine(_s, 'ปลาโตแล้ว! ปลาที่โตเต็มวัยขายได้ราคาเต็ม'),
@@ -370,9 +519,9 @@ final List<ChapterScript> kStoryScript = [
     ),
   ),
 
-  // ------------------------------------------------------------------ บท 3
+  // ------------------------------------------------------------------ บท 4
   ChapterScript(
-    chapter: 3,
+    chapter: StoryCh.kitchen,
     title: 'ครัว',
     intro: const [
       ScriptLine(_t, 'ปลาสดเก็บไว้นานไม่ได้ ต้องทำเป็นอาหารก่อน'),
@@ -428,9 +577,9 @@ final List<ChapterScript> kStoryScript = [
     ),
   ),
 
-  // ------------------------------------------------------------------ บท 4
+  // ------------------------------------------------------------------ บท 5
   ChapterScript(
-    chapter: 4,
+    chapter: StoryCh.preserve,
     title: 'ถนอมอาหาร',
     intro: const [
       ScriptLine(
@@ -441,8 +590,8 @@ final List<ChapterScript> kStoryScript = [
       ScriptLine(_s, 'มีอยู่ 4 วิธี ลุงจะสอนทีละวิธี แล้วหลานลองทำดูนะ'),
     ],
     lessons: const [
-      PreserveLesson(
-        method: 'dried',
+      Lesson(
+        id: 'dried',
         teach: [
           ScriptLine(_s, 'วิธีแรก ตากแห้ง แค่ผ่าปลาแล้วตากแดดบนแผงตาก'),
           ScriptLine(_t, 'ไม่ต้องใช้ไฟฟ้าเลย น้ำในตัวปลาหายไป เชื้อโรคก็โตยาก'),
@@ -471,8 +620,8 @@ final List<ChapterScript> kStoryScript = [
           ),
         ],
       ),
-      PreserveLesson(
-        method: 'salted',
+      Lesson(
+        id: 'salted',
         teach: [
           ScriptLine(
             _s,
@@ -504,8 +653,8 @@ final List<ChapterScript> kStoryScript = [
           ),
         ],
       ),
-      PreserveLesson(
-        method: 'pickled',
+      Lesson(
+        id: 'pickled',
         teach: [
           ScriptLine(_s, 'วิธีที่สาม ดอง ใช้น้ำส้มสายชูแช่ปลาในโหล'),
           ScriptLine(
@@ -536,8 +685,8 @@ final List<ChapterScript> kStoryScript = [
           ),
         ],
       ),
-      PreserveLesson(
-        method: 'canned',
+      Lesson(
+        id: 'canned',
         teach: [
           ScriptLine(_s, 'วิธีสุดท้าย บรรจุกระป๋อง ปิดสนิทจนอากาศเข้าไม่ได้'),
           ScriptLine(
@@ -637,9 +786,149 @@ final List<ChapterScript> kStoryScript = [
     ),
   ),
 
-  // ------------------------------------------------------------------ บท 5
+  // ------------------------------------------------------------------ บท 6
   ChapterScript(
-    chapter: 5,
+    chapter: StoryCh.sick,
+    title: 'ปลาป่วย',
+    intro: const [
+      ScriptLine(
+        _w,
+        'หลาน มาดูนี่เร็ว ปลาตัวหนึ่งถูตัวกับขอบบ่อ มีจุดขาวเล็ก ๆ เต็มตัวเลย',
+      ),
+      ScriptLine(
+        _t,
+        'ปลาก็ป่วยได้เหมือนคน น้ำแย่ อากาศร้อน หรือหลังน้ำท่วม โรคยิ่งมาง่าย',
+      ),
+      ScriptLine(
+        _s,
+        'ไม่ต้องตกใจ ดูอาการให้ดี แล้วเลือกยาให้ตรงโรค ปลาก็หายได้',
+      ),
+    ],
+    lessons: const [
+      Lesson(
+        id: 'symptom',
+        teach: [
+          ScriptLine(
+            _s,
+            'โรคปลาที่เจอบ่อยมีสามแบบ: จุดขาว ตัวด่าง และตกเลือด ดูจากอาการได้',
+          ),
+          ScriptLine(
+            _t,
+            'แต่ละโรคใช้ยาไม่เหมือนกัน ใช้ผิดก็เปลืองยา ปลาไม่หาย',
+          ),
+        ],
+        quiz: Quiz('ปลามีจุดขาวเล็ก ๆ ตามตัว ถูตัวกับขอบบ่อ ควรใช้อะไร?', [
+          QuizOption(
+            'เกลือแช่ปลา',
+            correct: true,
+            explain: 'ถูกต้อง! จุดขาวเกิดจากปรสิต แช่น้ำเกลือช่วยกำจัดได้',
+          ),
+          QuizOption(
+            'ด่างทับทิม',
+            explain: 'ด่างทับทิมใช้กับแผลด่างของโรคตัวด่างนะ ดูอาการอีกที',
+          ),
+          QuizOption(
+            'ยาปฏิชีวนะ',
+            explain: 'ยาปฏิชีวนะใช้กับโรคตกเลือดที่มีจุดเลือดออก ไม่ใช่จุดขาว ลองใหม่นะ',
+          ),
+        ]),
+        tryIt: [
+          ScriptLine(
+            _s,
+            'ไปตลาด ซื้อเกลือมาแช่ปลา แล้วกด "รักษาปลา" ที่หน้าปลา',
+            point: StoryTarget.buyMedicine,
+          ),
+        ],
+      ),
+      Lesson(
+        id: 'prevent',
+        teach: [
+          ScriptLine(
+            _t,
+            'ยาช่วยได้ แต่ต้นเหตุคือน้ำ ถ้าน้ำแย่มาก ยาก็ไม่ได้ผล',
+          ),
+          ScriptLine(
+            _s,
+            'ปลาป่วยแพร่เชื้อให้ตัวอื่นได้ ถ้ามีบ่อพักแยกปลา ย้ายตัวที่ป่วยออกไปก่อน',
+          ),
+        ],
+        quiz: Quiz('ให้ยาถูกแล้ว แต่น้ำในบ่อแย่มาก จะเกิดอะไรขึ้น?', [
+          QuizOption(
+            'ยาไม่ได้ผล ต้องแก้น้ำด้วย',
+            correct: true,
+            explain: 'ใช่! รักษาปลาต้องดูแลน้ำไปพร้อมกันเสมอ',
+          ),
+          QuizOption(
+            'ปลาหายเร็วขึ้น',
+            explain: 'น้ำแย่ทำให้ปลาอ่อนแอลงนะ ยาจะสู้ไม่ไหว ลองใหม่ดู',
+          ),
+          QuizOption(
+            'ไม่ต่างกันเลย',
+            explain: 'ต่างกันมากเลยหลาน น้ำคือบ้านของปลา ลองเลือกใหม่นะ',
+          ),
+        ]),
+        tryIt: [
+          ScriptLine(
+            _t,
+            'ระหว่างรักษา หมั่นกด "ดูแลน้ำ" ให้น้ำดีไว้ด้วยนะ',
+            point: StoryTarget.treat,
+          ),
+        ],
+      ),
+    ],
+    onTarget: const {
+      StoryTarget.buyMedicine: [
+        ScriptLine(
+          _s,
+          'ยาปลาอยู่ที่ตลาด ปุ่ม "อุปกรณ์และยาปลา" ซื้อให้ตรงกับโรคนะ',
+          point: StoryTarget.buyMedicine,
+        ),
+      ],
+      StoryTarget.treat: [
+        ScriptLine(
+          _s,
+          'กด "รักษาปลา" เลือกตัวที่ป่วย ดูอาการ แล้วเลือกยา',
+          point: StoryTarget.treat,
+        ),
+      ],
+      StoryTarget.endDay: [
+        ScriptLine(
+          _t,
+          'ให้ยาแล้ว ต้องรอสักสองสามวันปลาถึงจะหาย กด "จบวัน" ได้เลย',
+          point: StoryTarget.endDay,
+        ),
+      ],
+    },
+    onFail: const [
+      ScriptLine(_w, 'ปลาตัวนั้นไปเสียแล้ว ไม่เป็นไรนะ โรคบางทีก็มาเร็ว'),
+      ScriptLine(
+        _t,
+        'ลองใหม่อีกครั้ง รีบซื้อยาที่ตรงโรคมารักษาตั้งแต่วันแรกนะ',
+      ),
+    ],
+    onDone: const [
+      ScriptLine(_s, 'ปลาหายแล้ว! หลานดูอาการเป็นแล้วนะ'),
+      ScriptLine(
+        _t,
+        'ต่อจากนี้ปลาอาจป่วยได้ทุกเมื่อ ดูแลน้ำไว้ก่อนเสมอ ป้องกันดีกว่ารักษา',
+      ),
+    ],
+    card: KnowledgeCard(
+      id: 'sick',
+      title: 'ดูอาการ เลือกยาให้ตรงโรค',
+      body: 'ป้องกันดีกว่ารักษา: น้ำดี ปลาไม่แน่นบ่อ แยกตัวที่ป่วย ถ้าป่วยแล้วให้ดูอาการก่อนเลือกยา',
+      facts: () => [
+        for (final d in kDiseases.values)
+          CardFact(d.name, 'ใช้${_medicineText(d.medicine)}'),
+        CardFact('ยาถูกโรค หายใน', '$kTreatDays วัน (ถ้าน้ำไม่แย่มาก)'),
+        CardFact('ไม่รักษา ปลาอยู่ได้', 'ราว $kSickDaysToDie วัน'),
+      ],
+    ),
+  ),
+
+  // ------------------------------------------------------------------ บท 7
+  ChapterScript(
+    chapter: StoryCh.warning,
     title: 'คำเตือน',
     intro: const [
       ScriptLine(_w, 'หลาน! วิทยุประกาศว่าน้ำจะท่วมในอีกไม่กี่วัน'),
@@ -698,9 +987,9 @@ final List<ChapterScript> kStoryScript = [
     ),
   ),
 
-  // ------------------------------------------------------------------ บท 6
+  // ------------------------------------------------------------------ บท 8
   ChapterScript(
-    chapter: 6,
+    chapter: StoryCh.disaster,
     title: 'ภัยพิบัติจริง',
     intro: const [
       ScriptLine(_w, 'ฝนเริ่มตกหนักแล้ว ระดับน้ำขึ้นเร็วมาก'),
@@ -809,9 +1098,9 @@ final List<ChapterScript> kStoryScript = [
     ),
   ),
 
-  // ------------------------------------------------------------------ บท 7
+  // ------------------------------------------------------------------ บท 9
   ChapterScript(
-    chapter: 7,
+    chapter: StoryCh.summary,
     title: 'สรุป',
     intro: const [
       ScriptLine(_s, 'มานั่งคุยกันหน่อย ลุงอยากเล่าว่าหลานทำได้แค่ไหน'),
@@ -840,7 +1129,7 @@ final List<ChapterScript> kStoryScript = [
   ),
 ];
 
-/// บท 7: ตอนจบต่างกันตามเกรดรวม
+/// บทสรุป: ตอนจบต่างกันตามเกรดรวม
 const Map<String, List<ScriptLine>> kStoryEndingScript = {
   'S': [
     ScriptLine(
@@ -867,8 +1156,36 @@ const List<ScriptLine> kStoryUnlockScript = [
   ),
 ];
 
-/// บทของบทที่ [chapter] (1-7)
+/// บทของบทที่ [chapter] (1-9)
 ChapterScript scriptOf(int chapter) => kStoryScript[chapter - 1];
+
+/// ชื่อยาพร้อมราคา (เกลือใช้ราคาตลาดวันนั้น จึงบอกจำนวนถุงแทน)
+String _medicineText(String id) {
+  final m = kMedicines[id]!;
+  return m.ingredient
+      ? '${m.name} (เกลือ ${m.dose} ถุง)'
+      : '${m.name} · ${_baht(m.price)}';
+}
+
+/// ให้ยาผิดโรค: ลุงอธิบายว่ายานั้นใช้กับโรคไหน อาการของโรคนี้ และยาที่ถูก
+List<ScriptLine> wrongMedicineLines(String med, String disease) {
+  final d = kDiseases[disease]!;
+  final m = kMedicines[med]!;
+  final forD = kDiseases.values.where((x) => x.medicine == med);
+  return [
+    ScriptLine(
+      _t,
+      forD.isEmpty
+          ? '${m.name}ไม่ได้ใช้กับ${d.name}นะหลาน ปลาเลยยังไม่ดีขึ้น'
+          : '${m.name}ใช้กับ${forD.first.name}นะหลาน แต่ตัวนี้เป็น${d.name}',
+    ),
+    ScriptLine(
+      _s,
+      'ดูอาการอีกที: ${d.symptom} ต้องใช้${kMedicines[d.medicine]!.name} ลองเลือกใหม่นะ',
+      point: StoryTarget.treat,
+    ),
+  ];
+}
 
 /// การ์ดความรู้ทั้งหมดตามลำดับบท
 List<KnowledgeCard> get kKnowledgeCards => [

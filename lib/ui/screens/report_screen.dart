@@ -119,6 +119,15 @@ class ReportScreen extends ConsumerWidget {
         bad: true,
       );
     }
+    final health = diseaseLine(r);
+    if (health != null && (r.sickNew.isNotEmpty || r.diseaseDied > 0)) {
+      return _AlertLine(
+        key: const ValueKey('report-alert'),
+        icon: const PixelIcon('herb', size: 32),
+        text: health,
+        bad: true,
+      );
+    }
     if (r.spoiled > 0) {
       return _AlertLine(
         key: const ValueKey('report-alert'),
@@ -425,6 +434,23 @@ class _ReportDetails extends ConsumerWidget {
             text: 'อาหารหมดอายุ ${r.spoiled} จาน (ไปทิ้งที่คลังสินค้า)',
             color: AquaColors.bad,
           ),
+        if (diseaseLine(r) case final line?)
+          _Note(
+            key: const ValueKey('report-health'),
+            icon: const PixelIcon('herb', size: 18),
+            text: line,
+            color: r.sickNew.isEmpty && r.diseaseDied == 0 && r.treatFailed == 0
+                ? AquaColors.ok
+                : AquaColors.bad,
+          ),
+        if (r.aeratorCost > 0 || r.aeratorOff)
+          _Note(
+            icon: const PixelIcon('bub', size: 18),
+            text: r.aeratorOff
+                ? 'เงินไม่พอค่าไฟ เครื่องเติมอากาศปิดเอง'
+                : 'ค่าไฟเครื่องเติมอากาศ ${r.aeratorCost} บาท',
+            color: r.aeratorOff ? AquaColors.bad : AquaColors.textSoft,
+          ),
         if (z != null) ...[
           const SizedBox(height: Gap.m),
           PixelBox(
@@ -600,7 +626,12 @@ class _Tile extends StatelessWidget {
 }
 
 class _Note extends StatelessWidget {
-  const _Note({required this.icon, required this.text, required this.color});
+  const _Note({
+    super.key,
+    required this.icon,
+    required this.text,
+    required this.color,
+  });
   final Widget icon;
   final String text;
   final Color color;
@@ -628,4 +659,16 @@ class _Note extends StatelessWidget {
       ),
     );
   }
+}
+
+/// ผลเรื่องโรคปลาของคืนนี้ (ป่วยใหม่ หาย ตาย ยาไม่ได้ผล) — null = ไม่มีอะไร
+String? diseaseLine(DayReport r) {
+  final parts = <String>[
+    if (r.sickNew.isNotEmpty)
+      'ปลาป่วยใหม่ ${r.sickNew.length} ตัว ไปดูอาการที่ "รักษาปลา"',
+    if (r.cured > 0) 'รักษาหาย ${r.cured} ตัว',
+    if (r.treatFailed > 0) 'ยาไม่ได้ผล ${r.treatFailed} ตัว เพราะน้ำแย่มาก',
+    if (r.diseaseDied > 0) 'ตายจากโรค ${r.diseaseDied} ตัว',
+  ];
+  return parts.isEmpty ? null : parts.join(' · ');
 }

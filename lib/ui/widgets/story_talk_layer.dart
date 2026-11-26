@@ -37,6 +37,11 @@ class _StoryTalkLayerState extends ConsumerState<StoryTalkLayer> {
   /// กำลังรอหน้ายืนยันของผลตัวเลือก → ลุงยังไม่พูดเรื่องถัดไป
   bool _confirming = false;
 
+  /// คำตอบที่กำลังแสดงมาจากปุ่ม "ขอคำใบ้" (ผู้เล่นขอเอง → ลุงพาไปหน้านั้นได้)
+  bool _hint = false;
+
+  /// ลุงพาไปหน้าที่พูดถึง — เฉพาะตอนผู้เล่นขอคำใบ้เอง
+  /// บทพูดอื่นแค่ทำให้แท็บนั้นกะพริบ ไม่ดึงผู้เล่นไปหน้าอื่น
   void _point(ScriptLine l) {
     final t = l.point;
     final tab = t == null ? null : storyTabOf(t);
@@ -48,6 +53,7 @@ class _StoryTalkLayerState extends ConsumerState<StoryTalkLayer> {
     setState(() {
       _reply = null;
       _effect = null;
+      _hint = false;
       _confirming = effect != null;
     });
     if (effect == null) return;
@@ -62,6 +68,17 @@ class _StoryTalkLayerState extends ConsumerState<StoryTalkLayer> {
 
   @override
   Widget build(BuildContext context) {
+    // ปุ่มขอคำใบ้ → ลุงบอกสิ่งที่ต้องทำต่อ แล้วพาไปหน้านั้น
+    ref.listen<int>(storyHintProvider, (_, _) {
+      final p = ref.read(storyProvider);
+      final g = ref.read(gameProvider);
+      if (p == null || g == null) return;
+      setState(() {
+        _reply = StoryTalk.hint(p, g.engine);
+        _effect = null;
+        _hint = true;
+      });
+    });
     final story = watchStory(ref);
     if (story == null || _confirming) return const SizedBox.shrink();
     // มีแผ่นรายละเอียด/หน้าอื่นเปิดทับอยู่ → รอปิดก่อนแล้วลุงค่อยพูด (ไม่ให้กล่องถูกบัง)
@@ -77,7 +94,7 @@ class _StoryTalkLayerState extends ConsumerState<StoryTalkLayer> {
         talk: UncleTalk(
           key: const ValueKey('talk-reply'),
           lines: reply,
-          onLine: _point,
+          onLine: _hint ? _point : null,
           onDone: _afterReply,
         ),
       );
@@ -98,7 +115,6 @@ class _StoryTalkLayerState extends ConsumerState<StoryTalkLayer> {
           talk: UncleTalk(
             key: ValueKey('talk-${p.chapter}-${cue.key}'),
             lines: cue.lines,
-            onLine: _point,
             options: [
               for (final o in c.options) UncleOption(o.label, detail: o.detail),
             ],
@@ -119,7 +135,6 @@ class _StoryTalkLayerState extends ConsumerState<StoryTalkLayer> {
           talk: UncleTalk(
             key: ValueKey('talk-${p.chapter}-${cue.key}'),
             lines: cue.lines,
-            onLine: _point,
             options: [for (final o in cue.quiz!.options) UncleOption(o.text)],
             onOption: (i) {
               final a = ctl.answer(cue, i);
@@ -127,6 +142,21 @@ class _StoryTalkLayerState extends ConsumerState<StoryTalkLayer> {
                 _reply = a.explain;
                 _effect = null;
               });
+            },
+          ),
+        );
+      case TalkKind.gift:
+        return UncleTalkLayer(
+          talk: UncleTalk(
+            key: ValueKey('talk-${p.chapter}-${cue.key}'),
+            lines: cue.lines,
+            onDone: () {
+              // จำว่าให้แล้ว (ของขวัญเปลี่ยนน้ำให้วันละครั้ง)
+              ctl.hear(cue);
+              final r = ref
+                  .read(gameProvider.notifier)
+                  .run((e) => Story.giveGift(e, cue.gift!));
+              showResult(context, r);
             },
           ),
         );
@@ -138,7 +168,6 @@ class _StoryTalkLayerState extends ConsumerState<StoryTalkLayer> {
           talk: UncleTalk(
             key: ValueKey('talk-${p.chapter}-${cue.key}'),
             lines: cue.lines,
-            onLine: _point,
             onDone: () => ctl.hear(cue),
           ),
         );

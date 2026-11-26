@@ -3,6 +3,7 @@ import 'package:aqua_farm/data/constants.dart';
 import 'package:aqua_farm/data/difficulty.dart';
 import 'package:aqua_farm/data/disaster_data.dart';
 import 'package:aqua_farm/data/equipment_data.dart';
+import 'package:aqua_farm/data/story_script.dart';
 import 'package:aqua_farm/game/game_engine.dart';
 import 'package:aqua_farm/game/game_state.dart';
 import 'package:aqua_farm/save/save_repository.dart';
@@ -188,11 +189,11 @@ void main() {
         tester.widget<Spotlight>(find.byKey(ValueKey('story-gate-$target'))).on;
 
     testWidgets(
-      'แถบเป้าหมายติดบนจอ: บท 1/7 เป้าหมาย คำอธิบายไม่เกิน 2 บรรทัด',
+      'แถบเป้าหมายติดบนจอ: บท 1/9 เป้าหมาย คำอธิบายไม่เกิน 2 บรรทัด',
       (tester) async {
         await startStory(tester);
         expect(find.byKey(const ValueKey('story-goal')), findsOneWidget);
-        expect(find.text('บทที่ 1/7 · ลงบ่อ'), findsOneWidget);
+        expect(find.text('บทที่ 1/9 · ลงบ่อ'), findsOneWidget);
         expect(
           find.text('เป้าหมาย: ซื้อปลา 1 ชนิด 3 ตัวลงบ่อ แล้วดูแล 2 วัน'),
           findsOneWidget,
@@ -217,15 +218,85 @@ void main() {
       },
     );
 
-    testWidgets('ไม่มีเมนูล่าง: ลุงพาไปหน้าที่ต้องใช้ เหลือปุ่มพักมุมจอ', (
+    testWidgets('มีเมนูล่าง: แท็บที่ยังไม่เปิดจาง+กุญแจ ไม่ดึงไปหน้าอื่นเอง', (
       tester,
     ) async {
       await startStory(tester);
-      expect(find.byType(GameNavBar), findsNothing);
+      expect(find.byType(GameNavBar), findsOneWidget);
       expect(find.byTooltip('เมนู / พัก'), findsOneWidget);
-      // บท 1 เริ่มที่หน้าปลา
+      // บท 1 เริ่มที่หน้าปลา เปิดแค่แท็บปลา
       expect(find.byType(FishTab), findsOneWidget);
+      for (final i in [0, 2, 3, 4]) {
+        expect(find.byKey(ValueKey('nav-locked-$i')), findsOneWidget);
+      }
+      expect(find.byKey(const ValueKey('nav-locked-1')), findsNothing);
+      expect(find.byIcon(Icons.lock_rounded), findsNWidgets(4));
     });
+
+    testWidgets(
+      'บทถนอมอาหาร หมักเกลือ ไม่มีเกลือ: แท็บตลาดกะพริบ ไปซื้อเกลือแล้วกลับมาถนอมได้ ไม่ถูกดึงกลับ',
+      (tester) async {
+        await startStory(tester, choose: true);
+        final p = container.read(storyProvider)!
+          ..chapter = StoryCh.preserve
+          ..talked = StoryCh.preserve
+          ..heard.clear();
+        p.choices['method'] = 'salted';
+        for (final l in scriptOf(StoryCh.preserve).lessons) {
+          p.heard.addAll(['l:${l.id}', 'q:${l.id}', 'try:${l.id}']);
+        }
+        container.read(gameProvider.notifier).update((e) {
+          e.state.fishStock['nila'] = 1;
+          e.state.equipment['jar'] = 1;
+        });
+        await tester.pumpAndSettle();
+        expect(find.byKey(const ValueKey('uncle-talk')), findsNothing);
+        Spotlight navSpot(String name) => tester.widget<Spotlight>(
+          find
+              .ancestor(
+                of: find.descendant(
+                  of: find.byType(GameNavBar),
+                  matching: find.text(name),
+                ),
+                matching: find.byType(Spotlight),
+              )
+              .first,
+        );
+        expect(find.byType(MarketTab), findsNothing);
+        expect(navSpot('ตลาด').on, isTrue);
+        await tester.tap(
+          find.descendant(
+            of: find.byType(GameNavBar),
+            matching: find.text('ตลาด'),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.byType(MarketTab), findsOneWidget);
+        // ซื้อเกลือครบ → ยังอยู่ตลาด (ไม่ถูกดึง) แท็บครัวกะพริบแทน
+        container.read(gameProvider.notifier).update((e) {
+          e.buyIngredient('salt');
+          e.buyIngredient('salt');
+        });
+        await tester.pumpAndSettle();
+        expect(find.byType(MarketTab), findsOneWidget);
+        expect(navSpot('ครัว').on, isTrue);
+        // ลุงพูดชี้ไปถนอม (ฟังจบแล้วก็ยังอยู่ตลาด) → ผู้เล่นกดแท็บครัวเอง
+        await hearUncle(tester);
+        expect(find.byType(MarketTab), findsOneWidget);
+        await tester.tap(
+          find.descendant(
+            of: find.byType(GameNavBar),
+            matching: find.text('ครัว'),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.byType(KitchenTab), findsOneWidget);
+        expect(
+          container.read(gameProvider)!.engine.canPreserve('salted'),
+          isTrue,
+        );
+      },
+    );
 
     testWidgets('บท 1: เลือกปลาแล้วยืนยัน = ซื้อปลาชนิดนั้นครบ 3 ตัวจริง', (
       tester,
@@ -257,12 +328,12 @@ void main() {
     });
 
     testWidgets(
-      'บท 4: ลุงสอนทีละวิธี ถามสั้น ตอบผิดลุงอธิบายแล้วให้เลือกใหม่',
+      'บทถนอมอาหาร: ลุงสอนทีละวิธี ถามสั้น ตอบผิดลุงอธิบายแล้วให้เลือกใหม่',
       (tester) async {
         await startStory(tester, choose: true);
         container.read(storyProvider)!
-          ..chapter = 4
-          ..talked = 4
+          ..chapter = StoryCh.preserve
+          ..talked = StoryCh.preserve
           ..heard.clear();
         container.read(gameProvider.notifier).update((_) {});
         await tester.pumpAndSettle();
@@ -274,15 +345,15 @@ void main() {
         }
 
         // สอนตากแห้ง 2 ประโยค (แตะข้าม typewriter แล้วแตะไปต่อ)
-        expect(k('talk-4-l:dried'), findsOneWidget);
+        expect(k('talk-5-l:dried'), findsOneWidget);
         for (
           var i = 0;
-          i < 4 && k('talk-4-l:dried').evaluate().isNotEmpty;
+          i < 4 && k('talk-5-l:dried').evaluate().isNotEmpty;
           i++
         ) {
           await next();
         }
-        expect(k('talk-4-q:dried'), findsOneWidget);
+        expect(k('talk-5-q:dried'), findsOneWidget);
         expect(find.text('ทำไมปลาตากแห้งถึงเก็บได้นาน?'), findsWidgets);
         expect(k('uncle-option-2'), findsOneWidget);
         final money = container.read(gameProvider)!.state.money;
@@ -295,7 +366,7 @@ void main() {
         expect(k('uncle-think'), findsOneWidget);
         expect(find.textContaining('ลองดูอีกทีนะ'), findsWidgets);
         await next();
-        expect(k('talk-4-q:dried'), findsOneWidget);
+        expect(k('talk-5-q:dried'), findsOneWidget);
         expect(container.read(gameProvider)!.state.money, money);
 
         // ตอบถูก → ลุงชม แล้วชวนลองทำ (พาไปหน้าครัว)
@@ -306,8 +377,8 @@ void main() {
         expect(k('uncle-smile'), findsOneWidget);
         expect(find.textContaining('ถูกต้อง!'), findsWidgets);
         await next();
-        expect(k('talk-4-try:dried'), findsOneWidget);
-        expect(k('talk-4-l:salted'), findsNothing);
+        expect(k('talk-5-try:dried'), findsOneWidget);
+        expect(k('talk-5-l:salted'), findsNothing);
         expect(container.read(storyProvider)!.heard, contains('q:dried'));
       },
     );
@@ -323,7 +394,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('uncle-notebook')), findsOneWidget);
       expect(find.text('สมุดบันทึกลุงทอง'), findsWidgets);
-      expect(find.text('เก็บแล้ว 1/7 ใบ'), findsOneWidget);
+      expect(find.text('เก็บแล้ว 1/9 ใบ'), findsOneWidget);
       expect(find.byKey(const ValueKey('card-fish')), findsOneWidget);
       expect(find.text('ค่าในเกม'), findsWidgets);
       expect(find.byKey(const ValueKey('card-locked-2')), findsOneWidget);
@@ -376,7 +447,7 @@ void main() {
       // บทใหม่: ลุงทองเล่าเปิดบทก่อนให้ทำ
       expect(find.byKey(const ValueKey('talk-2-intro')), findsOneWidget);
       await hearUncle(tester);
-      expect(find.text('บทที่ 2/7 · ตลาด'), findsOneWidget);
+      expect(find.text('บทที่ 2/9 · คุณภาพน้ำ'), findsOneWidget);
       final saved = container.read(saveRepositoryProvider).loadStory()!.$1;
       expect(saved.chapter, 2);
       expect(saved.cards, ['fish']);
@@ -405,7 +476,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(container.read(gameProvider)!.state.pond, isEmpty);
       await hearUncle(tester, pick: null);
-      expect(find.text('บทที่ 1/7 · ลงบ่อ'), findsOneWidget);
+      expect(find.text('บทที่ 1/9 · ลงบ่อ'), findsOneWidget);
     });
   });
 
@@ -569,12 +640,12 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('บ่อปลา'));
     await tester.pumpAndSettle();
+    // แถบล่าง 3 ปุ่มใหญ่: ให้อาหาร / ดูแลน้ำ / รักษาปลา
     // ปุ่มให้อาหาร → แผ่นเลือก น้อย/พอดี/มาก พร้อมผลต่อการโตและน้ำเสีย
     final feed = find.byKey(const ValueKey('feed-main'));
-    expect(
-      find.descendant(of: feed, matching: find.text('เลือก น้อย/พอดี/มาก')),
-      findsOneWidget,
-    );
+    expect(feed, findsOneWidget);
+    expect(find.byKey(const ValueKey('pond-care-water')), findsOneWidget);
+    expect(find.byKey(const ValueKey('pond-care-treat')), findsOneWidget);
     await tester.tap(feed);
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('feed-choices')), findsOneWidget);
@@ -1035,16 +1106,33 @@ void main() {
     });
     await tester.tap(find.text('ปลา').last);
     await tester.pumpAndSettle();
-    // หน้าหลักไม่มีตัวเลขเทคนิค: แตะป้ายน้ำจึงเห็นค่าน้ำ
+    // หน้าหลักไม่มีตัวเลขเทคนิค: แตะป้ายน้ำ ("น้ำแย่") เปิดแผ่นดูแลน้ำ
     expect(find.text('แอมโมเนีย'), findsNothing);
     await openPondSheet(tester, 'pond-water');
+    // แถบสถานะเดียว ดี/เริ่มแย่/อันตราย · รายละเอียดซ่อนไว้ แตะแถบจึงเห็น
+    expect(find.byKey(const ValueKey('water-status')), findsOneWidget);
+    expect(find.text('ดี'), findsWidgets);
+    expect(find.text('แอมโมเนีย'), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('water-status')));
+    await tester.pumpAndSettle();
     expect(find.text('แอมโมเนีย'), findsOneWidget);
-    expect(find.text('NH3'), findsNothing);
+    expect(find.text('ไนไตรต์'), findsOneWidget);
+    expect(find.text('ออกซิเจน'), findsOneWidget);
+    expect(find.text('อุณหภูมิ'), findsOneWidget);
+    // ยังไม่มีชุดตรวจน้ำ: ไม่เห็นตัวเลขจริง
+    final unknown = find.textContaining(RegExp(r'^\? '), findRichText: true);
+    expect(unknown, findsNWidgets(4));
+    expect(find.text('เริ่มสูง'), findsNothing);
+    // มีชุดตรวจ กด "ตรวจน้ำ" → เห็นค่าจริงและระดับ
+    ctl.update((e) => e.state.equipment['kit'] = 1);
+    await tester.pumpAndSettle();
+    final test = find.byKey(const ValueKey('test-water'));
+    await tester.scrollUntilVisible(test, 200, scrollable: sheetScroll());
+    await tester.tap(test);
+    await tester.pumpAndSettle();
+    expect(unknown, findsNothing);
     expect(find.text('เริ่มสูง'), findsOneWidget);
-    expect(
-      find.text('ดี'),
-      findsWidgets,
-    ); // ป้ายน้ำในบ่อลดจาก "ดีมาก" เป็น "ดี"
+    expect(find.text('NH3'), findsNothing);
 
     final advice = find.byKey(const ValueKey('water-advice'));
     await tester.scrollUntilVisible(advice, 200, scrollable: sheetScroll());
@@ -1059,6 +1147,76 @@ void main() {
       find.text('ยังจับไม่ได้: ปลาโตสุด 0% (จับได้เมื่อโตครบ 100%)'),
       findsOneWidget,
     );
+  });
+
+  testWidgets('รักษาปลา: เห็นอาการ → เลือกปลา → เลือกยา · แยกบ่อพัก', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+    await startNewGame(tester);
+    final ctl = container.read(gameProvider.notifier);
+    ctl.update((e) {
+      e.buyFish('nila', 2);
+      e.state.pond.last.disease = 'spot';
+      e.state.meds['kmno4'] = 1;
+      e.state.equipment['qtank'] = 1;
+    });
+    await tester.tap(find.text('ปลา').last);
+    await tester.pumpAndSettle();
+    await openPondSheet(tester, 'pond-care-treat');
+    // ปลาป่วยขึ้นก่อน เห็นอาการ (ไม่บอกชื่อโรค ต้องดูอาการเอง)
+    expect(find.byKey(const ValueKey('symptom-1')), findsOneWidget);
+    expect(find.textContaining('แผลด่างขาว'), findsOneWidget);
+    expect(find.byKey(const ValueKey('treat-pick-0')), findsNothing);
+    // แยกปลาป่วยไปบ่อพัก
+    await tester.tap(find.byKey(const ValueKey('quarantine-1')));
+    await tester.pumpAndSettle();
+    expect(container.read(gameProvider)!.state.pond.last.quarantine, isTrue);
+    // เลือกปลา → เลือกยา (ยาผิด: ไม่มียา บอกเหตุผล ไม่เปลี่ยนสถานะ)
+    await tester.tap(find.byKey(const ValueKey('treat-pick-1')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('med-picker')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('use-antibio')));
+    await tester.pumpAndSettle();
+    expect(container.read(gameProvider)!.state.pond.last.treatDays, 0);
+    await tester.tap(find.byKey(const ValueKey('use-kmno4')));
+    await tester.pumpAndSettle();
+    final f = container.read(gameProvider)!.state.pond.last;
+    expect(f.treatDays, 2);
+    expect(find.byKey(const ValueKey('med-picker')), findsNothing);
+    expect(find.textContaining('กำลังรักษา'), findsOneWidget);
+  });
+
+  testWidgets('ตลาด: ซื้อยาปลาและชุดตรวจน้ำต้องยืนยันก่อน', (tester) async {
+    await pumpApp(tester);
+    await startNewGame(tester);
+    await tester.tap(
+      find.descendant(of: find.byType(GameNavBar), matching: find.text('ตลาด')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('market-tools')));
+    await tester.pumpAndSettle();
+    final med = find.byKey(const ValueKey('med-antibio'));
+    await tester.scrollUntilVisible(med, 200, scrollable: sheetScroll());
+    final money = container.read(gameProvider)!.state.money;
+    await tester.tap(
+      find.descendant(of: med, matching: find.byType(PixelButton)).last,
+    );
+    await tester.pumpAndSettle();
+    expect(find.textContaining('ยืนยันซื้อยาปฏิชีวนะ'), findsOneWidget);
+    await tester.tap(find.widgetWithText(PixelButton, 'ยกเลิก').last);
+    await tester.pumpAndSettle();
+    expect(container.read(gameProvider)!.state.money, money);
+    await tester.tap(
+      find.descendant(of: med, matching: find.byType(PixelButton)).last,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(PixelButton, 'ตกลง').last);
+    await tester.pumpAndSettle();
+    final s = container.read(gameProvider)!.state;
+    expect(s.meds['antibio'], 1);
+    expect(s.money, money - 60);
+    expect(find.byKey(const ValueKey('eq-kit')), findsOneWidget);
   });
 
   testWidgets('ช่องเซฟ: ลบต้องยืนยัน และเปลี่ยนชื่อได้', (tester) async {

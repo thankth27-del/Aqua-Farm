@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:material_ui/material_ui.dart';
 
 import 'app_theme.dart';
@@ -52,7 +54,12 @@ class _BarPainter extends CustomPainter {
     if (w <= 0) return;
     canvas.drawRRect(
       RRect.fromRectAndRadius(
-        Rect.fromLTWH(0, 0, w.clamp(size.height, size.width), size.height),
+        Rect.fromLTWH(
+          0,
+          0,
+          w.clamp(math.min(size.height, size.width), size.width),
+          size.height,
+        ),
         r,
       ),
       Paint()..color = color,

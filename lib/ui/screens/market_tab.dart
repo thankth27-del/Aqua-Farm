@@ -3,6 +3,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../data/disaster_data.dart';
 import '../../data/equipment_data.dart';
+import '../../data/health_data.dart';
 import '../../data/fish_data.dart';
 import '../../data/food_data.dart';
 import '../../data/ingredients.dart';
@@ -44,7 +45,7 @@ Future<void> showMarketSheet(BuildContext context, MarketSheet kind) {
   final (title, icon) = switch (kind) {
     MarketSheet.buy => ('ซื้อวัตถุดิบ', 'veg'),
     MarketSheet.sell => ('ขายของ', 'coin'),
-    MarketSheet.tools => ('อุปกรณ์ครัว', 'fridge'),
+    MarketSheet.tools => ('อุปกรณ์และยาปลา', 'fridge'),
   };
   return showDetailSheet<void>(
     context,
@@ -168,15 +169,16 @@ class MarketTab extends ConsumerWidget {
         ),
       ),
       trailing: Spotlight(
-        on: next == StoryTarget.buyTool,
+        on: next == StoryTarget.buyTool || next == StoryTarget.buyMedicine,
         child: RoundAction(
           key: const ValueKey('market-tools'),
           icon: const PixelIcon('fridge', size: 32),
           label: 'อุปกรณ์',
           labelOnScene: true,
           diameter: round,
-          tooltip: 'อุปกรณ์ครัว (ราวตาก โหล ตู้เย็น หม้อบรรจุ)',
-          onPressed: allows(StoryTarget.buyTool)
+          tooltip: 'อุปกรณ์ครัว ยาปลา และอุปกรณ์ดูแลบ่อ',
+          onPressed:
+              allows(StoryTarget.buyTool) || allows(StoryTarget.buyMedicine)
               ? () => showMarketSheet(context, MarketSheet.tools)
               : null,
         ),
@@ -220,12 +222,16 @@ class _MarketSheetBody extends ConsumerWidget {
 
     final story = watchStory(ref);
     final next = story == null ? null : Story.nextTarget(story.$1, story.$2);
+    // ของที่บทนี้ต้องซื้อ (ไม่ขาดอะไร = เครื่องปรุง สำหรับทำอาหารเมนูแรก)
+    final need = story == null
+        ? const <String, int>{}
+        : Story.missing(story.$1, story.$2);
+    bool wanted(String id) =>
+        need.isEmpty ? id == 'spice' : need.containsKey(id);
     if (story != null) {
       // เนื้อเรื่อง: ของที่ชี้ให้ซื้อ/ขายอยู่แถวแรก ไม่ต้องเลื่อนหา
       int first(bool hit) => hit ? 0 : 1;
-      ingredients.sort(
-        (a, b) => first(a.id == 'spice') - first(b.id == 'spice'),
-      );
+      ingredients.sort((a, b) => first(wanted(a.id)) - first(wanted(b.id)));
       fish.sort(
         (a, b) =>
             first((s.fishStock[a.id] ?? 0) > 0) -
@@ -251,7 +257,7 @@ class _MarketSheetBody extends ConsumerWidget {
             children: [
               for (final g in ingredients)
                 pick(
-                  g.id == 'spice',
+                  wanted(g.id),
                   StoryTarget.buyIngredient,
                   _IngredientCard(
                     key: ValueKey('ing-${g.id}'),
@@ -369,7 +375,7 @@ class _MarketSheetBody extends ConsumerWidget {
             Padding(
               padding: const EdgeInsets.only(bottom: Gap.s),
               child: pick(
-                eq.id == 'rack',
+                need.isEmpty ? eq.id == 'rack' : need.containsKey(eq.id),
                 StoryTarget.buyTool,
                 EquipmentRow(
                   key: ValueKey('eq-${eq.id}'),
@@ -391,13 +397,86 @@ class _MarketSheetBody extends ConsumerWidget {
       ),
     );
 
+    // ---------- ยาปลาและอุปกรณ์บ่อ ----------
+    Widget medPanel() => WoodPanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const SectionTitle(
+            'ยาและอุปกรณ์บ่อปลา',
+            icon: PixelIcon('herb', size: 28),
+          ),
+          for (final id in kMedicineOrder)
+            Padding(
+              padding: const EdgeInsets.only(bottom: Gap.s),
+              child: pick(
+                need.containsKey(id),
+                StoryTarget.buyMedicine,
+                EquipmentRow(
+                  key: ValueKey('med-$id'),
+                  spec: medicineSpec(id),
+                  price: e.medicinePrice(id),
+                  owned: e.medCount(id),
+                  closed: closed,
+                  onBuy: () {
+                    final m = kMedicines[id]!;
+                    final p = e.medicinePrice(id);
+                    act(
+                      closed || s.money < p,
+                      'ยืนยันซื้อ${m.name} 1 หน่วย ราคา $p บาท?'
+                      '${_warnLine(e.lowMoneyWarning(p))}',
+                      PixelIcon(m.icon, size: 56),
+                      (e) => e.buyMedicine(id),
+                    );
+                  },
+                ),
+              ),
+            ),
+          for (final id in kPondEquipmentOrder)
+            Padding(
+              padding: const EdgeInsets.only(bottom: Gap.s),
+              child: pick(
+                need.containsKey(id),
+                StoryTarget.buyMedicine,
+                EquipmentRow(
+                  key: ValueKey('eq-$id'),
+                  spec: kEquipment[id]!,
+                  price: e.equipmentPrice(id),
+                  owned: s.equipmentCount(id),
+                  closed: closed,
+                  onBuy: () {
+                    final eq = kEquipment[id]!;
+                    final p = e.equipmentPrice(id);
+                    act(
+                      closed || s.money < p,
+                      'ยืนยันซื้อ${eq.name} ราคา $p บาท?'
+                      '${_warnLine(e.lowMoneyWarning(p))}',
+                      PixelIcon(eq.icon, size: 56),
+                      (e) => e.buyEquipment(id),
+                    );
+                  },
+                ),
+              ),
+            ),
+          const Muted(
+            'ยาและผลการรักษาเป็นแบบจำลองเพื่อการเรียนรู้ (ค่าในเกม)',
+            size: 13,
+            align: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+
     var sections = switch (kind) {
       MarketSheet.buy => [(StoryTarget.buyIngredient, ingredientPanel)],
       MarketSheet.sell => [
         (StoryTarget.sellFish, sellFishPanel),
         (StoryTarget.sellFood, sellFoodPanel),
       ],
-      MarketSheet.tools => [(StoryTarget.buyTool, toolPanel)],
+      MarketSheet.tools => [
+        (StoryTarget.buyTool, toolPanel),
+        (StoryTarget.buyMedicine, medPanel),
+      ],
     };
     if (story != null) {
       // เนื้อเรื่อง: แสดงเฉพาะส่วนที่บทนี้ใช้ ส่วนที่ต้องกดต่อไปอยู่บนสุด
@@ -754,3 +833,16 @@ class _FoodRow extends StatelessWidget {
 
 /// บรรทัดเตือนเงินเหลือน้อยต่อท้ายข้อความยืนยันซื้อ
 String _warnLine(String? warn) => warn == null ? '' : '\n$warn';
+
+/// ยาปลาแสดงในแถวเดียวกับอุปกรณ์ (ชื่อ ราคา คำอธิบายสั้น)
+EquipmentSpec medicineSpec(String id) {
+  final m = kMedicines[id]!;
+  return EquipmentSpec(
+    id: m.id,
+    name: m.name,
+    price: m.price,
+    icon: m.icon,
+    description: m.description,
+    use: m.ingredient ? 'ใช้ครั้งละ ${m.dose} ถุง' : 'ใช้ครั้งละ 1 หน่วย',
+  );
+}

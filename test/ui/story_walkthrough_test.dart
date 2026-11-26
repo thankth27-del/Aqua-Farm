@@ -1,4 +1,5 @@
 import 'package:aqua_farm/data/constants.dart';
+import 'package:aqua_farm/data/health_data.dart';
 import 'package:aqua_farm/game/story.dart';
 import 'package:aqua_farm/save/save_repository.dart';
 import 'package:aqua_farm/ui/app.dart';
@@ -85,10 +86,18 @@ Future<void> settle(WidgetTester tester) async {
   await hearUncle(tester);
 }
 
-/// เนื้อเรื่องไม่มีเมนูล่าง: ลุงทองพาไปหน้า [name] เอง — ตรวจว่าไม่มีเมนูให้กด
+/// เนื้อเรื่องมีเมนูหลัก: เกมไม่ดึงไปหน้าอื่นเอง — แท็บ [name] ที่ต้องไปกะพริบบนเมนู
+/// (ถ้าอยู่หน้านั้นแล้ว แท็บไม่กะพริบ) ผู้เล่นกดเอง
 Future<void> openTab(WidgetTester tester, String name) async {
-  expect(find.byType(GameNavBar), findsNothing, reason: 'ไปหน้า$name');
-  await settle(tester);
+  final nav = find.byType(GameNavBar);
+  expect(nav, findsOneWidget, reason: 'ไปหน้า$name');
+  final label = find.descendant(of: nav, matching: find.text(name));
+  final spot = find.ancestor(of: label, matching: find.byType(Spotlight));
+  final on = (tester.widget<Spotlight>(spot.first)).on;
+  if (on) {
+    await tester.tap(label);
+    await settle(tester);
+  }
 }
 
 Future<void> pressIn(
@@ -164,6 +173,58 @@ Future<void> step(WidgetTester tester) async {
       } else {
         await pressIn(tester, 'catchFish', 'จับปลา');
       }
+    case StoryTarget.water || StoryTarget.treat:
+      await openTab(tester, 'ปลา');
+      if (find.byKey(const ValueKey('pond-water')).evaluate().isEmpty) {
+        await tester.tap(find.widgetWithText(PixelButton, 'บ่อปลา'));
+        await settle(tester);
+      }
+      final e = container.read(gameProvider)!.engine;
+      if (t == StoryTarget.water) {
+        // ปุ่ม "ดูแลน้ำ" กะพริบ → แผ่นดูแลน้ำ: ล้างตัวกรอง แล้วเปลี่ยนน้ำถ้ายังไม่ดี
+        final open = find.byKey(const ValueKey('pond-care-water'));
+        expectNoScroll(tester, open, 'ดูแลน้ำ');
+        await tester.tap(open);
+        await settle(tester);
+        if (e.state.filterDirt >= kCleanFilterMin) {
+          await tester.tap(find.byKey(const ValueKey('clean-filter')));
+          await settle(tester);
+        }
+        if (e.state.o2 < e.pondO2Need) {
+          await tester.tap(find.byKey(const ValueKey('aerate')));
+          await settle(tester);
+        }
+        if (e.state.water < kWaterGoodLine) {
+          final c = find.byKey(const ValueKey('change-water'));
+          await tester.ensureVisible(c);
+          await tester.tap(c);
+          await settle(tester);
+        }
+      } else {
+        // ปุ่ม "รักษาปลา" กะพริบ → เลือกปลาที่ป่วย → ดูอาการ → เลือกยาที่ตรงโรค
+        final open = find.byKey(const ValueKey('pond-care-treat'));
+        expectNoScroll(tester, open, 'รักษาปลา');
+        await tester.tap(open);
+        await settle(tester);
+        final i = e.state.pond.indexWhere(
+          (f) => f.sick && f.treatDays == 0 && f.health > 0,
+        );
+        expect(find.byKey(ValueKey('symptom-$i')), findsOneWidget);
+        final pickBtn = find.byKey(ValueKey('treat-pick-$i'));
+        await tester.ensureVisible(pickBtn);
+        await tester.tap(pickBtn);
+        await settle(tester);
+        final med = kDiseases[e.state.pond[i].disease]!.medicine;
+        final use = find.byKey(ValueKey('use-$med'));
+        await tester.ensureVisible(use);
+        await tester.tap(use);
+        await settle(tester);
+        expect(e.state.pond[i].treatDays, greaterThan(0));
+      }
+    case StoryTarget.buyMedicine:
+      await openTab(tester, 'ตลาด');
+      await openSheetFor(tester, 'buyMedicine', 'market-tools');
+      await pressIn(tester, 'buyMedicine', 'ซื้อ', confirm: 'ตกลง');
     case StoryTarget.endDay:
       await pressIn(tester, 'endDay', 'จบวัน');
       if (find.text('ดูรายงานทันที').evaluate().isNotEmpty) {
@@ -230,21 +291,21 @@ Future<void> step(WidgetTester tester) async {
 
 void main() {
   testWidgets(
-    'เล่นเนื้อเรื่องบท 1-7 ผ่าน UI: ทุกขั้นเห็นปุ่มที่ต้องกดโดยไม่ต้องเลื่อนจอ',
+    'เล่นเนื้อเรื่องบท 1-9 ผ่าน UI: ทุกขั้นเห็นปุ่มที่ต้องกดโดยไม่ต้องเลื่อนจอ',
     (tester) async {
       await pumpStory(tester);
       final chapters = <int>{};
       var guard = 0;
       while (find.byType(StorySummaryScreen).evaluate().isEmpty) {
-        expect(guard++ < 150, isTrue, reason: 'เนื้อเรื่องไม่จบใน 150 ขั้น');
+        expect(guard++ < 250, isTrue, reason: 'เนื้อเรื่องไม่จบใน 250 ขั้น');
         expect(progress.failed, isFalse, reason: progress.failReason);
         chapters.add(progress.chapter);
         // แถบเป้าหมายอยู่บนจอทุกขั้น
         expect(find.byKey(const ValueKey('story-goal')), findsOneWidget);
         await step(tester);
       }
-      expect(chapters, {1, 2, 3, 4, 5, 6});
-      // บท 7: ลุงเล่าตอนจบตามเกรด → ปลดล็อก → การ์ดใบสุดท้าย (ครบ 7 ใบในสมุด)
+      expect(chapters, {for (var c = 1; c < kStoryChapters; c++) c});
+      // บทสรุป: ลุงเล่าตอนจบตามเกรด → ปลดล็อก → การ์ดใบสุดท้าย (ครบทุกบทในสมุด)
       await hearUncle(tester);
       expect(progress.heard, containsAll(['ending', 'done']));
       expect(progress.cards, hasLength(kStoryChapters));

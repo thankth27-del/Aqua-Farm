@@ -87,10 +87,10 @@ void main() {
     },
   );
 
-  test('บท 2: จับปลาได้แล้วถามขาย 1 ตัว/ขายหมด ผลขายจริงตามที่เลือก', () {
+  test('บทตลาด: จับปลาได้แล้วถามขาย 1 ตัว/ขายหมด ผลขายจริงตามที่เลือก', () {
     p
-      ..chapter = 2
-      ..talked = 2;
+      ..chapter = StoryCh.market
+      ..talked = StoryCh.market;
     e.state.fishStock['nila'] = 2;
     e.state.fishStock['dook'] = 1;
     final c = cue();
@@ -109,12 +109,12 @@ void main() {
     expect(e.state.earned, e.state.money - money);
   });
 
-  test('บท 4: สอน→ถาม→ชวนลอง ทีละวิธี · ตอบผิดไม่ผ่านแต่ถามซ้ำ · ครบแล้วถามวิธีแรก', () {
+  test('บทถนอมอาหาร: สอน→ถาม→ชวนลอง ทีละวิธี · ตอบผิดไม่ผ่านแต่ถามซ้ำ · ครบแล้วถามวิธีแรก', () {
     p
-      ..chapter = 4
-      ..talked = 4;
-    final lessons = scriptOf(4).lessons;
-    expect(lessons.map((l) => l.method), kPreserveMethods.keys.toList());
+      ..chapter = StoryCh.preserve
+      ..talked = StoryCh.preserve;
+    final lessons = scriptOf(StoryCh.preserve).lessons;
+    expect(lessons.map((l) => l.id), kPreserveMethods.keys.toList());
     for (final l in lessons) {
       final teach = cue();
       expect(teach.kind, TalkKind.lesson);
@@ -159,64 +159,61 @@ void main() {
     expect(StoryTalk.effect('method', 'dried', e), isNull);
   });
 
-  /// เข้าบท 6 ตามทางปกติ (บท 5 ประกาศน้ำท่วมล่วงหน้า) แล้วฟังเปิดบท
-  void toChapter6() {
+  /// เข้าบทภัยจริงตามทางปกติ (บทคำเตือนประกาศน้ำท่วมล่วงหน้า) แล้วฟังเปิดบท
+  void toDisaster() {
     p
-      ..chapter = 4
+      ..chapter = StoryCh.sick
       ..done = true;
     Story.next(p, e);
     p.done = true;
     Story.next(p, e);
-    expect(p.chapter, 6);
+    expect(p.chapter, StoryCh.disaster);
     StoryTalk.hear(p, cue());
   }
 
-  test(
-    'บท 6: เตรียมไม่พอ → ลุงไม่ตำหนิ ให้ทางแก้ · ลุงพูดก่อนแต่ละวันน้ำท่วม',
-    () {
-      toChapter6();
-      final prep = cue();
-      expect(prep.key, 'prep');
-      expect(prep.lines, scriptOf(6).notReady);
-      StoryTalk.hear(p, prep);
+  test('บทภัยจริง: เตรียมไม่พอ → ลุงไม่ตำหนิ ให้ทางแก้ · ลุงพูดก่อนแต่ละวันน้ำท่วม', () {
+    toDisaster();
+    final prep = cue();
+    expect(prep.key, 'prep');
+    expect(prep.lines, scriptOf(StoryCh.disaster).notReady);
+    StoryTalk.hear(p, prep);
 
-      // คืนก่อนน้ำมา: ลุงพูดเรื่องวันแรก
-      final up = e.state.upcoming!;
-      e.state.day = up.startDay - 1;
-      expect(Story.floodDayAhead(e), 0);
-      final d0 = cue();
-      expect(d0.key, 'day:0');
-      expect(d0.lines, scriptOf(6).dayLines[0]);
-      StoryTalk.hear(p, d0);
+    // คืนก่อนน้ำมา: ลุงพูดเรื่องวันแรก
+    final up = e.state.upcoming!;
+    e.state.day = up.startDay - 1;
+    expect(Story.floodDayAhead(e), 0);
+    final d0 = cue();
+    expect(d0.key, 'day:0');
+    expect(d0.lines, scriptOf(StoryCh.disaster).dayLines[0]);
+    StoryTalk.hear(p, d0);
 
-      // ระหว่างน้ำท่วม: วันที่ i ผ่านแล้ว → ลุงพูดเรื่องวันถัดไป
-      e.state.active = ActiveDisaster(
-        type: up.type,
-        duration: 4,
-        severity: up.severity,
-        fishBefore: 3,
-        dayIndex: 1,
-      );
-      expect(Story.floodDayAhead(e), 2);
-      expect(cue().key, 'day:2');
-      e.state.active!.dayIndex = 3;
-      expect(Story.floodDayAhead(e), isNull, reason: 'น้ำลดแล้ว');
-    },
-  );
+    // ระหว่างน้ำท่วม: วันที่ i ผ่านแล้ว → ลุงพูดเรื่องวันถัดไป
+    e.state.active = ActiveDisaster(
+      type: up.type,
+      duration: 4,
+      severity: up.severity,
+      fishBefore: 3,
+      dayIndex: 1,
+    );
+    expect(Story.floodDayAhead(e), 2);
+    expect(cue().key, 'day:2');
+    e.state.active!.dayIndex = 3;
+    expect(Story.floodDayAhead(e), isNull, reason: 'น้ำลดแล้ว');
+  });
 
-  test('บท 6: เตรียมพร้อม → ลุงพูดชุด "พร้อมดี"', () {
+  test('บทภัยจริง: เตรียมพร้อม → ลุงพูดชุด "พร้อมดี"', () {
     final tool = kDisasters[kStoryDisaster]!.equipment.keys.first;
     e.state.equipment[tool] = 1;
     e.state.stock.add(StockBatch(food: 'canned', qty: 20));
-    toChapter6();
+    toDisaster();
     expect(Story.prepared(e), isTrue);
-    expect(cue().lines, scriptOf(6).ready);
+    expect(cue().lines, scriptOf(StoryCh.disaster).ready);
   });
 
   test(
-    'บท 6: ไฟดับ มีทั้งอาหารสุกและของถนอม → ถามกินอะไรก่อน ผลคือกินจริง',
+    'บทภัยจริง: ไฟดับ มีทั้งอาหารสุกและของถนอม → ถามกินอะไรก่อน ผลคือกินจริง',
     () {
-      toChapter6();
+      toDisaster();
       StoryTalk.hear(p, cue()); // prep
       e.state
         ..power = false
@@ -239,28 +236,28 @@ void main() {
     },
   );
 
-  test('บท 6 แพ้: ลุงพูดให้กำลังใจครั้งเดียว แล้วรอผู้เล่นลองใหม่', () {
-    toChapter6();
+  test('บทภัยจริง แพ้: ลุงพูดให้กำลังใจครั้งเดียว แล้วรอผู้เล่นลองใหม่', () {
+    toDisaster();
     p.failReason = 'อาหารไม่พอ';
     final f = cue();
     expect(f.key, 'fail');
-    expect(f.lines, scriptOf(6).onFail);
+    expect(f.lines, scriptOf(StoryCh.disaster).onFail);
     StoryTalk.hear(p, f);
     expect(StoryTalk.next(p, e), isNull);
   });
 
   for (final (g, points) in [('S', 3), ('A', 2), ('B', 1)]) {
-    test('บท 7: ตอนจบเกรด $g → ปลดล็อก → ลุงฝากท้าย → การ์ดสุดท้าย', () {
+    test('บทสรุป: ตอนจบเกรด $g → ปลดล็อก → ลุงฝากท้าย → การ์ดสุดท้าย', () {
       e.state
         ..gradeDays = 4
         ..gradePoints = points * 4;
       expect(e.overallGrade, g);
       p
-        ..chapter = 6
+        ..chapter = StoryCh.disaster
         ..done = true;
       Story.next(p, e);
       expect(p.finished, isTrue);
-      StoryTalk.hear(p, cue()); // เปิดบท 7
+      StoryTalk.hear(p, cue()); // เปิดบทสรุป
       final end = cue();
       expect(end.key, 'ending');
       expect(end.lines, [...kStoryEndingScript[g]!, ...kStoryUnlockScript]);

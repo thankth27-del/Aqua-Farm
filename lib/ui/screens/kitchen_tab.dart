@@ -343,7 +343,10 @@ class _KitchenView extends ConsumerWidget {
                   Padding(
                     padding: const EdgeInsets.only(bottom: Gap.s),
                     child: pick(
-                      p.id == 'dried',
+                      p.id ==
+                          (story == null
+                              ? 'dried'
+                              : Story.preserveMethod(story.$1)),
                       StoryTarget.preserve,
                       _RecipeCard(
                         key: ValueKey('preserve-${p.id}'),

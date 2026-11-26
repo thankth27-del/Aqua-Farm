@@ -32,7 +32,9 @@ class _FishDetailScreenState extends ConsumerState<FishDetailScreen> {
     // เนื้อเรื่องบท 1: ตั้งจำนวนให้ครบเป้าหมายเลย
     final p = ref.read(storyProvider);
     final s = ref.read(gameProvider)!.state;
-    if (p != null && p.chapter == 1 && s.pond.length < kStoryPondFish) {
+    if (p != null &&
+        p.chapter == StoryCh.farm &&
+        s.pond.length < kStoryPondFish) {
       _qty = kStoryPondFish - s.pond.length;
     }
   }

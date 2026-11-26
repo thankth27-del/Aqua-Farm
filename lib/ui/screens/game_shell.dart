@@ -7,7 +7,6 @@ import '../../data/difficulty.dart';
 import '../../data/disaster_data.dart';
 import '../../game/hints.dart';
 import '../../game/story.dart';
-import '../../game/story_talk.dart';
 import '../../data/story_script.dart';
 import '../../game/tutorial.dart';
 import '../build_info.dart';
@@ -90,16 +89,6 @@ class _GameShellState extends ConsumerState<GameShell> {
     });
   }
 
-  /// เนื้อเรื่องเปลี่ยนบท → เปิดแท็บของสิ่งที่ต้องทำต่อ
-  void _followStory() {
-    final story = watchStory(ref);
-    if (story == null) return;
-    final (p, e) = story;
-    final next = Story.nextTarget(p, e);
-    final tab = next == null ? null : storyTabOf(next);
-    if (tab != null && Story.tabOpen(p, tab)) _select(tab);
-  }
-
   @override
   Widget build(BuildContext context) {
     final target = ref.watch(gameProvider)!.engine.tutorialStep?.target;
@@ -118,17 +107,11 @@ class _GameShellState extends ConsumerState<GameShell> {
             .firstWhere((i) => !locked!.contains(i));
         _fishShop = false;
       }
+      // แท็บที่สิ่งที่ต้องทำต่ออยู่: กะพริบบนเมนูเท่านั้น ไม่ดึงผู้เล่นไปเอง
+      // (ไปเองด้วยเมนู หรือกด "ขอคำใบ้จากลุงทอง" ให้ลุงพาไป)
       final next = Story.nextTarget(p, e);
       storyTab = next == null ? null : storyTabOf(next);
-      // ไม่มีเมนูล่าง: สิ่งที่ต้องทำต่อไปอยู่หน้าอื่น → ลุงพาไปหน้านั้น
-      // (รอลุงพูดจบก่อน: บรรทัดที่ลุงชี้หน้าอื่น เช่น "ลองตากปลาดู" จะได้ไม่ถูกดึงกลับ)
-      final go = storyTab;
-      final talking = StoryTalk.next(p, e) != null;
-      if (go != null && go != _tab && !talking && Story.tabOpen(p, go)) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted && _tab != go) _select(go);
-        });
-      }
+      if (storyTab != null && !Story.tabOpen(p, storyTab)) storyTab = null;
     }
     final body = switch (_tab) {
       0 => FarmTab(onOpenTab: _select),
@@ -170,7 +153,7 @@ class _GameShellState extends ConsumerState<GameShell> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        StoryGoalBar(onChapterChanged: _followStory),
+        const StoryGoalBar(),
         TutorialPanel(screen: _screen),
         // คำแนะนำครั้งแรกของหน้า แทนที่ "ตอนนี้ควรทำ" จนกด "เข้าใจแล้ว"
         if (guide) tipOn ? TipBar(screen: _screen) : NextStepBar(onGo: _go),
@@ -214,10 +197,8 @@ class _GameShellState extends ConsumerState<GameShell> {
         fit: StackFit.expand,
         children: [
           backdrop,
-          // เนื้อเรื่อง: ไม่มีเมนูหลัก ลุงทองพาไปหน้าที่ต้องใช้เอง (เหลือปุ่มพักมุมจอ)
-          if (story != null)
-            content
-          else if (side)
+          // เนื้อเรื่องก็มีเมนูหลัก: แท็บที่ยังไม่เปิดในบทนี้จาง+กุญแจ แท็บที่ต้องไปกะพริบ
+          if (side)
             Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -238,6 +219,22 @@ class _GameShellState extends ConsumerState<GameShell> {
       ),
     );
   }
+}
+
+/// กุญแจบนแท็บที่ยังไม่เปิดในบทนี้
+class _LockBadge extends StatelessWidget {
+  const _LockBadge();
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.all(3),
+    decoration: BoxDecoration(
+      color: DsColors.ink,
+      shape: BoxShape.circle,
+      border: Border.all(color: DsColors.glassEdge, width: 1.5),
+    ),
+    child: const Icon(Icons.lock_rounded, size: 14, color: Colors.white),
+  );
 }
 
 /// เมนูหลัก: มือถือ = แถบล่างไอคอนใหญ่ ป้ายสั้น / แนวนอน-คอม = แถบข้างแคบ
@@ -298,16 +295,23 @@ class GameNavBar extends StatelessWidget {
       child: locked.contains(i)
           ? Semantics(
               enabled: false,
+              label: '${items[i].$1} (ยังไม่เปิดในบทนี้)',
               child: IgnorePointer(
-                child: Opacity(
+                child: Stack(
                   key: ValueKey('nav-locked-$i'),
-                  opacity: .35,
-                  child: _NavItem(
-                    label: items[i].$1,
-                    icon: items[i].$2,
-                    selected: false,
-                    onTap: () {},
-                  ),
+                  alignment: Alignment.center,
+                  children: [
+                    Opacity(
+                      opacity: .35,
+                      child: _NavItem(
+                        label: items[i].$1,
+                        icon: items[i].$2,
+                        selected: false,
+                        onTap: () {},
+                      ),
+                    ),
+                    const Positioned(top: 2, right: 4, child: _LockBadge()),
+                  ],
                 ),
               ),
             )

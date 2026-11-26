@@ -82,13 +82,14 @@ void main() {
     final c = await container();
     await c.read(storyProvider.notifier).startNew();
     final d = RiverpodDriver(c);
-    await clearChapter(d);
-    await clearChapter(d);
-    // อยู่บท 3 และทำเป้าหมายไปครึ่งทาง (ซื้อวัตถุดิบแล้ว)
+    while (d.progress.chapter < StoryCh.kitchen) {
+      await clearChapter(d);
+    }
+    // อยู่บทครัว และทำเป้าหมายไปครึ่งทาง (ซื้อวัตถุดิบแล้ว)
     await d.act((e) => e.buyIngredient('spice'));
     final day = d.engine.state.day;
     final money = d.engine.state.money;
-    expect(d.progress.chapter, 3);
+    expect(d.progress.chapter, StoryCh.kitchen);
     await c.read(storyProvider.notifier).exit();
     expect(c.read(gameProvider), isNull);
 
@@ -97,12 +98,12 @@ void main() {
     expect(c2.read(storySavedProvider), isTrue);
     expect(c2.read(storyProvider.notifier).resume(), isTrue);
     final d2 = RiverpodDriver(c2);
-    expect(d2.progress.chapter, 3);
+    expect(d2.progress.chapter, StoryCh.kitchen);
     expect(d2.engine.state.day, day);
     expect(d2.engine.state.money, money);
     expect(d2.engine.state.inventory['spice'], 1);
     await clearChapter(d2);
-    expect(d2.progress.chapter, 4);
+    expect(d2.progress.chapter, StoryCh.preserve);
   });
 
   test('เซฟอัตโนมัติหลังทุกการกระทำ (ไม่ต้องกดบันทึก)', () async {
@@ -113,11 +114,11 @@ void main() {
     expect(saved.$2.pond, hasLength(2));
   });
 
-  test('แพ้บท 6 แล้วลองใหม่ผ่าน controller', () async {
+  test('แพ้บทภัยจริง แล้วลองใหม่ผ่าน controller', () async {
     final c = await container();
     await c.read(storyProvider.notifier).startNew();
     final d = RiverpodDriver(c);
-    for (var i = 0; i < 5; i++) {
+    while (d.progress.chapter < StoryCh.disaster) {
       await clearChapter(d);
     }
     while (d.engine.state.active == null) {
@@ -128,9 +129,12 @@ void main() {
     expect(c.read(gameProvider)!.state.over, isFalse);
     expect(d.progress.failed, isTrue);
     await c.read(storyProvider.notifier).retry();
-    expect(d.progress.chapter, 6);
+    expect(d.progress.chapter, StoryCh.disaster);
     expect(d.progress.failed, isFalse);
-    // เซฟหลังลองใหม่ก็กลับมาที่บท 6
-    expect(c.read(saveRepositoryProvider).loadStory()!.$1.chapter, 6);
+    // เซฟหลังลองใหม่ก็กลับมาที่บทเดิม
+    expect(
+      c.read(saveRepositoryProvider).loadStory()!.$1.chapter,
+      StoryCh.disaster,
+    );
   });
 }

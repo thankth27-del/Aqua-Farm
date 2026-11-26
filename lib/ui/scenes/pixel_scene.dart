@@ -1227,7 +1227,7 @@ class PondSceneData {
 }
 
 /// ปลาป่วย: สุขภาพต่ำกว่าครึ่ง (ใช้แสดงผลเท่านั้น)
-bool fishSick(PondFish f) => f.health < 50;
+bool fishSick(PondFish f) => f.sick || f.health < 50;
 
 // น้ำในบ่อ: ผิวน้ำ → ก้นบ่อ
 const _waterBands = [

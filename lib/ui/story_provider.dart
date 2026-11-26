@@ -72,8 +72,11 @@ class StoryController extends Notifier<StoryProgress?> {
     final saved = ref.read(saveRepositoryProvider).loadStory();
     if (saved == null) return false;
     final (p, s) = saved;
+    final e = GameEngine(s, random: ref.read(storyRandomProvider))..calcWater();
+    // เซฟรุ่นเก่า: เปิด/ปิดโรคปลาตามบท
+    Story.check(p, e);
     state = p;
-    _attach(GameEngine(s, random: ref.read(storyRandomProvider))..calcWater());
+    _attach(e);
     return true;
   }
 
@@ -106,7 +109,7 @@ class StoryController extends Notifier<StoryProgress?> {
     return reply;
   }
 
-  /// ตอบคำถามบท 4 → คืนคำอธิบายของลุง (ผิดก็ไม่มีโทษ ถามข้อเดิมใหม่)
+  /// ตอบคำถามบทเรียนย่อย → คืนคำอธิบายของลุง (ผิดก็ไม่มีโทษ ถามข้อเดิมใหม่)
   QuizAnswer answer(TalkCue cue, int index) {
     final p = state;
     final a = StoryTalk.answer(p!, cue, index);
@@ -165,4 +168,16 @@ class StoryController extends Notifier<StoryProgress?> {
 
 final storyProvider = NotifierProvider<StoryController, StoryProgress?>(
   StoryController.new,
+);
+
+/// ปุ่ม "ขอคำใบ้จากลุงทอง" — เพิ่มค่าทุกครั้งที่กด ชั้นบทสนทนาฟังแล้วให้ลุงพูดคำใบ้
+class StoryHintRequest extends Notifier<int> {
+  @override
+  int build() => 0;
+
+  void ask() => state++;
+}
+
+final storyHintProvider = NotifierProvider<StoryHintRequest, int>(
+  StoryHintRequest.new,
 );

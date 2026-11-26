@@ -1,3 +1,5 @@
+import 'package:aqua_farm/data/constants.dart';
+import 'package:aqua_farm/data/health_data.dart';
 import 'package:aqua_farm/game/game_engine.dart';
 import 'package:aqua_farm/game/story.dart';
 
@@ -19,16 +21,29 @@ Future<void> fedDay(StoryDriver d) async {
   await d.endDay();
 }
 
-/// เล่นให้ผ่านบทปัจจุบัน (บท 1-6) แล้วกด "บทถัดไป"
+/// เล่นให้ผ่านบทปัจจุบัน (บทลงบ่อ-ภัยจริง) แล้วกด "บทถัดไป"
 Future<void> clearChapter(StoryDriver d) async {
   final ch = d.progress.chapter;
   switch (ch) {
-    case 1:
+    case StoryCh.farm:
       await d.act((e) => e.buyFish('nila', kStoryPondFish));
       while (!d.progress.done) {
+        if (d.progress.failed) {
+          throw StateError(
+            'บท ${d.progress.chapter} แพ้: ${d.progress.failReason}',
+          );
+        }
         await fedDay(d);
       }
-    case 2:
+    case StoryCh.water:
+      while (d.engine.state.filterDirt < kCleanFilterMin) {
+        await fedDay(d);
+      }
+      await d.act((e) {
+        e.cleanFilter();
+        if (e.state.water < kWaterGoodLine) e.changeWater();
+      });
+    case StoryCh.market:
       while (d.engine.matureCount == 0 && d.engine.fishTotal == 0) {
         await fedDay(d);
       }
@@ -38,20 +53,54 @@ Future<void> clearChapter(StoryDriver d) async {
           e.state.fishStock.entries.firstWhere((x) => x.value > 0).key,
         );
       });
-    case 3:
+    case StoryCh.kitchen:
       await d.act((e) {
         e.buyIngredient('spice');
         e.cook('fry');
       });
-    case 4:
+    case StoryCh.preserve:
       await d.act((e) {
         e.buyEquipment('rack');
         e.startPreserve('dried');
+        // จับปลาไปหมดแล้ว: ปล่อยปลาชุดใหม่ (บทถัดไปลุงพบปลาป่วยในบ่อ)
+        if (e.state.pond.isEmpty) e.buyFish('nila', 2);
       });
-    case 5:
-      await d.act((e) => e.buyEquipment('sand'));
-    case 6:
+    case StoryCh.sick:
+      // ลุงพบปลาเป็นจุดขาว → แช่เกลือ แล้วรอจนหาย
+      await d.act((e) {
+        final i = e.state.pond.indexWhere((f) => f.sick);
+        final med = kDiseases[e.state.pond[i].disease]!.medicine;
+        for (var k = 0; k < kMedicines[med]!.dose; k++) {
+          e.buyMedicine(med);
+        }
+        e.treat(i, med);
+      });
       while (!d.progress.done) {
+        if (d.progress.failed) {
+          throw StateError(
+            'บท ${d.progress.chapter} แพ้: ${d.progress.failReason}',
+          );
+        }
+        await d.act((e) {
+          if (e.state.water < kWaterGoodLine) e.changeWater();
+        });
+        await fedDay(d);
+      }
+    case StoryCh.warning:
+      await d.act((e) => e.buyEquipment('sand'));
+    case StoryCh.disaster:
+      while (!d.progress.done) {
+        if (d.progress.failed) {
+          throw StateError(
+            'บท ${d.progress.chapter} แพ้: ${d.progress.failReason}',
+          );
+        }
+        // ดูแลน้ำระหว่างน้ำท่วม (ล้างตัวกรอง/เติมอากาศ/เปลี่ยนน้ำ)
+        await d.act((e) {
+          if (e.state.filterDirt >= kCleanFilterMin) e.cleanFilter();
+          if (e.state.o2 < e.pondO2Need) e.aerate();
+          if (e.state.water < kWaterGoodLine) e.changeWater();
+        });
         await fedDay(d);
       }
   }

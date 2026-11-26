@@ -71,10 +71,7 @@ class StoryGate extends ConsumerWidget {
 /// แถบ "เป้าหมายบทนี้" ติดบนจอเสมอ: บท n/7 เป้าหมาย คำอธิบายสั้น ๆ
 /// และปุ่มบทถัดไป / ลองบทนี้ใหม่
 class StoryGoalBar extends ConsumerWidget {
-  const StoryGoalBar({super.key, this.onChapterChanged});
-
-  /// หลังเปลี่ยนบท (ให้หน้าเกมเปิดแท็บที่บทใหม่ใช้)
-  final VoidCallback? onChapterChanged;
+  const StoryGoalBar({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -179,6 +176,17 @@ class StoryGoalBar extends ConsumerWidget {
                 color: p.failed ? AquaColors.red : AquaColors.textSoft,
               ),
             ),
+            if (!p.finished) ...[
+              const SizedBox(height: Gap.xs),
+              PixelButton(
+                key: const ValueKey('story-hint-ask'),
+                label: 'ขอคำใบ้จากลุงทอง',
+                icon: const PixelIcon('face', size: 22),
+                style: PixelButtonStyle.wood,
+                expand: true,
+                onPressed: () => ref.read(storyHintProvider.notifier).ask(),
+              ),
+            ],
             if (p.failed || (p.done && !p.finished)) ...[
               const SizedBox(height: Gap.xs),
               Spotlight(
@@ -198,7 +206,6 @@ class StoryGoalBar extends ConsumerWidget {
                   ),
                   onPressed: () async {
                     await (p.failed ? ctl.retry() : ctl.next());
-                    onChapterChanged?.call();
                   },
                 ),
               ),
