@@ -153,20 +153,6 @@ abstract final class StoryTalk {
         choice: ch,
       );
     }
-    // ให้ยาผิดโรค: ลุงอธิบายอาการกับยาที่ถูก แล้วให้เลือกใหม่ (เสียแค่ยาที่ใช้ไป)
-    final wm = e.state.wrongMed;
-    final wf = e.state.wrongFor;
-    if (p.chapter >= StoryCh.sick && wm != null && wf != null) {
-      final key = 'wrong:${e.state.day}:$wm:$wf';
-      if (!p.heard.contains(key)) {
-        return TalkCue(
-          TalkKind.target,
-          key,
-          lines: wrongMedicineLines(wm, wf),
-          target: StoryTarget.treat,
-        );
-      }
-    }
     // เงินไม่พอซื้อของที่ต้องใช้ → ลุงให้ฟรี ผู้เล่นไม่ค้าง
     final gift = Story.giftNeeded(p, e);
     if (gift != null) {

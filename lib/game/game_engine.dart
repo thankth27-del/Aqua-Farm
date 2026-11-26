@@ -197,9 +197,13 @@ class GameEngine {
   /// เงินไม่พอแม้แต่ให้อาหาร "น้อย" → ลุงทองแบ่งอาหารปลาให้ฟรี (กันเลี้ยงต่อไม่ได้)
   bool get freeFeed => s.pond.isNotEmpty && s.money < feedCost(1);
 
-  /// เงินไม่พอค่าเติมอากาศ ปลาในบ่อขาดออกซิเจน → ลุงทองให้ยืมเครื่องเติมอากาศฟรี
+  /// เนื้อเรื่อง: เงินไม่พอค่าเติมอากาศ ปลาในบ่อขาดออกซิเจน → ลุงทองให้ยืมเครื่องเติมอากาศฟรี
+  /// (โหมดเอาชีวิตรอดไม่มี ตามต้นแบบ)
   bool get freeAerate =>
-      s.pond.isNotEmpty && s.money < kAerateCost && s.o2 < pondO2Need;
+      s.storyMode &&
+      s.pond.isNotEmpty &&
+      s.money < kAerateCost &&
+      s.o2 < pondO2Need;
 
   /// บ่อว่าง ไม่มีปลาเหลือขาย และเงินไม่พอซื้อปลา → ลุงทองให้ลูกปลา [kFreeFishCount] ตัวฟรี
   bool get freeFish =>

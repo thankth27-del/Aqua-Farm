@@ -376,6 +376,7 @@ abstract final class Story {
       ..upcoming = null
       // โรคปลาเปิดเมื่อถึงบทปลาป่วย
       ..diseaseOn = false
+      ..storyMode = true
       ..tut = kTutorialSteps;
     return e;
   }
@@ -642,7 +643,9 @@ abstract final class Story {
 
   /// ระบบโรคปลาเปิดตั้งแต่บทปลาป่วย (เซฟเก่าก็ปรับตามบท)
   static void sync(StoryProgress p, GameEngine e) {
-    e.state.diseaseOn = p.chapter >= StoryCh.sick;
+    e.state
+      ..diseaseOn = p.chapter >= StoryCh.sick
+      ..storyMode = true;
   }
 
   /// เตรียมรับน้ำท่วมครบ: มีอุปกรณ์กันภัยอย่างน้อย 1 ชิ้น และอาหารพอ [kStorySupplyDays] วัน

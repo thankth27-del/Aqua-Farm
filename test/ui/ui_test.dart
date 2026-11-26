@@ -1187,6 +1187,42 @@ void main() {
     expect(find.textContaining('กำลังรักษา'), findsOneWidget);
   });
 
+  testWidgets('เนื้อเรื่อง: ให้ยาผิด → ลุงอธิบายในแผงเลือกยาทันที แล้วเลือกใหม่', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+    await startNewGame(tester);
+    final ctl = container.read(gameProvider.notifier);
+    ctl.update((e) {
+      e.buyFish('nila', 1);
+      e.state
+        ..storyMode = true
+        ..meds['antibio'] = 9
+        ..meds['kmno4'] = 9;
+      e.state.pond.last.disease = 'spot';
+    });
+    await tester.tap(find.text('ปลา').last);
+    await tester.pumpAndSettle();
+    await openPondSheet(tester, 'pond-care-treat');
+    await tester.tap(find.byKey(const ValueKey('treat-pick-0')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('wrong-med-advice')), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('use-antibio')));
+    await tester.pumpAndSettle();
+    // แผงยังเปิด ลุงบอกว่ายาผิดและยาที่ถูก
+    expect(find.byKey(const ValueKey('med-picker')), findsOneWidget);
+    final advice = find.byKey(const ValueKey('wrong-med-advice'));
+    expect(advice, findsOneWidget);
+    expect(
+      find.descendant(of: advice, matching: find.textContaining('ด่างทับทิม')),
+      findsOneWidget,
+    );
+    await tester.tap(find.byKey(const ValueKey('use-kmno4')));
+    await tester.pumpAndSettle();
+    expect(container.read(gameProvider)!.state.pond.last.treatDays, 2);
+    expect(find.byKey(const ValueKey('med-picker')), findsNothing);
+  });
+
   testWidgets('ตลาด: ซื้อยาปลาและชุดตรวจน้ำต้องยืนยันก่อน', (tester) async {
     await pumpApp(tester);
     await startNewGame(tester);

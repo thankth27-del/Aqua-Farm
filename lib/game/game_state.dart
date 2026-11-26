@@ -510,6 +510,9 @@ class GameState {
   /// ระบบโรคปลาทำงาน (เนื้อเรื่องเปิดเมื่อถึงบทปลาป่วย)
   bool diseaseOn = true;
 
+  /// เกมของโหมดเนื้อเรื่อง (ลุงทองช่วยเพิ่ม เช่น ให้ยืมเครื่องเติมอากาศ) — โหมดเอาชีวิตรอด = false
+  bool storyMode = false;
+
   /// ให้ยาผิดโรคครั้งล่าสุดของวันนี้: ยาที่ใช้ และโรคของปลาตัวนั้น (null = ไม่มี)
   /// ลุงทองอธิบายแล้วให้เลือกใหม่ · ล้างเมื่อให้ยาถูกหรือจบวัน
   String? wrongMed;
@@ -575,6 +578,7 @@ class GameState {
     'ob': ?outbreak,
     'obd': outbreakDays,
     'dzOn': diseaseOn,
+    'sm': storyMode,
     'wm': ?wrongMed,
     'wf': ?wrongFor,
   };
@@ -623,6 +627,7 @@ class GameState {
       ..outbreak = j['ob'] as String?
       ..outbreakDays = _i(j['obd'])
       ..diseaseOn = (j['dzOn'] as bool?) ?? true
+      ..storyMode = (j['sm'] as bool?) ?? false
       ..wrongMed = j['wm'] as String?
       ..wrongFor = j['wf'] as String?;
     s.meds = _intMap(j['meds']);

@@ -133,7 +133,7 @@ class _UncleTalkState extends State<UncleTalk>
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _Portrait(mood: _line.mood, size: portrait),
+          UnclePortrait(mood: _line.mood, size: portrait),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -247,8 +247,8 @@ class _UncleTalkState extends State<UncleTalk>
 }
 
 /// รูปลุงตามอารมณ์ (ภาพพิกเซล ไม่เบลอ) — ไม่มีไฟล์ภาพ = กรอบสีพร้อมอักษร "ท"
-class _Portrait extends StatelessWidget {
-  const _Portrait({required this.mood, required this.size});
+class UnclePortrait extends StatelessWidget {
+  const UnclePortrait({super.key, required this.mood, required this.size});
 
   final UncleMood mood;
   final double size;

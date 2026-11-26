@@ -4,6 +4,7 @@ import 'package:material_ui/material_ui.dart';
 import '../../data/constants.dart';
 import '../../data/fish_data.dart';
 import '../../data/health_data.dart';
+import '../../data/story_script.dart';
 import '../../game/tutorial.dart';
 import '../design/design_system.dart' show DsColors, DsText;
 import '../dialogs.dart';
@@ -18,6 +19,7 @@ import '../theme/theme.dart';
 import '../widgets/feed_choice.dart';
 import '../widgets/game_hud.dart';
 import '../widgets/story_gate.dart';
+import '../widgets/uncle_dialog.dart' show UnclePortrait;
 import '../widgets/guide_bars.dart';
 import 'fish_detail_screen.dart';
 
@@ -573,6 +575,12 @@ class _TreatCareState extends ConsumerState<_TreatCare> {
 
     Widget medPicker(int i) {
       final f = s.pond[i];
+      // เนื้อเรื่อง: ให้ยาผิดโรค → ลุงอธิบายตรงนี้เลย แล้วให้เลือกใหม่
+      final wm = s.wrongMed;
+      final wf = s.wrongFor;
+      final advice = s.storyMode && wm != null && wf == f.disease
+          ? wrongMedicineLines(wm, wf!)
+          : null;
       return WoodPanel(
         key: const ValueKey('med-picker'),
         child: Column(
@@ -587,6 +595,32 @@ class _TreatCareState extends ConsumerState<_TreatCare> {
               size: FontSize.small,
             ),
             const SizedBox(height: Gap.s),
+            if (advice != null) ...[
+              PaperCard(
+                key: const ValueKey('wrong-med-advice'),
+                fill: AquaColors.redPale,
+                border: AquaColors.red,
+                padding: const EdgeInsets.all(Gap.s),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    UnclePortrait(mood: advice.first.mood, size: 48),
+                    const SizedBox(width: Gap.s),
+                    Expanded(
+                      child: Text(
+                        'ลุงทอง: ${advice.map((l) => l.text).join(' ')}',
+                        style: const TextStyle(
+                          fontSize: FontSize.small,
+                          fontWeight: FontWeight.w700,
+                          color: AquaColors.text,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: Gap.s),
+            ],
             for (final id in kMedicineOrder)
               Padding(
                 padding: const EdgeInsets.only(bottom: Gap.s),
@@ -611,7 +645,10 @@ class _TreatCareState extends ConsumerState<_TreatCare> {
                         onPressed: () {
                           final r = ctl.run((e) => e.treat(i, id));
                           showResult(context, r);
-                          if (r.ok) setState(() => _pick = null);
+                          // ยาผิด: แผงยังเปิดอยู่ ให้อ่านคำแนะนำแล้วเลือกใหม่
+                          if (r.ok && s.pond[i].treatDays > 0) {
+                            setState(() => _pick = null);
+                          }
                         },
                       ),
                     ),

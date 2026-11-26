@@ -113,8 +113,9 @@ void main() {
       expect(s.money, 2);
     });
 
-    test('เงินไม่พอเติมอากาศ ปลาขาดออกซิเจน → ลุงทองให้ยืมเครื่องฟรี', () {
+    test('เนื้อเรื่อง: เงินไม่พอเติมอากาศ ปลาขาดออกซิเจน → ลุงทองให้ยืมเครื่องฟรี', () {
       final e = newEngine();
+      e.state.storyMode = true;
       e.buyFish('nila', 1);
       final s = e.state
         ..money = 3
@@ -127,8 +128,22 @@ void main() {
       expect(s.money, 3);
       // มีเงินพอ จ่ายเองตามปกติ
       final rich = newEngine()..buyFish('nila', 1);
-      rich.state.o2 = 10;
+      rich.state
+        ..storyMode = true
+        ..o2 = 10;
       expect(rich.freeAerate, isFalse);
+    });
+
+    test('โหมดเอาชีวิตรอด: ไม่มีเครื่องเติมอากาศฟรี', () {
+      final e = newEngine()..buyFish('nila', 1);
+      e.state
+        ..money = 3
+        ..o2 = 10;
+      expect(e.freeAerate, isFalse);
+      expect(e.aerate().ok, isFalse);
+      // เซฟ/โหลดจำโหมดได้
+      e.state.storyMode = true;
+      expect(GameState.fromJson(e.state.toJson()).storyMode, isTrue);
     });
   });
 

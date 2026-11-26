@@ -3,6 +3,7 @@
 // รัน:
 //   dart run tool/simulate.dart [จำนวนเกม]          ตารางผล (ค่าเริ่มต้น 200 เกม)
 //   dart run tool/simulate.dart ... --fish <ชนิด>   ให้บอทเลี้ยงปลาชนิดนั้นแทนปลานิล
+//   dart run tool/simulate.dart ... --no-health     ปิดโรคปลา/ตัวกรอง (เทียบกับสมดุลก่อนมีระบบโรค)
 //   dart run tool/simulate.dart --rules             สรุปกติกาการตัดสินใจของบอทแต่ละแบบ
 //   dart run tool/simulate.dart --trace <โหมด> <ผู้เล่น> <seed> [วัน]
 //                                                   พิมพ์ทุกการกระทำของเกมเดียว ทีละวัน
@@ -16,10 +17,14 @@ import 'package:aqua_farm/data/difficulty.dart';
 import 'package:aqua_farm/data/disaster_data.dart';
 import 'package:aqua_farm/data/fish_data.dart';
 import 'package:aqua_farm/data/food_data.dart';
+import 'package:aqua_farm/data/health_data.dart';
 import 'package:aqua_farm/data/ingredients.dart';
 import 'package:aqua_farm/game/game_engine.dart';
 
 enum Player { none, half, good }
+
+/// เปิดระบบโรคปลา (ปิดด้วย `--no-health`)
+var health = true;
 
 /// ชนิดปลาที่บอทเลี้ยง (เปลี่ยนด้วย `--fish <id>` เพื่อเทียบความคุ้มของแต่ละชนิด)
 var fishType = 'nila';
@@ -37,7 +42,8 @@ const rules = '''
   1. พลังงาน < 40 → พักผ่อน
   2. ความอิ่ม ≤ 75 → กินอาหารที่ใกล้หมดอายุที่สุดก่อน จนอิ่มเกิน 75
   3. จับปลาที่โตเต็มที่ทั้งหมด
-  4. ดูแลบ่อตามค่าน้ำ: คุณภาพน้ำ < 70 → เปลี่ยนน้ำ, ออกซิเจน < 50 → เติมอากาศ
+  4. ดูแลบ่อตามค่าน้ำ: ตัวกรองสกปรกถึงเกณฑ์ → ล้าง, คุณภาพน้ำ < 70 → เปลี่ยนน้ำ,
+     ออกซิเจน < 50 → เติมอากาศ · ปลาป่วย → ซื้อยาที่ตรงโรคแล้วรักษา
   5. ให้อาหารปลา "พอดี" (เงินไม่พอ → "น้อย")
   6. เครื่องปรุง: ราคาวันนี้ถูกกว่าราคากลาง 10% ขึ้นไป → ตุนให้ถึง 6 ชิ้น (ถ้ามีเงิน 150 ขึ้นไป)
      ไม่ถูก → ซื้อแค่ให้มี 2 ชิ้น (ไว้ทำอาหารตอนตลาดปิด)
@@ -309,6 +315,22 @@ class Bot {
     act('จับปลา $caught ตัว', e.catchFish());
 
     // ดูแลบ่อตามค่าน้ำ
+    // ล้างเมื่อสกปรกมาก (ล้างบ่อยเกินแบคทีเรียดีหาย น้ำยิ่งแย่)
+    if (s.filterDirt >= 40 && s.pond.isNotEmpty) {
+      needEnergy(kCleanFilterEnergy);
+      act('ล้างตัวกรอง', e.cleanFilter());
+    }
+    // ปลาป่วย: ซื้อยาที่ตรงโรค (ตลาดเปิด) แล้วรักษา
+    for (var i = 0; i < s.pond.length; i++) {
+      final f = s.pond[i];
+      if (!f.sick || f.treatDays > 0 || f.health <= 0) continue;
+      final med = kDiseases[f.disease]!.medicine;
+      while (e.medCount(med) < kMedicines[med]!.dose &&
+          s.money >= e.medicinePrice(med) &&
+          e.buyMedicine(med).ok) {}
+      needEnergy(kTreatEnergy);
+      act('รักษา${kDiseases[f.disease]!.name}', e.treat(i, med));
+    }
     if (s.pond.isNotEmpty || s.water < 50) {
       if (s.water < 70) act('เปลี่ยนน้ำ (น้ำ ${s.water})', e.changeWater());
       if (s.o2 < 50) {
@@ -388,7 +410,7 @@ Result playGame(
   int maxDays = 1000,
 }) {
   final e = GameEngine.newGame('sim', random: Random(seed), mode: mode);
-  final s = e.state;
+  final s = e.state..diseaseOn = health;
   final startDay = 1 + Random(seed * 31 + 7).nextInt(2);
   while (!s.finished && s.day <= maxDays) {
     final log = trace ? <String>[] : null;
@@ -402,6 +424,7 @@ Result playGame(
                   ? 'เตือน${kDisasters[s.upcoming!.type]!.name}อีก ${e.warnDays} วัน'
                   : 'ปกติ'}'
         : '';
+    if (!health) s.filterDirt = 0;
     Bot(e, p, log: log, startDay: startDay).dayStep();
     if (trace) {
       stdout.writeln(before);
@@ -421,6 +444,7 @@ Result playGame(
 
 void main(List<String> argv) {
   final args = [...argv];
+  health = !args.remove('--no-health');
   final fi = args.indexOf('--fish');
   if (fi >= 0) {
     fishType = args[fi + 1];
@@ -456,7 +480,9 @@ void main(List<String> argv) {
   }
   final games = args.isEmpty ? 200 : int.parse(args.first);
   final out = StringBuffer()
-    ..writeln('จำลอง $games เกมต่อช่อง (โหมด × ผู้เล่น)')
+    ..writeln(
+      'จำลอง $games เกมต่อช่อง (โหมด × ผู้เล่น) · โรคปลา${health ? 'เปิด' : 'ปิด'}',
+    )
     ..writeln()
     ..writeln(
       '| โหมด (เป้า) | ผู้เล่น | อัตราชนะ | วันที่ล้มเฉลี่ย | เงินเฉลี่ยตอนจบ | เงินเฉลี่ยตอนชนะ | ภัยที่รอดเฉลี่ย | เกรดตอนชนะ S/A/B |',

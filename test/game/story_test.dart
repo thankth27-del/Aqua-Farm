@@ -326,11 +326,12 @@ void main() {
       expect(e.state.meds['kmno4'], 0);
       expect(e.state.pond[i].sick, isTrue);
       expect(e.state.pond[i].health, health);
-      final cue = StoryTalk.next(p, e)!;
-      expect(cue.key, startsWith('wrong:'));
-      expect(cue.lines.first.text, contains('ด่างทับทิม'));
-      expect(cue.lines.last.text, contains('เกลือ'));
-      StoryTalk.hear(p, cue);
+      // ลุงอธิบายในแผงเลือกยาทันที (ไม่ใช่บทพูดหลังปิดแผง)
+      expect(e.state.storyMode, isTrue);
+      expect(e.state.wrongMed, 'kmno4');
+      final lines = wrongMedicineLines(e.state.wrongMed!, e.state.wrongFor!);
+      expect(lines.first.text, contains('ด่างทับทิม'));
+      expect(lines.last.text, contains('เกลือ'));
       expect(StoryTalk.next(p, e)?.key, isNot(startsWith('wrong:')));
       // เลือกใหม่: ยังชี้ไปซื้อยาที่ถูก
       expect(Story.nextTarget(p, e), StoryTarget.buyMedicine);
